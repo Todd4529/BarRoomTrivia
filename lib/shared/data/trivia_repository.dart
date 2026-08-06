@@ -1,6 +1,9 @@
 import 'dart:math';
 import '../models/question.dart';
 import 'trivia_genres.dart';
+import 'sports_database.dart';
+import 'pop_culture_database.dart';
+import 'science_history_database.dart';
 
 /// Comprehensive Multi-Genre Trivia Question Repository for Bar Rooms Trivia
 class TriviaRepository {
