@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bar Rooms Trivia - Real-Time Cross-Platform Trivia</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-B88ow8dH.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BY0lI3fp.css">
+</head>
+<body class="dark-theme">
+  <!-- Global App Bar & View Selector -->
+  <header class="app-header">
+    <div class="logo-container">
+      <span id="app-logo-icon" class="logo-icon">🍺</span>
+      <h1 class="app-title" id="app-title-text">BAR ROOMS TRIVIA</h1>
+      <span class="badge badge-dev">PRO ENGINE</span>
+    </div>
+    
+    <nav class="nav-tabs">
+      <button class="nav-btn active" data-view="hub">
+        <span class="icon">🎛️</span> Target Hub
+      </button>
+      <button class="nav-btn" data-view="tv">
+        <span class="icon">📺</span> Bar TV Display
+      </button>
+      <button class="nav-btn" data-view="host">
+        <span class="icon">👑</span> Host Panel
+      </button>
+    </nav>
+
+    <div class="header-actions">
+      <button id="btn-popout-tv" class="btn btn-secondary btn-sm">
+        📺 Pop Out TV
+      </button>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- 1. HUB TARGET SELECTOR VIEW -->
+    <section id="view-hub" class="view-panel active">
+      <div class="hub-hero">
+        <h2>Automated Cross-Platform Bar Trivia</h2>
+        <p>Queue up to 10 trivia genres in sequence, select difficulty (Kids, Beginner, Standard, Advanced), configure timers, and click Start Game.</p>
+        
+        <div class="target-grid">
+          <div class="target-card card-tv" data-view="tv">
+            <div class="card-icon">📺</div>
+            <h3>Bar TV Display</h3>
+            <p>16:9 Aspect Ratio visual interface (`#121212`), centered top header, centered rotating 4-slide advertisement carousel, countdown ring, dynamic QR code, large clean genre icon, difficulty badge, A-D box correct answer highlight, next question countdown timer, and auto-scrolling leaderboard.</p>
+          </div>
+
+          <div class="target-card card-host" data-view="host">
+            <div class="card-icon">👑</div>
+            <h3>Host Control Panel</h3>
+            <p>Input venue name, upload bar logo, select difficulty level (Kids to Advanced), configure question timer (10s-3m), queue up to 10 trivia genres in order, start/pause/reset game.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. BAR TV DISPLAY VIEW -->
+    <section id="view-tv" class="view-panel">
+      <div class="tv-viewport 16-9" style="position: relative;">
+        <!-- TOP HEADER: CENTERED BEER ICON & BAR ROOMS TRIVIA ONLY WITH TV MODE TOGGLE -->
+        <div class="tv-header tv-header-centered">
+          <div class="tv-brand">
+            <div id="tv-custom-logo-container" class="custom-logo-wrapper hidden">
+              <img id="tv-custom-logo-img" src="" alt="Bar Logo" class="tv-logo-img">
+            </div>
+            <span id="tv-brand-icon" class="brand-icon">🍻</span>
+            <span id="tv-bar-name" class="brand-name">BAR ROOMS TRIVIA</span>
+          </div>
+
+          <div class="tv-mode-toggle">
+            <button id="btn-tv-toggle-promo" class="tv-toggle-btn active">📣 Promo Ads</button>
+            <button id="btn-tv-toggle-live" class="tv-toggle-btn">🎯 Live Stage</button>
+          </div>
+        </div>
+
+        <!-- TV ROTATING ADVERTISEMENT / ATTRACT CAROUSEL (4 CENTERED SLIDES) -->
+        <div id="tv-promo-screen" class="tv-promo-full-centered">
+          <!-- Centered Carousel Slides Container -->
+          <div class="promo-carousel-stage">
+            
+            <!-- SLIDE 1: WELCOME TO OUR PUB -->
+            <div class="promo-slide active" data-slide="1">
+              <div id="promo-logo-placeholder" class="promo-logo-box">
+                <span class="big-icon">🍺</span>
+              </div>
+              
+              <div class="promo-badge">🎮 LIVE TRIVIA NIGHT</div>
+              
+              <h1 class="promo-title-centered">WELCOME TO <span id="promo-bar-name" class="highlight-cyan">OUR PUB</span></h1>
+              
+              <p class="promo-para">Free to Play on Your Mobile Phone • No App Downloads Required</p>
+              
+              <p class="promo-para-secondary">Join the fun, answer questions live, and test your trivia skills against everyone in the bar!</p>
+            </div>
+
+            <!-- SLIDE 2: WHAT IS BAR ROOMS TRIVIA? -->
+            <div class="promo-slide" data-slide="2">
+              <div class="promo-badge">🍻 WHAT IS BAR ROOMS TRIVIA?</div>
+              
+              <h1 class="promo-title-centered title-no-wrap">REAL-TIME TRIVIA BUILT FOR BARS</h1>
+              
+              <p class="promo-para">Compete against everyone in the venue right from your mobile phone!</p>
+              
+              <p class="promo-para-secondary">Questions appear live on the big TV and on your device—no paper, no pens, no waiting for manual grading!</p>
+            </div>
+
+            <!-- SLIDE 3: 3 EASY STEPS TO PLAY -->
+            <div class="promo-slide" data-slide="3">
+              <div class="promo-badge">📱 EASY TO PLAY</div>
+              
+              <h1 class="promo-title-centered">JOIN THE GAME IN SECONDS</h1>
+              
+              <div class="promo-steps-row">
+                <div class="p-step"><span class="step-num">1</span> Scan QR Code</div>
+                <div class="p-step"><span class="step-num">2</span> Pick a Nickname</div>
+                <div class="p-step"><span class="step-num">3</span> Answer on Phone</div>
+              </div>
+              
+              <p class="promo-para-secondary">Questions & 4 answer options display live right on your mobile screen!</p>
+            </div>
+
+            <!-- SLIDE 4: LEADERBOARD COMPETITION -->
+            <div class="promo-slide" data-slide="4">
+              <div class="promo-badge">🏆 REAL-TIME COMPETITION</div>
+              
+              <h1 class="promo-title-centered">CLIMB THE LIVE LEADERBOARD</h1>
+              
+              <p class="promo-para">Earn points for fast and accurate answers on every question!</p>
+              
+              <p class="promo-para-secondary">Real-time scoring updates the TV leaderboard instantly!</p>
+            </div>
+
+            <!-- Carousel Dots (4 Slides) -->
+            <div class="carousel-indicators">
+              <span class="indicator active" data-slide-target="1"></span>
+              <span class="indicator" data-slide-target="2"></span>
+              <span class="indicator" data-slide-target="3"></span>
+              <span class="indicator" data-slide-target="4"></span>
+            </div>
+          </div>
+
+          <!-- Bottom Stage: Centered QR Card & Fluctuating Text -->
+          <div class="promo-bottom-row">
+            <div class="promo-qr-box">
+              <div class="qr-frame">
+                <canvas id="promo-qr-canvas"></canvas>
+              </div>
+              <div class="qr-text-side">
+                <span class="qr-hdr">SCAN CAMERA TO JOIN</span>
+                <span class="qr-room-lbl">ROOM CODE</span>
+                <strong class="qr-room-code">TRIV</strong>
+              </div>
+            </div>
+
+            <!-- CLEAN BOTTOM CARD WITH FLUCTUATING TEXT -->
+            <div class="promo-cta-box-centered">
+              <span class="fluctuating-text">WAITING FOR HOST TO START GAME</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- NORMAL LIVE TRIVIA STAGE GRID (ACTIVE DURING GAME) -->
+        <div id="tv-live-grid" class="tv-body-grid hidden">
+          <!-- Main Stage: Question & Timer (65%) -->
+          <div class="tv-stage">
+            <div class="tv-stage-header">
+              <div class="tv-pills-row">
+                <span id="tv-category" class="category-pill">POP CULTURE & MUSIC</span>
+                <span id="tv-difficulty-badge" class="difficulty-pill diff-standard">🎯 STANDARD</span>
+              </div>
+              
+              <!-- Countdown Timer Ring for Question Active Phase -->
+              <div id="tv-timer-container" class="timer-ring-wrapper hidden">
+                <svg class="timer-svg" viewBox="0 0 100 100">
+                  <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
+                  <circle id="timer-progress" class="timer-stroke" cx="50" cy="50" r="42"></circle>
+                </svg>
+                <div class="timer-text-container">
+                  <span id="tv-timer-val" class="timer-number">20</span>
+                  <span class="timer-label">SEC</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Question Text, Larger Genre Icon (Higher Up, No Circle) & Live Next Question Countdown Banner -->
+            <div class="question-container">
+              <!-- LARGER GENRE ICON MOVED HIGHER UP (NO CIRCLE) -->
+              <div id="tv-genre-icon-box" class="genre-icon-box">
+                <span id="tv-genre-icon" class="genre-big-icon">🎵</span>
+              </div>
+
+              <div class="tracker-and-next-wrapper">
+                <span id="tv-round-tracker" class="round-tracker">ROUND 1 • QUESTION 1/10</span>
+                <!-- LIVE NEXT QUESTION COUNTDOWN TIMER BANNER ON TV -->
+                <div id="tv-next-q-banner" class="tv-next-q-banner hidden">
+                  ⏳ NEXT QUESTION IN <strong id="tv-next-q-timer-val">20</strong> SECONDS
+                </div>
+              </div>
+
+              <h2 id="tv-question-text" class="question-headline">
+                Waiting for host to start...
+              </h2>
+            </div>
+
+            <!-- Options Preview Grid (Correct Answer Highlighted in A-D Boxes with Icon) -->
+            <div id="tv-options-grid" class="options-grid hidden">
+              <div id="tile-a" class="option-tile tile-a"><span class="lbl">A</span> <span id="opt-a-text">Option A</span></div>
+              <div id="tile-b" class="option-tile tile-b"><span class="lbl">B</span> <span id="opt-b-text">Option B</span></div>
+              <div id="tile-c" class="option-tile tile-c"><span class="lbl">C</span> <span id="opt-c-text">Option C</span></div>
+              <div id="tile-d" class="option-tile tile-d"><span class="lbl">D</span> <span id="opt-d-text">Option D</span></div>
+            </div>
+          </div>
+
+          <!-- Side Stage: Leaderboard & Dynamic QR (35%) -->
+          <div class="tv-sidebar">
+            <!-- QR Display Widget -->
+            <div class="qr-card">
+              <span class="qr-title">SCAN TO PLAY</span>
+              <div class="qr-code-wrapper">
+                <canvas id="qr-canvas"></canvas>
+              </div>
+              <div class="qr-room-info">
+                <span>ROOM CODE</span>
+                <strong id="qr-room-code">TRIV</strong>
+              </div>
+            </div>
+
+            <!-- Leaderboard Widget with Auto-Scroll Support -->
+            <div class="leaderboard-card">
+              <div class="lb-header">
+                <span>🏆 LIVE LEADERBOARD</span>
+              </div>
+              <div class="lb-scroll-container">
+                <ul id="tv-leaderboard-list" class="lb-list">
+                  <li class="lb-empty">No players connected yet...</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TV DISPLAY ROUND WINNER POP-UP OVERLAY -->
+        <div id="tv-winner-modal-overlay" class="tv-modal-backdrop hidden">
+          <div class="tv-winner-modal-card">
+            <div class="winner-trophy-icon">🏆👑</div>
+            <div class="tv-winner-badge">ROUND WINNER AWARDED</div>
+            <h1 id="tv-winner-name" class="tv-winner-name-text">TriviaMaster99</h1>
+            <div class="tv-winner-bonus-pill">+250 BONUS POINTS!</div>
+            
+            <div class="tv-next-round-timer-box">
+              <span>NEXT ROUND STARTS IN</span>
+              <strong id="tv-winner-next-round-timer">60</strong>
+              <span>SECONDS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. PLAYER CONTROLLER VIEW -->
+    <section id="view-player" class="view-panel">
+      <!-- Player Nickname Modal / Entry Form -->
+      <div id="player-entry-screen" class="player-modal-container">
+        <div class="modal-card">
+          <div class="modal-icon">📱</div>
+          <h2>JOIN THE TRIVIA</h2>
+          <p>Join Anytime Mid-Round • Score Accumulates Live</p>
+
+          <form id="form-player-join" class="join-form">
+            <div class="form-group">
+              <label for="input-room-code">ROOM CODE</label>
+              <input type="text" id="input-room-code" value="TRIV" placeholder="TRIV" required uppercase>
+            </div>
+            <div class="form-group">
+              <label for="input-nickname">NICKNAME</label>
+              <input type="text" id="input-nickname" placeholder="e.g. Trivia Master" maxlength="15" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+              ENTER GAME (ANONYMOUS AUTH)
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Player 4-Button Controller Screen with Questions & Answers -->
+      <div id="player-controller-screen" class="controller-container hidden">
+        <div class="controller-header">
+          <div class="player-info">
+            <span id="player-disp-nickname" class="nickname-highlight">NICKNAME</span>
+            <span id="player-disp-room" class="room-sub">ROOM: TRIV • ROUND 1</span>
+          </div>
+
+          <div class="header-right-badges">
+            <!-- LIVE PLAYER COUNTDOWN TIMER BADGE -->
+            <div class="player-timer-badge">
+              ⏱️ <span id="player-timer-val">20</span>s
+            </div>
+
+            <div class="player-score-pill">
+              <span id="player-score-val">0</span> PTS
+            </div>
+          </div>
+        </div>
+
+        <!-- Question Card Container -->
+        <div class="player-question-card">
+          <div class="card-meta">
+            <div style="display:flex; gap:6px; align-items:center;">
+              <span id="player-category-pill" class="category-pill-sm">POP CULTURE</span>
+              <span id="player-difficulty-pill" class="difficulty-pill-sm diff-standard">🎯 STANDARD</span>
+            </div>
+            <div id="player-status-badge" class="status-badge status-locked">
+              <span id="status-icon">🔒</span> <span id="status-text">LOCKED</span>
+            </div>
+          </div>
+          <h3 id="player-question-text" class="player-q-headline">
+            Waiting for next question...
+          </h3>
+        </div>
+
+        <!-- 4-Button Option Grid with Text Rendering -->
+        <div class="button-grid-2x2">
+          <button class="btn-answer btn-a" data-choice="A" disabled>
+            <span class="btn-lbl">A</span>
+            <span id="p-opt-a" class="btn-text">Option A</span>
+          </button>
+          <button class="btn-answer btn-b" data-choice="B" disabled>
+            <span class="btn-lbl">B</span>
+            <span id="p-opt-b" class="btn-text">Option B</span>
+          </button>
+          <button class="btn-answer btn-c" data-choice="C" disabled>
+            <span class="btn-lbl">C</span>
+            <span id="p-opt-c" class="btn-text">Option C</span>
+          </button>
+          <button class="btn-answer btn-d" data-choice="D" disabled>
+            <span class="btn-lbl">D</span>
+            <span id="p-opt-d" class="btn-text">Option D</span>
+          </button>
+        </div>
+
+        <!-- 20-SECOND ANSWER REVEAL & FUNNY RESULT POP-UP MODAL OVERLAY -->
+        <div id="result-modal-overlay" class="result-modal-backdrop hidden">
+          <div id="result-modal-box" class="result-modal-card">
+            <div id="result-modal-icon" class="result-icon">🎉</div>
+            <h2 id="result-modal-title" class="result-title">NAILED IT!</h2>
+            
+            <div id="result-modal-score" class="result-points-pill">+100 PTS</div>
+
+            <!-- CORRECT ANSWER SHOWCASE BOX -->
+            <div class="correct-answer-box">
+              <span class="ans-label">CORRECT ANSWER:</span>
+              <strong id="result-correct-text" class="ans-text">B) Taylor Swift</strong>
+            </div>
+
+            <!-- FUNNY STATEMENT QUOTE -->
+            <p id="result-modal-quote" class="result-funny-quote">
+              "Your brain cells are firing on all cylinders! 🧠🔥"
+            </p>
+
+            <!-- 20-SECOND NEXT QUESTION COUNTDOWN TIMER -->
+            <div class="next-q-countdown-pill">
+              ⏳ Next Question in <strong id="modal-next-q-timer">20</strong>s...
+            </div>
+          </div>
+        </div>
+
+        <!-- PLAYER ROUND WINNER POP-UP MODAL OVERLAY -->
+        <div id="player-winner-modal-overlay" class="result-modal-backdrop hidden">
+          <div class="result-modal-card is-correct">
+            <div class="result-icon">👑🏆</div>
+            <h2 class="result-title" style="color: var(--accent-yellow);">ROUND WINNER!</h2>
+            <h3 id="player-winner-name-text" style="font-size: 24px; font-weight: 900; margin-bottom: 8px;">TriviaMaster99</h3>
+            <div class="result-points-pill" style="background: rgba(255,214,0,0.2); color: var(--accent-yellow); border-color: var(--accent-yellow);">
+              +250 BONUS POINTS!
+            </div>
+            <div class="next-q-countdown-pill">
+              ⏳ Next Round in <strong id="player-winner-next-timer">60</strong>s...
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. HOST CONTROL PANEL VIEW -->
+    <section id="view-host" class="view-panel">
+      <div class="host-dashboard">
+        <!-- Subscription Status & Venue Name Input Header -->
+        <div class="host-card sub-card">
+          <div class="sub-info">
+            <!-- VENUE NAME INPUT CONTROL -->
+            <div class="venue-input-group">
+              <label for="host-venue-name-input">VENUE / BAR / BREWERY NAME:</label>
+              <input type="text" id="host-venue-name-input" value="OUR PUB" placeholder="Enter Venue Name" class="venue-name-input">
+            </div>
+            <p style="margin-top: 6px;">License Status: <span class="badge badge-success">Active Pro</span></p>
+          </div>
+
+          <!-- BAR LOGO UPLOAD CONTROL -->
+          <div class="logo-upload-box">
+            <label for="host-logo-input" class="btn btn-secondary btn-sm logo-btn-lbl">
+              🖼️ Upload Bar Logo
+            </label>
+            <input type="file" id="host-logo-input" accept="image/*" class="hidden">
+            <div id="host-logo-preview-wrapper" class="logo-preview-wrapper hidden">
+              <img id="host-logo-preview" src="" alt="Bar Logo Preview" class="logo-preview-img">
+              <button id="btn-remove-logo" class="btn-icon-remove">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- HOST CONTROLS CARD -->
+        <div class="host-card launcher-card">
+          <!-- CENTERED HEADER "Host Controls" & GAME STATUS -->
+          <div class="card-header-centered">
+            <h2>👑 Host Controls</h2>
+            <div id="host-engine-status" class="engine-badge badge-idle">Game Status: NOT STARTED</div>
+          </div>
+
+          <!-- 1. DIFFICULTY LEVEL SELECTOR (KIDS, BEGINNER, STANDARD, ADVANCED) -->
+          <div class="difficulty-config-box">
+            <div class="config-label">
+              <span class="icon">🎯</span>
+              <span class="lbl-title">DIFFICULTY LEVEL</span>
+              <span class="lbl-desc">Swipe / scroll to select difficulty setting:</span>
+            </div>
+            <div class="scroll-container-relative">
+              <div class="difficulty-chips horizontal-scroll-wrapper" id="difficulty-chips-container">
+                <button class="diff-chip" data-diff="Kids">🧒 Kids</button>
+                <button class="diff-chip" data-diff="Beginner">🌱 Beginner</button>
+                <button class="diff-chip active" data-diff="Standard">🎯 Standard (Default)</button>
+                <button class="diff-chip" data-diff="Advanced">🧠 Advanced</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. QUESTION TIMER CONFIGURATION SELECTOR -->
+          <div class="timer-config-box">
+            <div class="config-label">
+              <span class="icon">⏱️</span>
+              <span class="lbl-title">QUESTION TIMER DURATION</span>
+              <span class="lbl-desc">Swipe / scroll to select question timer duration:</span>
+            </div>
+            <div class="scroll-container-relative">
+              <div class="timer-chips horizontal-scroll-wrapper" id="timer-chips-container">
+                <button class="timer-chip" data-timer="10">10s</button>
+                <button class="timer-chip" data-timer="15">15s</button>
+                <button class="timer-chip active" data-timer="20">20s (Default)</button>
+                <button class="timer-chip" data-timer="30">30s</button>
+                <button class="timer-chip" data-timer="45">45s</button>
+                <button class="timer-chip" data-timer="60">60s</button>
+                <button class="timer-chip" data-timer="90">90s</button>
+                <button class="timer-chip" data-timer="120">2 Min</button>
+                <button class="timer-chip" data-timer="180">3 Min</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. MULTI-GENRE QUEUE SELECTOR (SELECT UP TO 10 GENRES IN ORDER) -->
+          <div class="genre-config-box">
+            <div class="config-label">
+              <span class="icon">🎭</span>
+              <span class="lbl-title">TRIVIA GENRE QUEUE (UP TO 10 GENRES IN ORDER)</span>
+              <span class="lbl-desc">Swipe / tap genres to queue round playlist:</span>
+            </div>
+
+            <!-- QUEUE STATUS DISPLAY BAR -->
+            <div class="genre-queue-bar">
+              <span class="queue-lbl">PLAYLIST:</span>
+              <div id="host-queue-list-display" class="queue-chips-list">
+                <span class="queue-empty-msg">No genres queued yet (Will default to Auto Select)</span>
+              </div>
+              <button id="btn-clear-queue" class="btn btn-secondary btn-sm">Clear Queue</button>
+            </div>
+
+            <div class="scroll-container-relative">
+              <div class="genre-chips-grid horizontal-scroll-wrapper" id="genre-chips-container">
+                <button class="genre-chip" data-genre="Auto Select">⚡ Auto Select</button>
+                <button class="genre-chip" data-genre="Random">🎲 Random (Mixed)</button>
+                <button class="genre-chip" data-genre="Homebrewing Beer">🍺 Homebrewing Beer</button>
+                <button class="genre-chip" data-genre="Home Repair">🛠️ Home Repair</button>
+                <button class="genre-chip" data-genre="Finance">💵 Finance</button>
+                <button class="genre-chip" data-genre="Travel">✈️ Travel</button>
+                <button class="genre-chip" data-genre="Health">🩺 Health</button>
+                <button class="genre-chip" data-genre="Music Lyrics">🎶 Music Lyrics</button>
+                <button class="genre-chip" data-genre="Pop Culture & Music">🎵 Pop Culture & Music</button>
+                <button class="genre-chip" data-genre="Movies & Hollywood">🎬 Movies & Hollywood</button>
+                <button class="genre-chip" data-genre="80s & 90s Nostalgia">📺 80s & 90s Nostalgia</button>
+                <button class="genre-chip" data-genre="Science & Technology">🧪 Science & Technology</button>
+                <button class="genre-chip" data-genre="World History">📜 World History</button>
+                <button class="genre-chip" data-genre="World Geography">🌍 World Geography</button>
+                <button class="genre-chip" data-genre="Sports & Stadiums">⚽ Sports & Stadiums</button>
+                <button class="genre-chip" data-genre="Beer, Wine & Spirits">🍻 Beer, Wine & Spirits</button>
+                <button class="genre-chip" data-genre="Food & Culinary">🍕 Food & Culinary</button>
+                <button class="genre-chip" data-genre="Video Games & Gaming">🎮 Video Games & Gaming</button>
+                <button class="genre-chip" data-genre="Classic Literature">📚 Classic Literature</button>
+                <button class="genre-chip" data-genre="Comics & Superheroes">🦸 Comics & Superheroes</button>
+                <button class="genre-chip" data-genre="Art & Architecture">🎨 Art & Architecture</button>
+                <button class="genre-chip" data-genre="Wildlife & Nature">🦁 Wildlife & Nature</button>
+                <button class="genre-chip" data-genre="Astronomy & Space">🚀 Astronomy & Space</button>
+                <button class="genre-chip" data-genre="Mythology & Folklore">🏛️ Mythology & Folklore</button>
+                <button class="genre-chip" data-genre="Automotive & Racing">🏎️ Automotive & Racing</button>
+                <button class="genre-chip" data-genre="Rock & Roll Classics">🎸 Rock & Roll Classics</button>
+                <button class="genre-chip" data-genre="Sitcoms & TV Dramas">📺 Sitcoms & TV Dramas</button>
+                <button class="genre-chip" data-genre="Internet & Meme Culture">🌐 Internet & Meme Culture</button>
+                <button class="genre-chip" data-genre="Famous Landmarks">🏙️ Famous Landmarks</button>
+                <button class="genre-chip" data-genre="Mind Benders & Riddles">🧠 Mind Benders & Riddles</button>
+                <button class="genre-chip" data-genre="Business & Brands">💼 Business & Brands</button>
+                <button class="genre-chip" data-genre="Broadway & Theater">🎭 Broadway & Theater</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. START GAME CONTROLS MENU -->
+          <div class="host-controls-grid">
+            <button id="btn-start-auto" class="btn btn-success btn-lg">
+              ▶️ Start Game
+            </button>
+            <button id="btn-pause-auto" class="btn btn-secondary btn-lg" disabled>
+              ⏸️ Pause Engine
+            </button>
+            <button id="btn-reset-game" class="btn btn-danger btn-lg">
+              🔄 Reset Game & New Room
+            </button>
+          </div>
+
+          <!-- 5. LIVE HOST STATS BAR -->
+          <div class="host-stats-bar">
+            <div class="stat-box">
+              <span class="stat-lbl">CURRENT ROUND</span>
+              <strong id="stat-round">1</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-lbl">DIFFICULTY</span>
+              <strong id="stat-difficulty">Standard</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-lbl">ACTIVE TIMER</span>
+              <strong id="stat-active-timer">20s</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-lbl">ACTIVE PLAYERS</span>
+              <strong id="stat-players-count">0</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+</body>
+</html>
