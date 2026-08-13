@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:in_app_update/in_app_update.dart';
 import 'shared/config/supabase_config.dart';
 import 'shared/theme/app_theme.dart';
 import 'tv/views/tv_display_view.dart';
@@ -114,6 +116,25 @@ class _BarRoomTriviaAppState extends State<BarRoomTriviaApp> {
         _router.go('/reset-password');
       }
     });
+    _checkForUpdate();
+  }
+
+  void _checkForUpdate() async {
+    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
+      try {
+        final updateInfo = await InAppUpdate.checkForUpdate();
+        if (updateInfo.updateAvailability == UpdateAvailability.updateAvailable) {
+          if (updateInfo.flexibleUpdateAllowed) {
+            await InAppUpdate.startFlexibleUpdate();
+            await InAppUpdate.completeFlexibleUpdate();
+          } else if (updateInfo.immediateUpdateAllowed) {
+            await InAppUpdate.performImmediateUpdate();
+          }
+        }
+      } catch (e) {
+        debugPrint('In-App Update check skipped or failed: $e');
+      }
+    }
   }
 
   @override

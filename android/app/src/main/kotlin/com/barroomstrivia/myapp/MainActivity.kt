@@ -1,4 +1,4 @@
-package com.example.bar_rooms_trivia
+package com.barroomstrivia.myapp
 
 import io.flutter.embedding.android.FlutterActivity
 

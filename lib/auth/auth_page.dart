@@ -106,7 +106,7 @@ class _AuthPageState extends State<AuthPage> {
 
   void _navigateToHome() {
     if (mounted) {
-      context.go('/host');
+      context.go('/hub');
     }
   }
 
