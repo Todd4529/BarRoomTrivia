@@ -14,23 +14,49 @@ class AuthPage extends StatefulWidget {
 class _AuthPageState extends State<AuthPage> {
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _passwordCtrl = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _submitFocusNode = FocusNode();
   final FocusNode _googleFocusNode = FocusNode();
+  final FocusNode _appleFocusNode = FocusNode();
 
   bool _isSignUpMode = false;
   bool _loading = false;
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    _setupFocusListeners();
+  }
+
+  void _setupFocusListeners() {
+    for (final node in [_emailFocusNode, _passwordFocusNode, _submitFocusNode, _googleFocusNode, _appleFocusNode]) {
+      node.addListener(() {
+        if (node.hasFocus && node.context != null) {
+          Scrollable.ensureVisible(
+            node.context!,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _scrollController.dispose();
     _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     _submitFocusNode.dispose();
     _googleFocusNode.dispose();
+    _appleFocusNode.dispose();
     super.dispose();
   }
 
@@ -120,6 +146,9 @@ class _AuthPageState extends State<AuthPage> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final isLandscape = mediaQuery.size.width > mediaQuery.size.height;
+
     return Scaffold(
       backgroundColor: AppTheme.darkBackground,
       body: Stack(
@@ -164,65 +193,97 @@ class _AuthPageState extends State<AuthPage> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: BoxConstraints(maxWidth: isLandscape ? 560 : 420),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // App Icon Logo Box
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.neonCyan.withOpacity(0.2),
-                              blurRadius: 20,
-                              spreadRadius: 2,
+                      // Header Row (Compact on TV / Landscape)
+                      if (isLandscape)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.asset(
+                                'assets/images/app_logo.png',
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  width: 44,
+                                  height: 44,
+                                  color: AppTheme.cardSurface,
+                                  child: const Icon(Icons.local_bar, size: 24, color: AppTheme.neonCyan),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'BAR ROOMS TRIVIA',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.8,
+                                color: Colors.white,
+                              ),
                             ),
                           ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            'assets/images/app_logo.png',
-                            width: 72,
-                            height: 72,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
-                              width: 72,
-                              height: 72,
-                              color: AppTheme.cardSurface,
-                              child: const Icon(Icons.local_bar, size: 40, color: AppTheme.neonCyan),
+                        )
+                      else ...[
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.neonCyan.withOpacity(0.2),
+                                blurRadius: 16,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.asset(
+                              'assets/images/app_logo.png',
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                width: 60,
+                                height: 60,
+                                color: AppTheme.cardSurface,
+                                child: const Icon(Icons.local_bar, size: 36, color: AppTheme.neonCyan),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Title & Subtitle
-                      const Text(
-                        'BAR ROOMS TRIVIA',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2.0,
-                          color: Colors.white,
+                        const SizedBox(height: 8),
+                        const Text(
+                          'BAR ROOMS TRIVIA',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.0,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 4),
                       Text(
                         _isSignUpMode ? 'Create your account to start hosting' : 'Sign in to access your host dashboard',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 13, color: Colors.white60),
+                        style: const TextStyle(fontSize: 12, color: Colors.white60),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
 
                       // Glassmorphic Auth Form Card
                       Container(
-                        padding: const EdgeInsets.all(20.0),
+                        padding: const EdgeInsets.all(18.0),
                         decoration: BoxDecoration(
                           color: AppTheme.cardSurface.withOpacity(0.85),
                           borderRadius: BorderRadius.circular(16),
@@ -244,27 +305,31 @@ class _AuthPageState extends State<AuthPage> {
                               focusNode: _emailFocusNode,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
+                              onEditingComplete: () {
+                                FocusScope.of(context).requestFocus(_passwordFocusNode);
+                              },
                               onSubmitted: (_) {
                                 FocusScope.of(context).requestFocus(_passwordFocusNode);
                               },
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 labelText: 'Email Address',
-                                labelStyle: const TextStyle(color: Colors.white60),
-                                prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.neonCyan),
+                                labelStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+                                prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.neonCyan, size: 20),
                                 filled: true,
                                 fillColor: const Color(0xFF0F172A),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2.0),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
 
                             // Password Field
                             TextField(
@@ -272,27 +337,30 @@ class _AuthPageState extends State<AuthPage> {
                               focusNode: _passwordFocusNode,
                               obscureText: _obscurePassword,
                               textInputAction: TextInputAction.done,
+                              onEditingComplete: _handlePrimarySubmit,
                               onSubmitted: (_) => _handlePrimarySubmit(),
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 labelText: 'Password',
-                                labelStyle: const TextStyle(color: Colors.white60),
-                                prefixIcon: const Icon(Icons.lock_outlined, color: AppTheme.neonCyan),
+                                labelStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+                                prefixIcon: const Icon(Icons.lock_outlined, color: AppTheme.neonCyan, size: 20),
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword ? Icons.visibility_off : Icons.visibility,
                                     color: Colors.white54,
+                                    size: 20,
                                   ),
                                   onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                                 ),
                                 filled: true,
                                 fillColor: const Color(0xFF0F172A),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2.0),
                                 ),
                               ),
@@ -320,12 +388,12 @@ class _AuthPageState extends State<AuthPage> {
                                   },
                                   child: const Text(
                                     'Forgot password?',
-                                    style: TextStyle(color: AppTheme.neonCyan, fontSize: 13),
+                                    style: TextStyle(color: AppTheme.neonCyan, fontSize: 12),
                                   ),
                                 ),
                               ),
                             ] else
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 10),
 
                             // Submit Button
                             ElevatedButton(
@@ -333,36 +401,36 @@ class _AuthPageState extends State<AuthPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.neonCyan,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 elevation: 4,
                               ),
                               onPressed: _loading ? null : _handlePrimarySubmit,
                               child: _loading
                                   ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
+                                      width: 20,
+                                      height: 20,
                                       child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.black),
                                     )
                                   : Text(
                                       _isSignUpMode ? 'Create Account' : 'Sign In',
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                                     ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 10),
 
                             // Divider
                             Row(
                               children: [
                                 Expanded(child: Divider(color: Colors.white.withOpacity(0.12))),
                                 const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 12.0),
-                                  child: Text('OR', style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  padding: EdgeInsets.symmetric(horizontal: 10.0),
+                                  child: Text('OR', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
                                 ),
                                 Expanded(child: Divider(color: Colors.white.withOpacity(0.12))),
                               ],
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 10),
 
                             // Google Sign-In Button
                             ElevatedButton.icon(
@@ -370,38 +438,39 @@ class _AuthPageState extends State<AuthPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 11),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               icon: Container(
                                 padding: const EdgeInsets.all(2),
                                 decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                                child: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 24),
+                                child: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 22),
                               ),
-                              label: const Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                              label: const Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                               onPressed: _loading ? null : _signInWithGoogle,
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
 
                             // Apple Sign-In Button
                             ElevatedButton.icon(
+                              focusNode: _appleFocusNode,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.black,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(vertical: 11),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   side: BorderSide(color: Colors.white.withOpacity(0.2)),
                                 ),
                               ),
-                              icon: const Icon(Icons.apple, color: Colors.white, size: 22),
-                              label: const Text('Sign in with Apple', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                              icon: const Icon(Icons.apple, color: Colors.white, size: 20),
+                              label: const Text('Sign in with Apple', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                               onPressed: _loading ? null : _signInWithApple,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
 
                       // Toggle between Sign In and Sign Up
                       Row(
@@ -409,7 +478,7 @@ class _AuthPageState extends State<AuthPage> {
                         children: [
                           Text(
                             _isSignUpMode ? 'Already have an account? ' : "Don't have an account? ",
-                            style: const TextStyle(color: Colors.white60, fontSize: 14),
+                            style: const TextStyle(color: Colors.white60, fontSize: 13),
                           ),
                           InkWell(
                             onTap: () => setState(() => _isSignUpMode = !_isSignUpMode),
@@ -421,7 +490,7 @@ class _AuthPageState extends State<AuthPage> {
                                 style: const TextStyle(
                                   color: AppTheme.neonCyan,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
