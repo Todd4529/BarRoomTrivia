@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
 import '../../shared/services/realtime_service.dart';
@@ -51,12 +54,108 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _adSlideTimer;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
+  String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _initTvSession();
     _startAdSlideTimer();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedBaseUrl = prefs.getString('player_base_url');
+    if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
+      if (mounted) setState(() => _playerBaseUrl = savedBaseUrl);
+    } else if (kIsWeb) {
+      if (mounted) setState(() => _playerBaseUrl = Uri.base.origin);
+    }
+  }
+
+  String _getPlayUrl() {
+    final cleanBase = _playerBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    return '$cleanBase/?view=player&room=${widget.roomCode}';
+  }
+
+  void _showEditPlayerUrlDialog() {
+    final controller = TextEditingController(text: _playerBaseUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppTheme.neonCyan, width: 2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code, color: AppTheme.neonCyan),
+            SizedBox(width: 10),
+            Text(
+              'Player Web URL & QR Settings',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the web link players will open when scanning the TV QR code with their mobile phones:',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Player Base URL',
+                labelStyle: const TextStyle(color: AppTheme.neonCyan),
+                hintText: 'https://todd4529.github.io/BarRoomTrivia',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Sample QR URL: ${controller.text}/?view=player&room=${widget.roomCode}',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              if (newUrl.isNotEmpty) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('player_base_url', newUrl);
+                if (mounted) setState(() => _playerBaseUrl = newUrl);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save & Update QR', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _startAdSlideTimer() {
@@ -322,32 +421,47 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 children: [
-                  // Top Centered Header Bar with Official App Icon & Bar Rooms Trivia Title
+                  // Top Centered Header Bar with Exit to Hub & QR Settings
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          'assets/images/app_logo.png',
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white70),
+                        tooltip: 'Return to Hub',
+                        onPressed: () => context.go('/hub'),
                       ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'BAR ROOMS TRIVIA',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2.0,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.asset(
+                              'assets/images/app_logo.png',
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'BAR ROOMS TRIVIA',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2.0,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.settings, color: AppTheme.neonCyan),
+                        tooltip: 'QR & Player URL Settings',
+                        onPressed: _showEditPlayerUrlDialog,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
 
                   // Main TV Stage Grid: Live Round / Paused / Resuming OR Pre-Game Countdown OR Official 4-Page Advertisement Carousel
                   Expanded(
@@ -467,25 +581,26 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   /// Official 4-Page Scrolling Advertisement Screen (Active when no game is running)
   Widget _buildOfficial4PageAdCarousel() {
-    final playUrl = 'https://bar-trivia.app/play?room=${widget.roomCode}';
+    final playUrl = _getPlayUrl();
 
     return Container(
-      padding: const EdgeInsets.all(36),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.4), width: 2),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonCyan.withOpacity(0.12),
+            color: AppTheme.neonCyan.withValues(alpha: 0.12),
             blurRadius: 30,
             spreadRadius: 2,
           ),
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Left 65% Stage: Animated 4-Page Ad Content & Glowing Status Badge
+          // Left 65% Stage: Animated 4-Page Ad Content & Bottom Status Badge
           Expanded(
             flex: 65,
             child: Column(
@@ -521,21 +636,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                // Centered between left edge of screen and left edge of QR code card, moved up 4 lines
+                // Lowered & Centered Waiting for host banner with generous spacing
                 Align(
                   alignment: Alignment.center,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                     decoration: BoxDecoration(
                       color: AppTheme.darkBackground,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppTheme.neonCyan, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.neonCyan.withOpacity(0.55),
-                          blurRadius: 24,
+                          color: AppTheme.neonCyan.withValues(alpha: 0.45),
+                          blurRadius: 20,
                           spreadRadius: 2,
                         ),
                       ],
@@ -543,7 +658,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     child: const Text(
                       'WAITING FOR HOST TO START GAME',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: 1.5,
@@ -561,17 +676,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 56),
               ],
             ),
           ),
-          const SizedBox(width: 32),
+          const SizedBox(width: 28),
 
-          // Right 35% Stage: Permanent Live QR Code & Room Code Card (No Leaderboard before game starts)
+          // Right 35% Stage: Permanent Live QR Code & Room Code Card
           Expanded(
             flex: 35,
             child: Container(
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
                 color: Colors.black26,
                 borderRadius: BorderRadius.circular(24),
@@ -583,15 +697,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   const Text(
                     'SCAN CAMERA TO JOIN',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1.5,
                       color: AppTheme.neonCyan,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
@@ -599,9 +713,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     child: QrImageView(
                       data: playUrl,
                       version: QrVersions.auto,
-                      size: 200.0,
+                      size: 160.0,
                       backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                      dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'ROOM: ${widget.roomCode}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
+                      color: AppTheme.neonYellow,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    playUrl,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white60,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -613,7 +750,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     );
   }
 
-  /// Builds the 4 Original Advertisement Slides
+  /// Builds the 4 Original Advertisement Slides with Clean Scaling
   Widget _buildAdSlideContent(int index) {
     switch (index) {
       case 0:
@@ -623,9 +760,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.25),
+                color: AppTheme.neonPurple.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppTheme.neonPurple),
               ),
@@ -634,30 +771,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 style: TextStyle(
                   color: AppTheme.neonPurple,
                   fontWeight: FontWeight.w900,
-                  fontSize: 14,
+                  fontSize: 13,
                   letterSpacing: 1.2,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             const Text(
               'WELCOME TO OUR PUB!',
               style: TextStyle(
-                fontSize: 44,
+                fontSize: 34,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
                 height: 1.15,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             const Text(
               'Free to Play on Your Mobile Phone • No App Downloads Required',
-              style: TextStyle(color: AppTheme.neonCyan, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(color: AppTheme.neonCyan, fontSize: 17, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             const Text(
               'Join the fun, answer questions live, and test your trivia skills against everyone in the bar!',
-              style: TextStyle(color: Colors.white70, fontSize: 18),
+              style: TextStyle(color: Colors.white70, fontSize: 15),
             ),
           ],
         );
@@ -669,9 +806,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonYellow.withOpacity(0.25),
+                color: AppTheme.neonYellow.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppTheme.neonYellow),
               ),
@@ -680,30 +817,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 style: TextStyle(
                   color: AppTheme.neonYellow,
                   fontWeight: FontWeight.w900,
-                  fontSize: 14,
+                  fontSize: 13,
                   letterSpacing: 1.2,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             const Text(
               'REAL-TIME TRIVIA BUILT FOR BARS',
               style: TextStyle(
-                fontSize: 42,
+                fontSize: 32,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
                 height: 1.15,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             const Text(
               'Compete against everyone in the venue right from your mobile phone!',
-              style: TextStyle(color: AppTheme.neonCyan, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(color: AppTheme.neonCyan, fontSize: 17, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             const Text(
               'Questions appear live on the big TV and on your device—no paper, no pens, no waiting for manual grading!',
-              style: TextStyle(color: Colors.white70, fontSize: 18),
+              style: TextStyle(color: Colors.white70, fontSize: 15),
             ),
           ],
         );
@@ -715,9 +852,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonCyan.withOpacity(0.25),
+                color: AppTheme.neonCyan.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppTheme.neonCyan),
               ),
@@ -726,37 +863,37 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 style: TextStyle(
                   color: AppTheme.neonCyan,
                   fontWeight: FontWeight.w900,
-                  fontSize: 14,
+                  fontSize: 13,
                   letterSpacing: 1.2,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             const Text(
               'JOIN THE GAME IN SECONDS',
               style: TextStyle(
-                fontSize: 42,
+                fontSize: 32,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
                 height: 1.15,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
 
             // 3 Steps Row
             Row(
               children: [
                 _buildStepBox('1', 'Scan QR Code'),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 _buildStepBox('2', 'Pick Nickname'),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 _buildStepBox('3', 'Answer on Phone'),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
             const Text(
               'Questions & 4 answer options display live right on your mobile screen!',
-              style: TextStyle(color: Colors.white70, fontSize: 18),
+              style: TextStyle(color: Colors.white70, fontSize: 15),
             ),
           ],
         );
@@ -769,9 +906,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withOpacity(0.25),
+                color: AppTheme.neonGreen.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppTheme.neonGreen),
               ),
@@ -780,30 +917,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 style: TextStyle(
                   color: AppTheme.neonGreen,
                   fontWeight: FontWeight.w900,
-                  fontSize: 14,
+                  fontSize: 13,
                   letterSpacing: 1.2,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             const Text(
               'CLIMB THE LIVE LEADERBOARD',
               style: TextStyle(
-                fontSize: 42,
+                fontSize: 32,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
                 height: 1.15,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             const Text(
               'Earn points for fast and accurate answers on every question!',
-              style: TextStyle(color: AppTheme.neonCyan, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(color: AppTheme.neonCyan, fontSize: 17, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             const Text(
               'Real-time scoring updates the TV leaderboard instantly after every round!',
-              style: TextStyle(color: Colors.white70, fontSize: 18),
+              style: TextStyle(color: Colors.white70, fontSize: 15),
             ),
           ],
         );
@@ -812,29 +949,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   Widget _buildStepBox(String stepNum, String title) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.darkBackground,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.4)),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: const BoxDecoration(
               color: AppTheme.neonCyan,
               shape: BoxShape.circle,
             ),
             child: Text(
               stepNum,
-              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 14),
+              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 12),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             title,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ],
       ),
@@ -842,17 +980,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   Widget _buildPreGameCountdownScreen() {
-    final playUrl = 'https://bar-trivia.app/play?room=${widget.roomCode}';
+    final playUrl = _getPlayUrl();
 
     return Container(
-      padding: const EdgeInsets.all(40),
+      padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: AppTheme.neonCyan, width: 2.5),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonCyan.withOpacity(0.2),
+            color: AppTheme.neonCyan.withValues(alpha: 0.2),
             blurRadius: 30,
             spreadRadius: 2,
           ),
@@ -869,7 +1007,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonYellow.withOpacity(0.2),
+                    color: AppTheme.neonYellow.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppTheme.neonYellow),
                   ),
@@ -883,21 +1021,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 const Text(
                   'NEXT ROUND STARTS IN...',
                   style: TextStyle(
-                    fontSize: 42,
+                    fontSize: 36,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                       decoration: BoxDecoration(
                         color: AppTheme.cardSurfaceElevated,
                         borderRadius: BorderRadius.circular(18),
@@ -910,7 +1048,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           Text(
                             '0:${_preGameSeconds.toString().padLeft(2, '0')}',
                             style: const TextStyle(
-                              fontSize: 48,
+                              fontSize: 44,
                               fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: 2,
@@ -921,20 +1059,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 const Text(
                   'Get your phones out! Scan the QR code now before the next round starts!',
-                  style: TextStyle(color: Colors.white70, fontSize: 18),
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 32),
+          const SizedBox(width: 28),
 
           Expanded(
             flex: 35,
             child: Container(
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
                 color: Colors.black26,
                 borderRadius: BorderRadius.circular(24),
@@ -946,15 +1084,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   const Text(
                     'SCAN TO PLAY NOW',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2.0,
                       color: AppTheme.neonCyan,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
@@ -962,9 +1100,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     child: QrImageView(
                       data: playUrl,
                       version: QrVersions.auto,
-                      size: 200.0,
+                      size: 160.0,
                       backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                      dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'ROOM: ${widget.roomCode}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
+                      color: AppTheme.neonYellow,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    playUrl,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white60,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

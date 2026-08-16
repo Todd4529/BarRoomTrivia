@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'shared/config/supabase_config.dart';
@@ -219,18 +220,18 @@ class MainNavigationHub extends StatelessWidget {
                 runSpacing: 24,
                 alignment: WrapAlignment.center,
                 children: [
-                  _buildTargetCard(
-                    context,
+                  FocusableTargetCard(
                     title: 'BAR TV DISPLAY',
                     icon: Icons.tv,
                     color: AppTheme.neonCyan,
+                    autofocus: true,
                     onTap: () => context.go('/tv?room=TRIV'),
                   ),
-                  _buildTargetCard(
-                    context,
+                  FocusableTargetCard(
                     title: 'HOST CONTROL PANEL',
                     icon: Icons.dashboard,
                     color: AppTheme.neonPurple,
+                    autofocus: false,
                     onTap: () => context.go('/host'),
                   ),
                 ],
@@ -241,47 +242,121 @@ class MainNavigationHub extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildTargetCard(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: 280,
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          color: AppTheme.cardSurface,
+class FocusableTargetCard extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final bool autofocus;
+  final VoidCallback onTap;
+
+  const FocusableTargetCard({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.color,
+    this.autofocus = false,
+    required this.onTap,
+  });
+
+  @override
+  State<FocusableTargetCard> createState() => _FocusableTargetCardState();
+}
+
+class _FocusableTargetCardState extends State<FocusableTargetCard> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: widget.autofocus,
+      onFocusChange: (focused) {
+        setState(() => _isFocused = focused);
+      },
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.select ||
+              key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.space ||
+              key == LogicalKeyboardKey.gameButtonA) {
+            widget.onTap();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AnimatedScale(
+        scale: _isFocused ? 1.06 : 1.0,
+        duration: const Duration(milliseconds: 180),
+        child: InkWell(
+          onTap: widget.onTap,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.4), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 16,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 48, color: color),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                color: Colors.white,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 280,
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: _isFocused
+                  ? widget.color.withValues(alpha: 0.22)
+                  : AppTheme.cardSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _isFocused ? widget.color : widget.color.withValues(alpha: 0.35),
+                width: _isFocused ? 3.5 : 1.5,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: _isFocused
+                      ? widget.color.withValues(alpha: 0.65)
+                      : widget.color.withValues(alpha: 0.08),
+                  blurRadius: _isFocused ? 28 : 16,
+                  spreadRadius: _isFocused ? 4 : 1,
+                ),
+              ],
             ),
-          ],
+            child: Column(
+              children: [
+                Icon(
+                  widget.icon,
+                  size: 52,
+                  color: _isFocused ? Colors.white : widget.color,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  widget.title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    color: _isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+                if (_isFocused) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'PRESS ENTER / SELECT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

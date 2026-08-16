@@ -10,23 +10,24 @@ class QrDisplayWidget extends StatelessWidget {
   const QrDisplayWidget({
     super.key,
     required this.roomCode,
-    this.baseUrl = 'https://bar-trivia.app',
+    this.baseUrl = 'https://todd4529.github.io/BarRoomTrivia',
     this.showRoomCode = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final playUrl = '$baseUrl/play?room=$roomCode';
+    final cleanBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final playUrl = '$cleanBase/?view=player&room=$roomCode';
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.4), width: 2),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonCyan.withOpacity(0.15),
+            color: AppTheme.neonCyan.withValues(alpha: 0.15),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -56,7 +57,8 @@ class QrDisplayWidget extends StatelessWidget {
               version: QrVersions.auto,
               size: 180.0,
               backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
+              eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+              dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
             ),
           ),
           if (showRoomCode) ...[
