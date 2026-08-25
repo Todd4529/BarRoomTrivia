@@ -356,18 +356,70 @@ function initQrCodes() {
 }
 
 // 3. BROADCAST CHANNEL & SUPABASE REAL-TIME STATE MACHINE
-function broadcastSupabaseEvent(event, payload) {
-  if (realtimeChannel) {
-    try {
-      realtimeChannel.send({
-        type: 'broadcast',
+async function broadcastSupabaseEvent(event, payload) {
+  if (!realtimeChannel) return;
+  try {
+    await realtimeChannel.send({
+      type: 'broadcast',
+      event,
+      payload: {
+        ...payload,
         event,
-        payload,
-      });
-    } catch (e) {
-      console.warn(`[Supabase Realtime] Failed to send ${event}:`, e);
-    }
+        room_code: currentRoomCode,
+      },
+    });
+  } catch (e) {
+    console.warn(`[Supabase Realtime] Failed to send ${event}:`, e);
   }
+}
+
+function handleIncomingQuestionStart(rawPayload) {
+  if (!rawPayload) return;
+  const payload = rawPayload.payload || rawPayload;
+  console.log('[Realtime] Processing question_start:', payload);
+
+  const questionData = {
+    id: payload.question_id || payload.id || String(Date.now()),
+    category: payload.category || 'General Knowledge',
+    difficulty: payload.difficulty || selectedDifficulty || 'Standard',
+    text: payload.question_text || payload.text || payload.question || '',
+    options: {
+      A: payload.option_a || payload.options?.A || payload.options?.a || 'Option A',
+      B: payload.option_b || payload.options?.B || payload.options?.b || 'Option B',
+      C: payload.option_c || payload.options?.C || payload.options?.c || 'Option C',
+      D: payload.option_d || payload.options?.D || payload.options?.d || 'Option D',
+    },
+    correct: (payload.correct_option || payload.correct || 'A').toUpperCase().trim(),
+  };
+
+  currentQuestionData = questionData;
+  currentGameState = 'QUESTION_ACTIVE';
+
+  const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds) || selectedQuestionDuration || 20;
+  const qIndex = Number(payload.question_index) || 1;
+  const roundNum = Math.floor((qIndex - 1) / 10) + 1;
+  const qNumInRound = ((qIndex - 1) % 10) + 1;
+
+  timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
+  const remainingSecs = Math.max(1, Math.min(durationSeconds, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)));
+
+  onQuestionStart({
+    questionData,
+    roundNumber: roundNum,
+    questionNumberInRound: qNumInRound,
+    durationSeconds: remainingSecs,
+    difficulty: questionData.difficulty,
+  });
+}
+
+function handleIncomingTimerExpired(rawPayload) {
+  const payload = rawPayload?.payload || rawPayload || {};
+  console.log('[Realtime] Processing timer_expired:', payload);
+  onTimerExpired({
+    correctOption: payload.correct_option || payload.correctOption || payload.correct,
+    correctText: payload.correctText,
+    nextQuestionStartsAtEpochMs: payload.next_question_starts_at_epoch_ms,
+  });
 }
 
 function initSupabaseRealtime() {
@@ -380,48 +432,18 @@ function initSupabaseRealtime() {
   const chName = `room_${currentRoomCode.toUpperCase()}`;
   console.log(`[Supabase Realtime] Connecting to ${chName}...`);
 
-  realtimeChannel = supabase.channel(chName);
+  realtimeChannel = supabase.channel(chName, {
+    config: {
+      broadcast: { self: true, ack: false },
+    },
+  });
 
   realtimeChannel
-    .on('broadcast', { event: 'question_start' }, ({ payload }) => {
-      console.log('[Supabase Realtime] question_start received:', payload);
-      if (!payload) return;
-
-      const questionData = {
-        id: payload.question_id || payload.id || String(Date.now()),
-        category: payload.category || 'General Knowledge',
-        difficulty: payload.difficulty || 'Standard',
-        text: payload.question_text || payload.text || '',
-        options: {
-          A: payload.option_a || payload.options?.A || 'Option A',
-          B: payload.option_b || payload.options?.B || 'Option B',
-          C: payload.option_c || payload.options?.C || 'Option C',
-          D: payload.option_d || payload.options?.D || 'Option D',
-        },
-        correct: payload.correct_option || payload.correct || 'A',
-      };
-
-      const durationSeconds = payload.duration_seconds || payload.time_limit_seconds || 20;
-      const qIndex = payload.question_index || 1;
-      const roundNum = Math.floor((qIndex - 1) / 10) + 1;
-      const qNumInRound = ((qIndex - 1) % 10) + 1;
-
-      timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
-
-      onQuestionStart({
-        questionData,
-        roundNumber: roundNum,
-        questionNumberInRound: qNumInRound,
-        durationSeconds,
-        difficulty: payload.difficulty || 'Standard',
-      });
+    .on('broadcast', { event: 'question_start' }, (response) => {
+      handleIncomingQuestionStart(response.payload || response);
     })
-    .on('broadcast', { event: 'timer_expired' }, ({ payload }) => {
-      console.log('[Supabase Realtime] timer_expired received:', payload);
-      onTimerExpired({
-        correctOption: payload?.correct_option || payload?.correct,
-        nextQuestionStartsAtEpochMs: payload?.next_question_starts_at_epoch_ms,
-      });
+    .on('broadcast', { event: 'timer_expired' }, (response) => {
+      handleIncomingTimerExpired(response.payload || response);
     })
     .on('broadcast', { event: 'round_completed' }, ({ payload }) => {
       console.log('[Supabase Realtime] round_completed received:', payload);
@@ -435,6 +457,24 @@ function initSupabaseRealtime() {
       console.log('[Supabase Realtime] game_reset received');
       onGameReset();
     })
+    .on('broadcast', { event: 'request_state_sync' }, () => {
+      if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+        broadcastSupabaseEvent('question_start', {
+          question_index: currentQuestionIndex + 1,
+          question_id: currentQuestionData.id,
+          duration_seconds: remainingTimerSeconds,
+          timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+          category: currentQuestionData.category,
+          difficulty: selectedDifficulty,
+          question_text: currentQuestionData.text,
+          option_a: currentQuestionData.options.A,
+          option_b: currentQuestionData.options.B,
+          option_c: currentQuestionData.options.C,
+          option_d: currentQuestionData.options.D,
+          correct_option: currentQuestionData.correct,
+        });
+      }
+    })
     .on('broadcast', { event: 'leaderboard_updated' }, ({ payload }) => {
       if (payload?.players || payload?.leaderboard) {
         playersLeaderboard = payload.players || payload.leaderboard;
@@ -443,6 +483,9 @@ function initSupabaseRealtime() {
     })
     .subscribe((status) => {
       console.log(`[Supabase Realtime] ${chName} channel status: ${status}`);
+      if (status === 'SUBSCRIBED') {
+        broadcastSupabaseEvent('request_state_sync', { room_code: currentRoomCode });
+      }
     });
 }
 
