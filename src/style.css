@@ -1508,8 +1508,16 @@ body[data-view="player"] .logo-container {
 .btn-d { background-color: var(--button-d); }
 
 .btn-answer.selected {
-  outline: 4px solid white;
+  outline: 4px solid #ffffff !important;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.8), 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  transform: scale(1.04) !important;
   opacity: 1 !important;
+}
+
+.btn-answer.unselected {
+  opacity: 0.35 !important;
+  filter: grayscale(40%);
+  transform: scale(0.96);
 }
 
 .btn-answer.review-correct {
@@ -1517,6 +1525,7 @@ body[data-view="player"] .logo-container {
   color: black !important;
   box-shadow: 0 0 25px rgba(0, 230, 118, 0.6) !important;
   opacity: 1 !important;
+  transform: scale(1.04) !important;
 }
 
 .btn-answer.review-correct .btn-lbl, .btn-answer.review-correct .btn-text {
@@ -1526,6 +1535,7 @@ body[data-view="player"] .logo-container {
 .btn-answer.review-wrong {
   background-color: #d50000 !important;
   opacity: 0.5 !important;
+  transform: scale(0.96);
 }
 
 /* 20-SECOND ANSWER REVEAL & RESULT POP-UP MODAL OVERLAY */

@@ -1073,6 +1073,9 @@ function onQuestionStart(payload) {
   if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
   startCountdown(totalTimerDuration);
 
+  // Reset player answer choice state for new question
+  playerChoiceSubmitted = null;
+
   // Update Player Phone Display & Difficulty Pill
   const playerDispRoom = document.getElementById('player-disp-room');
   const playerCategoryPill = document.getElementById('player-category-pill');
@@ -1081,7 +1084,7 @@ function onQuestionStart(payload) {
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  if (playerDispRoom) playerDispRoom.textContent = `ROOM: TRIV • ROUND ${roundNumber || 1} (Q${questionNumberInRound || 1}/10)`;
+  if (playerDispRoom) playerDispRoom.textContent = `ROOM: ${currentRoomCode} • ROUND ${roundNumber || 1} (Q${questionNumberInRound || 1}/10)`;
   if (playerCategoryPill) playerCategoryPill.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
   if (playerDiffPill) {
     playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
@@ -1089,10 +1092,14 @@ function onQuestionStart(payload) {
   }
   if (playerQuestionText) playerQuestionText.textContent = questionData.text;
 
-  document.getElementById('p-opt-a').textContent = questionData.options.A;
-  document.getElementById('p-opt-b').textContent = questionData.options.B;
-  document.getElementById('p-opt-c').textContent = questionData.options.C;
-  document.getElementById('p-opt-d').textContent = questionData.options.D;
+  const optA = document.getElementById('p-opt-a');
+  if (optA) optA.textContent = questionData.options.A;
+  const optB = document.getElementById('p-opt-b');
+  if (optB) optB.textContent = questionData.options.B;
+  const optC = document.getElementById('p-opt-c');
+  if (optC) optC.textContent = questionData.options.C;
+  const optD = document.getElementById('p-opt-d');
+  if (optD) optD.textContent = questionData.options.D;
 
   if (playerStatusBadge) {
     playerStatusBadge.className = 'status-badge status-active';
@@ -1101,7 +1108,7 @@ function onQuestionStart(payload) {
 
   answerBtns.forEach(btn => {
     btn.disabled = false;
-    btn.classList.remove('selected', 'review-correct', 'review-wrong');
+    btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
   });
 }
 
@@ -1146,8 +1153,9 @@ function updateTimerUI() {
 
 // 6. TIMER EXPIRED -> HIGHLIGHT CORRECT OPTION TILE ON TV & START NEXT QUESTION COUNTDOWN TIMER ON TV
 function onTimerExpired(payload) {
-  const correctOpt = payload?.correctOption || currentQuestionData?.correct;
-  const correctTextStr = payload?.correctText || `${correctOpt}) ${currentQuestionData?.options[correctOpt]}`;
+  const rawCorrect = payload?.correctOption || currentQuestionData?.correct || '';
+  const correctOpt = rawCorrect.toUpperCase().trim();
+  const correctTextStr = payload?.correctText || `${correctOpt}) ${currentQuestionData?.options?.[correctOpt] || ''}`;
 
   clearMockPlayerTimeouts();
 
@@ -1161,9 +1169,10 @@ function onTimerExpired(payload) {
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
-    const choice = btn.dataset.choice;
+    const choice = (btn.dataset.choice || '').toUpperCase();
     if (choice === correctOpt) {
       btn.classList.add('review-correct');
+      btn.classList.remove('unselected');
     } else if (btn.classList.contains('selected')) {
       btn.classList.add('review-wrong');
     }
@@ -1201,15 +1210,48 @@ function onTimerExpired(payload) {
     }, 1000);
   }
 
-  const isCorrect = (playerChoiceSubmitted === correctOpt);
-  const randomQuote = isCorrect 
-    ? getRandomItem(funnyCorrectQuotes)
-    : getRandomItem(funnyWrongQuotes);
+  // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
+  const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
-  showResultModal(isCorrect, isCorrect ? `POINTS CREDITED!` : "0 PTS", correctTextStr, randomQuote, 20);
+  if (isCorrect && currentPlayer) {
+    let speedBonus = 10;
+    if (remainingTimerSeconds >= totalTimerDuration - 3) speedBonus = 50;
+    else if (remainingTimerSeconds >= Math.floor(totalTimerDuration / 2)) speedBonus = 25;
 
-  if (isCorrect) {
+    currentPlayer.streak = (currentPlayer.streak || 0) + 1;
+    let streakMult = 1.0;
+    if (currentPlayer.streak >= 3) streakMult = 1.5;
+    else if (currentPlayer.streak === 2) streakMult = 1.2;
+
+    const pointsEarned = Math.round((100 + speedBonus) * streakMult);
+    currentPlayer.score += pointsEarned;
+    const scoreVal = document.getElementById('player-score-val');
+    if (scoreVal) scoreVal.textContent = currentPlayer.score;
+
+    const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+    if (targetPlayer) {
+      targetPlayer.score = currentPlayer.score;
+      targetPlayer.streak = currentPlayer.streak;
+    } else {
+      playersLeaderboard.push({ nickname: currentPlayer.nickname, score: currentPlayer.score, streak: currentPlayer.streak });
+    }
+    renderLeaderboard();
+    channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
+    broadcastSupabaseEvent('leaderboard_updated', {
+      event: 'leaderboard_updated',
+      room_code: currentRoomCode,
+      players: playersLeaderboard,
+    });
+
+    const randomQuote = getRandomItem(funnyCorrectQuotes);
+    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 20);
     confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
+  } else {
+    if (currentPlayer) {
+      currentPlayer.streak = 0;
+    }
+    const randomQuote = getRandomItem(funnyWrongQuotes);
+    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 20);
   }
 }
 
@@ -1395,46 +1437,33 @@ function initPlayerControls() {
   });
 
   answerBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.disabled || !currentPlayer) return;
+    btn.onclick = (e) => {
+      e.preventDefault();
+      // Guard: Only allow choosing if player is registered and hasn't already submitted
+      if (!currentPlayer || playerChoiceSubmitted !== null) return;
 
-      answerBtns.forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      const choice = btn.dataset.choice;
+      const choice = (btn.dataset.choice || '').toUpperCase();
+      if (!choice) return;
+
       playerChoiceSubmitted = choice;
 
-      answerBtns.forEach(b => b.disabled = true);
+      // Lock visually: highlight selected and dim unselected
+      answerBtns.forEach(b => {
+        const bChoice = (b.dataset.choice || '').toUpperCase();
+        if (bChoice === choice) {
+          b.classList.add('selected');
+          b.classList.remove('unselected');
+        } else {
+          b.classList.add('unselected');
+          b.classList.remove('selected');
+        }
+        b.disabled = true;
+      });
+
       const playerStatusBadge = document.getElementById('player-status-badge');
       if (playerStatusBadge) {
         playerStatusBadge.className = 'status-badge status-locked';
-        playerStatusBadge.innerHTML = `<span id="status-icon">✅</span> SUBMITTED (${choice})`;
-      }
-
-      if (currentQuestionData && choice === currentQuestionData.correct) {
-        let speedBonus = 10;
-        if (remainingTimerSeconds >= totalTimerDuration - 3) speedBonus = 50;
-        else if (remainingTimerSeconds >= Math.floor(totalTimerDuration / 2)) speedBonus = 25;
-
-        currentPlayer.streak = (currentPlayer.streak || 0) + 1;
-        let streakMult = 1.0;
-        if (currentPlayer.streak >= 3) streakMult = 1.5;
-        else if (currentPlayer.streak === 2) streakMult = 1.2;
-
-        const pointsEarned = Math.round((100 + speedBonus) * streakMult);
-        currentPlayer.score += pointsEarned;
-        document.getElementById('player-score-val').textContent = currentPlayer.score;
-
-        const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
-        if (targetPlayer) {
-          targetPlayer.score = currentPlayer.score;
-          targetPlayer.streak = currentPlayer.streak;
-        } else {
-          playersLeaderboard.push({ nickname: currentPlayer.nickname, score: currentPlayer.score, streak: currentPlayer.streak });
-        }
-        renderLeaderboard();
-        channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-      } else {
-        if (currentPlayer) currentPlayer.streak = 0;
+        playerStatusBadge.innerHTML = `<span id="status-icon">🔒</span> LOCKED IN: Option ${choice}`;
       }
 
       channel.postMessage({
@@ -1446,10 +1475,9 @@ function initPlayerControls() {
         room_code: currentRoomCode,
         nickname: currentPlayer.nickname,
         selected_option: choice,
-        is_correct: currentQuestionData ? (choice === currentQuestionData.correct) : false,
         score: currentPlayer.score,
       });
-    });
+    };
   });
 }
 
@@ -1464,13 +1492,8 @@ function onPlayerJoined(player) {
 }
 
 function onAnswerSubmitted({ player, choice }) {
-  if (currentQuestionData && choice === currentQuestionData.correct) {
-    const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
-    if (targetPlayer) {
-      targetPlayer.score += 100;
-      renderLeaderboard();
-    }
-  }
+  // Answer submission recorded
+  console.log(`Player ${player?.nickname} submitted answer: ${choice}`);
 }
 
 // RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL
