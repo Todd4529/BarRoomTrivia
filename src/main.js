@@ -1,12 +1,27 @@
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
+import { createClient } from '@supabase/supabase-js';
 import { fetchRealtimeTriviaQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
+
+// Supabase Configuration
+const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_VjyTwHSKG0WNtVJMGk4omw_fRQwSUWb';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+});
+
+let realtimeChannel = null;
 
 // State & Broadcast Channel
 const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
 const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
 
-let currentRoomCode = 'TRIV';
+const initialUrlParams = new URLSearchParams(window.location.search);
+let currentRoomCode = (initialUrlParams.get('room') || initialUrlParams.get('room_id') || 'TRIV').toUpperCase();
 let currentPlayer = null;
 let currentQuestionIndex = 0;
 let selectedQuestionDuration = 20; // Default 20 seconds
@@ -117,6 +132,7 @@ function initApp() {
   initPlayerControls();
   initTvModeToggle();
   initBroadcastChannelListeners();
+  initSupabaseRealtime();
   initIndicatorClicks();
   
   onVenueNameUpdated({ venueName: currentVenueName });
@@ -178,6 +194,10 @@ function initTvModeToggle() {
 // 1. NAVIGATION ROUTING & INSTANT VIEW SWITCHING
 function switchView(viewName) {
   if (!viewName) return;
+
+  // Toggle player mode on body
+  document.body.classList.toggle('player-mode', viewName === 'player');
+  document.body.setAttribute('data-view', viewName);
 
   // 1. Toggle panel visibility
   const panels = document.querySelectorAll('.view-panel');
@@ -288,6 +308,13 @@ function initNavigation() {
 
   // Initial load view resolution
   const urlParams = new URLSearchParams(window.location.search);
+  const roomParam = urlParams.get('room') || urlParams.get('room_id');
+  if (roomParam) {
+    currentRoomCode = roomParam.toUpperCase();
+    const roomInput = document.getElementById('input-room-code');
+    if (roomInput) roomInput.value = currentRoomCode;
+  }
+
   const viewParam = urlParams.get('view');
   if (viewParam && ['tv', 'player', 'host', 'hub'].includes(viewParam)) {
     switchView(viewParam);
@@ -328,7 +355,97 @@ function initQrCodes() {
   }
 }
 
-// 3. BROADCAST CHANNEL REAL-TIME STATE MACHINE
+// 3. BROADCAST CHANNEL & SUPABASE REAL-TIME STATE MACHINE
+function broadcastSupabaseEvent(event, payload) {
+  if (realtimeChannel) {
+    try {
+      realtimeChannel.send({
+        type: 'broadcast',
+        event,
+        payload,
+      });
+    } catch (e) {
+      console.warn(`[Supabase Realtime] Failed to send ${event}:`, e);
+    }
+  }
+}
+
+function initSupabaseRealtime() {
+  if (realtimeChannel) {
+    try {
+      supabase.removeChannel(realtimeChannel);
+    } catch (_) {}
+  }
+
+  const chName = `room_${currentRoomCode.toUpperCase()}`;
+  console.log(`[Supabase Realtime] Connecting to ${chName}...`);
+
+  realtimeChannel = supabase.channel(chName);
+
+  realtimeChannel
+    .on('broadcast', { event: 'question_start' }, ({ payload }) => {
+      console.log('[Supabase Realtime] question_start received:', payload);
+      if (!payload) return;
+
+      const questionData = {
+        id: payload.question_id || payload.id || String(Date.now()),
+        category: payload.category || 'General Knowledge',
+        difficulty: payload.difficulty || 'Standard',
+        text: payload.question_text || payload.text || '',
+        options: {
+          A: payload.option_a || payload.options?.A || 'Option A',
+          B: payload.option_b || payload.options?.B || 'Option B',
+          C: payload.option_c || payload.options?.C || 'Option C',
+          D: payload.option_d || payload.options?.D || 'Option D',
+        },
+        correct: payload.correct_option || payload.correct || 'A',
+      };
+
+      const durationSeconds = payload.duration_seconds || payload.time_limit_seconds || 20;
+      const qIndex = payload.question_index || 1;
+      const roundNum = Math.floor((qIndex - 1) / 10) + 1;
+      const qNumInRound = ((qIndex - 1) % 10) + 1;
+
+      timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
+
+      onQuestionStart({
+        questionData,
+        roundNumber: roundNum,
+        questionNumberInRound: qNumInRound,
+        durationSeconds,
+        difficulty: payload.difficulty || 'Standard',
+      });
+    })
+    .on('broadcast', { event: 'timer_expired' }, ({ payload }) => {
+      console.log('[Supabase Realtime] timer_expired received:', payload);
+      onTimerExpired({
+        correctOption: payload?.correct_option || payload?.correct,
+        nextQuestionStartsAtEpochMs: payload?.next_question_starts_at_epoch_ms,
+      });
+    })
+    .on('broadcast', { event: 'round_completed' }, ({ payload }) => {
+      console.log('[Supabase Realtime] round_completed received:', payload);
+      if (payload?.top3_winners || payload?.top3Winners) {
+        onRoundWinner({
+          top3Winners: payload.top3_winners || payload.top3Winners || [],
+        });
+      }
+    })
+    .on('broadcast', { event: 'game_reset' }, () => {
+      console.log('[Supabase Realtime] game_reset received');
+      onGameReset();
+    })
+    .on('broadcast', { event: 'leaderboard_updated' }, ({ payload }) => {
+      if (payload?.players || payload?.leaderboard) {
+        playersLeaderboard = payload.players || payload.leaderboard;
+        renderLeaderboard();
+      }
+    })
+    .subscribe((status) => {
+      console.log(`[Supabase Realtime] ${chName} channel status: ${status}`);
+    });
+}
+
 function initBroadcastChannelListeners() {
   channel.onmessage = (event) => {
     const { type, payload } = event.data;
@@ -743,6 +860,22 @@ async function runNextAutomatedStep() {
 
   currentGameState = 'QUESTION_ACTIVE';
   channel.postMessage({ type: 'QUESTION_START', payload });
+  broadcastSupabaseEvent('question_start', {
+    event: 'question_start',
+    room_code: currentRoomCode,
+    question_index: currentQuestionIndex + 1,
+    question_id: question.id,
+    duration_seconds: durationSeconds,
+    timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+    category: question.category,
+    difficulty: selectedDifficulty,
+    question_text: question.text,
+    option_a: question.options.A,
+    option_b: question.options.B,
+    option_c: question.options.C,
+    option_d: question.options.D,
+    correct_option: question.correct,
+  });
   onQuestionStart(payload);
 
   autoEngineTimeout = setTimeout(() => {
@@ -758,6 +891,12 @@ async function runNextAutomatedStep() {
 
     setTimeout(() => {
       channel.postMessage({ type: 'TIMER_EXPIRED', payload: expiredPayload });
+      broadcastSupabaseEvent('timer_expired', {
+        event: 'timer_expired',
+        room_code: currentRoomCode,
+        correct_option: question.correct,
+        next_question_starts_at_epoch_ms: Date.now() + 20000,
+      });
       onTimerExpired(expiredPayload);
 
       autoEngineTimeout = setTimeout(() => {
@@ -772,6 +911,11 @@ async function runNextAutomatedStep() {
           roundWinner.score += 250;
           renderLeaderboard();
           channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
+          broadcastSupabaseEvent('leaderboard_updated', {
+            event: 'leaderboard_updated',
+            room_code: currentRoomCode,
+            players: playersLeaderboard,
+          });
 
           const winnerPayload = {
             roundNumber: currentRound,
@@ -781,6 +925,12 @@ async function runNextAutomatedStep() {
           };
 
           channel.postMessage({ type: 'ROUND_WINNER', payload: winnerPayload });
+          broadcastSupabaseEvent('round_completed', {
+            event: 'round_completed',
+            room_code: currentRoomCode,
+            top3_winners: playersLeaderboard.slice(0, 3),
+            next_round_starts_at_epoch_ms: Date.now() + 60000,
+          });
           onRoundWinner(winnerPayload);
 
           autoEngineTimeout = setTimeout(() => {
@@ -1192,6 +1342,12 @@ function initPlayerControls() {
     playerControllerScreen.classList.remove('hidden');
 
     channel.postMessage({ type: 'PLAYER_JOINED', payload: currentPlayer });
+    broadcastSupabaseEvent('player_joined', {
+      event: 'player_joined',
+      room_code: currentRoomCode,
+      nickname: currentPlayer.nickname,
+      score: currentPlayer.score,
+    });
     onPlayerJoined(currentPlayer);
 
     if (currentQuestionData) {
@@ -1249,6 +1405,14 @@ function initPlayerControls() {
       channel.postMessage({
         type: 'ANSWER_SUBMITTED',
         payload: { player: currentPlayer, choice }
+      });
+      broadcastSupabaseEvent('answer_submitted', {
+        event: 'answer_submitted',
+        room_code: currentRoomCode,
+        nickname: currentPlayer.nickname,
+        selected_option: choice,
+        is_correct: currentQuestionData ? (choice === currentQuestionData.correct) : false,
+        score: currentPlayer.score,
       });
     });
   });
