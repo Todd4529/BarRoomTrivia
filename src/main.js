@@ -1,20 +1,9 @@
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
-import { createClient } from '@supabase/supabase-js';
+import mqtt from 'mqtt';
 import { fetchRealtimeTriviaQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
 
-// Supabase Configuration
-const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_VjyTwHSKG0WNtVJMGk4omw_fRQwSUWb';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
-
-let realtimeChannel = null;
+let mqttClient = null;
 
 // State & Broadcast Channel
 const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
@@ -132,7 +121,7 @@ function initApp() {
   initPlayerControls();
   initTvModeToggle();
   initBroadcastChannelListeners();
-  initSupabaseRealtime();
+  initRealtimeEngine();
   initIndicatorClicks();
   
   onVenueNameUpdated({ venueName: currentVenueName });
@@ -355,21 +344,32 @@ function initQrCodes() {
   }
 }
 
-// 3. BROADCAST CHANNEL & SUPABASE REAL-TIME STATE MACHINE
-async function broadcastSupabaseEvent(event, payload) {
-  if (!realtimeChannel) return;
+// 3. BROADCAST CHANNEL & MQTT WEBSOCKET REAL-TIME ENGINE
+function getMqttTopic() {
+  return `barrooms_trivia/room_${currentRoomCode.toUpperCase()}`;
+}
+
+function broadcastRealtimeEvent(event, payload = {}) {
+  const fullPayload = {
+    ...payload,
+    event,
+    type: event.toUpperCase(),
+    room_code: currentRoomCode.toUpperCase(),
+    timestamp: Date.now(),
+  };
+
+  // 1. Local BroadcastChannel
   try {
-    await realtimeChannel.send({
-      type: 'broadcast',
-      event,
-      payload: {
-        ...payload,
-        event,
-        room_code: currentRoomCode,
-      },
-    });
-  } catch (e) {
-    console.warn(`[Supabase Realtime] Failed to send ${event}:`, e);
+    channel.postMessage({ type: event.toUpperCase(), payload: fullPayload });
+  } catch (_) {}
+
+  // 2. Internet-Wide Realtime MQTT WebSockets
+  if (mqttClient && mqttClient.connected) {
+    try {
+      mqttClient.publish(getMqttTopic(), JSON.stringify(fullPayload));
+    } catch (e) {
+      console.warn('[Realtime MQTT] Failed to publish:', e);
+    }
   }
 }
 
@@ -422,71 +422,92 @@ function handleIncomingTimerExpired(rawPayload) {
   });
 }
 
-function initSupabaseRealtime() {
-  if (realtimeChannel) {
-    try {
-      supabase.removeChannel(realtimeChannel);
-    } catch (_) {}
+function handleRealtimeIncomingEvent(event, data) {
+  const normEvent = (event || '').toLowerCase();
+  const payload = data.payload || data;
+
+  if (normEvent === 'question_start') {
+    handleIncomingQuestionStart(payload);
+  } else if (normEvent === 'timer_expired') {
+    handleIncomingTimerExpired(payload);
+  } else if (normEvent === 'round_completed' || normEvent === 'round_winner') {
+    if (payload?.top3_winners || payload?.top3Winners) {
+      onRoundWinner({ top3Winners: payload.top3_winners || payload.top3Winners || [] });
+    }
+  } else if (normEvent === 'game_reset') {
+    onGameReset();
+  } else if (normEvent === 'request_state_sync') {
+    if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+      broadcastRealtimeEvent('question_start', {
+        question_index: currentQuestionIndex + 1,
+        question_id: currentQuestionData.id,
+        duration_seconds: remainingTimerSeconds,
+        timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+        category: currentQuestionData.category,
+        difficulty: selectedDifficulty,
+        question_text: currentQuestionData.text,
+        option_a: currentQuestionData.options.A,
+        option_b: currentQuestionData.options.B,
+        option_c: currentQuestionData.options.C,
+        option_d: currentQuestionData.options.D,
+        correct_option: currentQuestionData.correct,
+      });
+    }
+  } else if (normEvent === 'player_joined') {
+    onPlayerJoined(payload);
+  } else if (normEvent === 'answer_submitted') {
+    onAnswerSubmitted(payload);
+  } else if (normEvent === 'leaderboard_updated') {
+    if (payload?.players || payload?.leaderboard) {
+      playersLeaderboard = payload.players || payload.leaderboard;
+      renderLeaderboard();
+    }
+  }
+}
+
+function initRealtimeEngine() {
+  if (mqttClient) {
+    try { mqttClient.end(true); } catch (_) {}
   }
 
-  const chName = `room_${currentRoomCode.toUpperCase()}`;
-  console.log(`[Supabase Realtime] Connecting to ${chName}...`);
+  const topic = getMqttTopic();
+  console.log(`[Realtime Engine] Connecting to MQTT broker for ${topic}...`);
 
-  realtimeChannel = supabase.channel(chName, {
-    config: {
-      broadcast: { self: true, ack: false },
-    },
-  });
+  try {
+    mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+      clientId: `barrooms_${Math.random().toString(16).substring(2, 10)}`,
+      keepalive: 30,
+      reconnectPeriod: 2000,
+    });
 
-  realtimeChannel
-    .on('broadcast', { event: 'question_start' }, (response) => {
-      handleIncomingQuestionStart(response.payload || response);
-    })
-    .on('broadcast', { event: 'timer_expired' }, (response) => {
-      handleIncomingTimerExpired(response.payload || response);
-    })
-    .on('broadcast', { event: 'round_completed' }, ({ payload }) => {
-      console.log('[Supabase Realtime] round_completed received:', payload);
-      if (payload?.top3_winners || payload?.top3Winners) {
-        onRoundWinner({
-          top3Winners: payload.top3_winners || payload.top3Winners || [],
-        });
-      }
-    })
-    .on('broadcast', { event: 'game_reset' }, () => {
-      console.log('[Supabase Realtime] game_reset received');
-      onGameReset();
-    })
-    .on('broadcast', { event: 'request_state_sync' }, () => {
-      if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
-        broadcastSupabaseEvent('question_start', {
-          question_index: currentQuestionIndex + 1,
-          question_id: currentQuestionData.id,
-          duration_seconds: remainingTimerSeconds,
-          timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
-          category: currentQuestionData.category,
-          difficulty: selectedDifficulty,
-          question_text: currentQuestionData.text,
-          option_a: currentQuestionData.options.A,
-          option_b: currentQuestionData.options.B,
-          option_c: currentQuestionData.options.C,
-          option_d: currentQuestionData.options.D,
-          correct_option: currentQuestionData.correct,
-        });
-      }
-    })
-    .on('broadcast', { event: 'leaderboard_updated' }, ({ payload }) => {
-      if (payload?.players || payload?.leaderboard) {
-        playersLeaderboard = payload.players || payload.leaderboard;
-        renderLeaderboard();
-      }
-    })
-    .subscribe((status) => {
-      console.log(`[Supabase Realtime] ${chName} channel status: ${status}`);
-      if (status === 'SUBSCRIBED') {
-        broadcastSupabaseEvent('request_state_sync', { room_code: currentRoomCode });
+    mqttClient.on('connect', () => {
+      console.log(`[Realtime Engine] Connected! Subscribing to ${topic}...`);
+      mqttClient.subscribe(topic, { qos: 0 }, (err) => {
+        if (!err) {
+          console.log(`[Realtime Engine] Subscribed to ${topic}!`);
+          // Request current state from host immediately
+          broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+        }
+      });
+    });
+
+    mqttClient.on('message', (receivedTopic, message) => {
+      if (receivedTopic !== topic) return;
+      try {
+        const data = JSON.parse(message.toString());
+        const event = data.event || data.type || '';
+        handleRealtimeIncomingEvent(event, data);
+      } catch (err) {
+        console.warn('[Realtime Engine] Failed to parse message:', err);
       }
     });
+
+    mqttClient.on('error', (err) => {
+      console.warn('[Realtime Engine] Error:', err);
+    });
+  } catch (err) {
+    console.error('[Realtime Engine] Init failed:', err);
+  }
 }
 
 function initBroadcastChannelListeners() {
@@ -902,10 +923,7 @@ async function runNextAutomatedStep() {
   };
 
   currentGameState = 'QUESTION_ACTIVE';
-  channel.postMessage({ type: 'QUESTION_START', payload });
-  broadcastSupabaseEvent('question_start', {
-    event: 'question_start',
-    room_code: currentRoomCode,
+  broadcastRealtimeEvent('question_start', {
     question_index: currentQuestionIndex + 1,
     question_id: question.id,
     duration_seconds: durationSeconds,
@@ -933,11 +951,9 @@ async function runNextAutomatedStep() {
     currentGameState = 'QUESTION_REVIEW';
 
     setTimeout(() => {
-      channel.postMessage({ type: 'TIMER_EXPIRED', payload: expiredPayload });
-      broadcastSupabaseEvent('timer_expired', {
-        event: 'timer_expired',
-        room_code: currentRoomCode,
+      broadcastRealtimeEvent('timer_expired', {
         correct_option: question.correct,
+        correctText: `${question.correct}) ${question.options[question.correct]}`,
         next_question_starts_at_epoch_ms: Date.now() + 20000,
       });
       onTimerExpired(expiredPayload);
@@ -953,10 +969,7 @@ async function runNextAutomatedStep() {
           
           roundWinner.score += 250;
           renderLeaderboard();
-          channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-          broadcastSupabaseEvent('leaderboard_updated', {
-            event: 'leaderboard_updated',
-            room_code: currentRoomCode,
+          broadcastRealtimeEvent('leaderboard_updated', {
             players: playersLeaderboard,
           });
 
@@ -967,10 +980,7 @@ async function runNextAutomatedStep() {
             delaySeconds: 60
           };
 
-          channel.postMessage({ type: 'ROUND_WINNER', payload: winnerPayload });
-          broadcastSupabaseEvent('round_completed', {
-            event: 'round_completed',
-            room_code: currentRoomCode,
+          broadcastRealtimeEvent('round_completed', {
             top3_winners: playersLeaderboard.slice(0, 3),
             next_round_starts_at_epoch_ms: Date.now() + 60000,
           });
@@ -1279,10 +1289,7 @@ function onTimerExpired(payload) {
       playersLeaderboard.push({ nickname: currentPlayer.nickname, score: currentPlayer.score, streak: currentPlayer.streak });
     }
     renderLeaderboard();
-    channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-    broadcastSupabaseEvent('leaderboard_updated', {
-      event: 'leaderboard_updated',
-      room_code: currentRoomCode,
+    broadcastRealtimeEvent('leaderboard_updated', {
       players: playersLeaderboard,
     });
 
@@ -1321,24 +1328,24 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
     if (scorePill) scorePill.textContent = pointsText;
   } else {
     card.className = 'result-modal-card is-wrong';
-    if (icon) icon.textContent = '😅';
-    if (title) title.textContent = playerChoiceSubmitted ? 'NOT QUITE!' : 'TIME EXPIRED!';
+    if (icon) icon.textContent = '❌';
+    if (title) title.textContent = 'OOF! MISSED IT!';
     if (scorePill) scorePill.textContent = pointsText;
   }
 
   if (correctTextEl) correctTextEl.textContent = correctTextStr;
   if (quote) quote.textContent = `"${funnyQuote}"`;
 
+  let remSecs = countdownSeconds;
+  if (modalTimerVal) modalTimerVal.textContent = remSecs;
+
   overlay.classList.remove('hidden');
 
   clearInterval(modalCountdownInterval);
-  let remModalSecs = countdownSeconds;
-  if (modalTimerVal) modalTimerVal.textContent = remModalSecs;
-
   modalCountdownInterval = setInterval(() => {
-    remModalSecs--;
-    if (modalTimerVal) modalTimerVal.textContent = Math.max(0, remModalSecs);
-    if (remModalSecs <= 0) {
+    remSecs--;
+    if (modalTimerVal) modalTimerVal.textContent = Math.max(0, remSecs);
+    if (remSecs <= 0) {
       clearInterval(modalCountdownInterval);
       hideResultModal();
     }
@@ -1351,34 +1358,57 @@ function hideResultModal() {
   clearInterval(modalCountdownInterval);
 }
 
-// 7. ROUND WINNER HANDLER
+// 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 function onRoundWinner(payload) {
-  const { winnerName, delaySeconds } = payload;
-  hideResultModal();
+  const top3 = payload?.top3Winners || playersLeaderboard.slice(0, 3);
+  if (!top3 || top3.length === 0) return;
 
-  const tvNextQBanner = document.getElementById('tv-next-q-banner');
-  if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
-  clearInterval(tvNextQCountdownInterval);
+  const winner1 = top3[0] || { nickname: 'Champion', score: 0 };
+  const winner2 = top3[1] || { nickname: 'Runner Up', score: 0 };
+  const winner3 = top3[2] || { nickname: 'Third Place', score: 0 };
 
   const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
-  const tvWinnerName = document.getElementById('tv-winner-name');
-  const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
-
-  if (tvWinnerName) tvWinnerName.textContent = winnerName;
-  if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
-
   const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
-  const playerWinnerName = document.getElementById('player-winner-name-text');
-  const playerWinnerTimer = document.getElementById('player-winner-next-timer');
 
-  if (playerWinnerName) playerWinnerName.textContent = winnerName;
+  const tvW1Name = document.getElementById('tv-w1-name');
+  const tvW1Score = document.getElementById('tv-w1-score');
+  const tvW2Name = document.getElementById('tv-w2-name');
+  const tvW2Score = document.getElementById('tv-w2-score');
+  const tvW3Name = document.getElementById('tv-w3-name');
+  const tvW3Score = document.getElementById('tv-w3-score');
+
+  if (tvW1Name) tvW1Name.textContent = winner1.nickname;
+  if (tvW1Score) tvW1Score.textContent = `${winner1.score} PTS`;
+  if (tvW2Name) tvW2Name.textContent = winner2.nickname;
+  if (tvW2Score) tvW2Score.textContent = `${winner2.score} PTS`;
+  if (tvW3Name) tvW3Name.textContent = winner3.nickname;
+  if (tvW3Score) tvW3Score.textContent = `${winner3.score} PTS`;
+
+  const pW1Name = document.getElementById('player-w1-name');
+  const pW1Score = document.getElementById('player-w1-score');
+  const pW2Name = document.getElementById('player-w2-name');
+  const pW2Score = document.getElementById('player-w2-score');
+  const pW3Name = document.getElementById('player-w3-name');
+  const pW3Score = document.getElementById('player-w3-score');
+
+  if (pW1Name) pW1Name.textContent = winner1.nickname;
+  if (pW1Score) pW1Score.textContent = `${winner1.score} PTS`;
+  if (pW2Name) pW2Name.textContent = winner2.nickname;
+  if (pW2Score) pW2Score.textContent = `${winner2.score} PTS`;
+  if (pW3Name) pW3Name.textContent = winner3.nickname;
+  if (pW3Score) pW3Score.textContent = `${winner3.score} PTS`;
+
+  const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
+  const playerWinnerTimer = document.getElementById('player-winner-next-round-timer');
+
+  if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
 
-  clearInterval(winnerCountdownInterval);
-  let remWinnerSecs = delaySeconds || 60;
+  let remWinnerSecs = 60;
   if (tvNextRoundTimer) tvNextRoundTimer.textContent = remWinnerSecs;
   if (playerWinnerTimer) playerWinnerTimer.textContent = remWinnerSecs;
 
+  clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     remWinnerSecs--;
     const currentSecs = Math.max(0, remWinnerSecs);
@@ -1442,14 +1472,11 @@ function initPlayerControls() {
       playerControllerScreen.style.display = 'flex';
     }
 
-    // Re-initialize Supabase connection for this specific room code
-    initSupabaseRealtime();
+    // Re-initialize Realtime connection for this specific room code
+    initRealtimeEngine();
 
-    // Broadcast join locally and via Supabase
-    channel.postMessage({ type: 'PLAYER_JOINED', payload: currentPlayer });
-    broadcastSupabaseEvent('player_joined', {
-      event: 'player_joined',
-      room_code: currentRoomCode,
+    // Broadcast join
+    broadcastRealtimeEvent('player_joined', {
       nickname: currentPlayer.nickname,
       score: currentPlayer.score,
     });
@@ -1509,13 +1536,7 @@ function initPlayerControls() {
         playerStatusBadge.innerHTML = `<span id="status-icon">🔒</span> LOCKED IN: Option ${choice}`;
       }
 
-      channel.postMessage({
-        type: 'ANSWER_SUBMITTED',
-        payload: { player: currentPlayer, choice }
-      });
-      broadcastSupabaseEvent('answer_submitted', {
-        event: 'answer_submitted',
-        room_code: currentRoomCode,
+      broadcastRealtimeEvent('answer_submitted', {
         nickname: currentPlayer.nickname,
         selected_option: choice,
         score: currentPlayer.score,

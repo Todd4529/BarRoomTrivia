@@ -12,6 +12,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "canvas-confetti": "^1.9.3",
     "lucide": "^0.439.0",
+    "mqtt": "^5.15.2",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
