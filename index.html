@@ -279,13 +279,13 @@
           <form id="form-player-join" class="join-form">
             <div class="form-group">
               <label for="input-room-code">ROOM CODE</label>
-              <input type="text" id="input-room-code" value="TRIV" placeholder="TRIV" required uppercase>
+              <input type="text" id="input-room-code" value="TRIV" placeholder="TRIV" required style="text-transform: uppercase;">
             </div>
             <div class="form-group">
               <label for="input-nickname">NICKNAME</label>
-              <input type="text" id="input-nickname" placeholder="e.g. Trivia Master" maxlength="15" required>
+              <input type="text" id="input-nickname" placeholder="e.g. Trivia Master" maxlength="15" required autocomplete="nickname">
             </div>
-            <button type="submit" class="btn btn-primary btn-block">
+            <button type="submit" id="btn-player-join" class="btn btn-primary btn-block">
               ENTER GAME (ANONYMOUS AUTH)
             </button>
           </form>

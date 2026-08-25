@@ -1325,22 +1325,42 @@ function onRoundSummary(payload) {
 // 8. PLAYER CONTROLLER HANDLER WITH SPEED BONUS & STREAK MULTIPLIER SCORING
 function initPlayerControls() {
   const formJoin = document.getElementById('form-player-join');
+  const btnJoin = document.getElementById('btn-player-join');
   const playerEntryScreen = document.getElementById('player-entry-screen');
   const playerControllerScreen = document.getElementById('player-controller-screen');
   const playerDispNickname = document.getElementById('player-disp-nickname');
+  const playerDispRoom = document.getElementById('player-disp-room');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  formJoin?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const nickname = document.getElementById('input-nickname').value.trim();
-    if (!nickname) return;
+  function doJoin() {
+    const roomInput = document.getElementById('input-room-code');
+    const nicknameInput = document.getElementById('input-nickname');
+
+    const enteredRoom = (roomInput?.value || '').trim();
+    if (enteredRoom) {
+      currentRoomCode = enteredRoom.toUpperCase();
+    }
+
+    const rawNick = (nicknameInput?.value || '').trim();
+    const nickname = rawNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
 
     currentPlayer = { nickname, score: 0, streak: 0 };
     if (playerDispNickname) playerDispNickname.textContent = nickname.toUpperCase();
+    if (playerDispRoom) playerDispRoom.textContent = `ROOM: ${currentRoomCode} • ROUND 1`;
 
-    playerEntryScreen.classList.add('hidden');
-    playerControllerScreen.classList.remove('hidden');
+    if (playerEntryScreen) {
+      playerEntryScreen.classList.add('hidden');
+      playerEntryScreen.style.display = 'none';
+    }
+    if (playerControllerScreen) {
+      playerControllerScreen.classList.remove('hidden');
+      playerControllerScreen.style.display = 'flex';
+    }
 
+    // Re-initialize Supabase connection for this specific room code
+    initSupabaseRealtime();
+
+    // Broadcast join locally and via Supabase
     channel.postMessage({ type: 'PLAYER_JOINED', payload: currentPlayer });
     broadcastSupabaseEvent('player_joined', {
       event: 'player_joined',
@@ -1351,12 +1371,27 @@ function initPlayerControls() {
     onPlayerJoined(currentPlayer);
 
     if (currentQuestionData) {
-      document.getElementById('player-question-text').textContent = currentQuestionData.text;
-      document.getElementById('p-opt-a').textContent = currentQuestionData.options.A;
-      document.getElementById('p-opt-b').textContent = currentQuestionData.options.B;
-      document.getElementById('p-opt-c').textContent = currentQuestionData.options.C;
-      document.getElementById('p-opt-d').textContent = currentQuestionData.options.D;
+      const qText = document.getElementById('player-question-text');
+      if (qText) qText.textContent = currentQuestionData.text;
+      const optA = document.getElementById('p-opt-a');
+      if (optA) optA.textContent = currentQuestionData.options?.A || 'A';
+      const optB = document.getElementById('p-opt-b');
+      if (optB) optB.textContent = currentQuestionData.options?.B || 'B';
+      const optC = document.getElementById('p-opt-c');
+      if (optC) optC.textContent = currentQuestionData.options?.C || 'C';
+      const optD = document.getElementById('p-opt-d');
+      if (optD) optD.textContent = currentQuestionData.options?.D || 'D';
     }
+  }
+
+  formJoin?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    doJoin();
+  });
+
+  btnJoin?.addEventListener('click', (e) => {
+    e.preventDefault();
+    doJoin();
   });
 
   answerBtns.forEach(btn => {
