@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../../shared/models/game_session.dart';
 import '../../shared/services/game_engine.dart';
 import '../../shared/services/realtime_service.dart';
@@ -470,73 +472,97 @@ class _HostDashboardViewState extends State<HostDashboardView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.darkBackground,
-      appBar: AppBar(
-        backgroundColor: AppTheme.cardSurface,
-        elevation: 0,
-        centerTitle: true,
-        toolbarHeight: 68,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Row(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (context.mounted) {
+          context.go('/hub');
+        }
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (context.mounted) context.go('/hub');
+          },
+          const SingleActivator(LogicalKeyboardKey.goBack): () {
+            if (context.mounted) context.go('/hub');
+          },
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.darkBackground,
+          appBar: AppBar(
+            backgroundColor: AppTheme.cardSurface,
+            elevation: 0,
+            centerTitle: true,
+            toolbarHeight: 68,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white70),
+              tooltip: 'Return to Hub',
+              onPressed: () => context.go('/hub'),
+            ),
+            title: Column(
               mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.asset(
-                    'assets/images/app_logo.png',
-                    width: 28,
-                    height: 28,
-                    fit: BoxFit.cover,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 28,
+                        height: 28,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'BAR ROOMS TRIVIA',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        letterSpacing: 1.5,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 2),
                 const Text(
-                  'BAR ROOMS TRIVIA',
+                  'HOST CONTROL',
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    letterSpacing: 1.5,
-                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    color: AppTheme.neonCyan,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
-            const Text(
-              'HOST CONTROL',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-                letterSpacing: 1.2,
-                color: AppTheme.neonCyan,
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ACTIVE COUNTDOWN TIMER CARD (PRE-GAME & LIVE QUESTION TIMER)
+                  if (_isPreGameCountdownActive || _isEngineRunning) _buildActiveCountdownTimerCard(),
+                  _buildGameModeSegmentedControl(),
+                  const SizedBox(height: 16),
+                  _buildDifficultySegmentedControl(),
+                  const SizedBox(height: 16),
+                  _buildTimerDurationScrollWheel(),
+                  const SizedBox(height: 16),
+                  _buildGenreQueueSelector(),
+                  const SizedBox(height: 24),
+                  _buildActionButtons(),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ACTIVE COUNTDOWN TIMER CARD (PRE-GAME & LIVE QUESTION TIMER)
-              if (_isPreGameCountdownActive || _isEngineRunning) _buildActiveCountdownTimerCard(),
-              _buildGameModeSegmentedControl(),
-              const SizedBox(height: 16),
-              _buildDifficultySegmentedControl(),
-              const SizedBox(height: 16),
-              _buildTimerDurationScrollWheel(),
-              const SizedBox(height: 16),
-              _buildGenreQueueSelector(),
-              const SizedBox(height: 24),
-              _buildActionButtons(),
-            ],
           ),
         ),
       ),

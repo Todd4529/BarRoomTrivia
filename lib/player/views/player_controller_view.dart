@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../../shared/models/game_session.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
@@ -433,116 +435,135 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.darkBackground,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            _player == null
-                ? _buildNicknamePrompt()
-                : _buildActivePlayerScreen(),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (context.mounted) {
+          context.go('/hub');
+        }
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (context.mounted) context.go('/hub');
+          },
+          const SingleActivator(LogicalKeyboardKey.goBack): () {
+            if (context.mounted) context.go('/hub');
+          },
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.darkBackground,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                _player == null
+                    ? _buildNicknamePrompt()
+                    : _buildActivePlayerScreen(),
 
-            if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black.withOpacity(0.88),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(20),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardSurfaceElevated,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.neonYellow, width: 2.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.neonYellow.withOpacity(0.35),
-                          blurRadius: 28,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.emoji_events_rounded, color: AppTheme.neonYellow, size: 56),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'ROUND COMPLETED!',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                            color: AppTheme.neonYellow,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'TOP 3 WINNERS OF THE ROUND',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ...List.generate(_top3Winners.length, (idx) {
-                          final w = _top3Winners[idx];
-                          final badges = ['🥇 1ST PLACE', '🥈 2ND PLACE', '🥉 3RD PLACE'];
-                          final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: colors[idx].withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: colors[idx], width: 1.5),
+                if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.88),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.all(20),
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cardSurfaceElevated,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppTheme.neonYellow, width: 2.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.neonYellow.withOpacity(0.35),
+                              blurRadius: 28,
+                              spreadRadius: 2,
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.emoji_events_rounded, color: AppTheme.neonYellow, size: 56),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'ROUND COMPLETED!',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.5,
+                                color: AppTheme.neonYellow,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'TOP 3 WINNERS OF THE ROUND',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ...List.generate(_top3Winners.length, (idx) {
+                              final w = _top3Winners[idx];
+                              final badges = ['🥇 1ST PLACE', '🥈 2ND PLACE', '🥉 3RD PLACE'];
+                              final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: colors[idx].withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: colors[idx], width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      badges[idx],
-                                      style: TextStyle(
-                                        color: colors[idx],
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 12,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          badges[idx],
+                                          style: TextStyle(
+                                            color: colors[idx],
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        Text(
+                                          (w['nickname'] as String? ?? '').toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     Text(
-                                      (w['nickname'] as String? ?? '').toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      '${w['score']} pts',
+                                      style: TextStyle(
+                                        color: colors[idx],
                                         fontWeight: FontWeight.w900,
                                         fontSize: 16,
                                       ),
                                     ),
                                   ],
                                 ),
-                                Text(
-                                  '${w['score']} pts',
-                                  style: TextStyle(
-                                    color: colors[idx],
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

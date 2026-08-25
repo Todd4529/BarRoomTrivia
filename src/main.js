@@ -276,12 +276,14 @@ function initNavigation() {
 
   popoutPlayerBtn?.addEventListener('click', (e) => {
     e.preventDefault();
-    window.open(window.location.origin + '?view=player', '_blank', 'width=420,height=800');
+    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+    window.open(`${window.location.origin}${basePath}/?view=player`, '_blank', 'width=420,height=800');
   });
 
   popoutTvBtn?.addEventListener('click', (e) => {
     e.preventDefault();
-    window.open(window.location.origin + '?view=tv', '_blank', 'width=1280,height=720');
+    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+    window.open(`${window.location.origin}${basePath}/?view=tv`, '_blank', 'width=1280,height=720');
   });
 
   // Initial load view resolution
@@ -308,7 +310,8 @@ document.addEventListener('click', (e) => {
 
 // 2. DYNAMIC QR CODES
 function initQrCodes() {
-  const playUrl = `${window.location.origin}?view=player&room=${currentRoomCode}`;
+  const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+  const playUrl = `${window.location.origin}${basePath}/?view=player&room=${currentRoomCode}`;
 
   const canvasStage = document.getElementById('qr-canvas');
   if (canvasStage) {

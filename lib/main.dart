@@ -30,7 +30,15 @@ final GoRouter _router = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => const InitialRouteDecider(),
+      builder: (context, state) {
+        final view = state.uri.queryParameters['view'];
+        final room = state.uri.queryParameters['room'] ??
+            state.uri.queryParameters['room_id'];
+        if (view == 'player' || (view == null && room != null && state.uri.queryParameters['view'] != 'tv')) {
+          return PlayerControllerView(initialRoomCode: room);
+        }
+        return const InitialRouteDecider();
+      },
     ),
     GoRoute(
       path: '/onboarding',
@@ -209,11 +217,6 @@ class MainNavigationHub extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Cross-Platform',
-                style: TextStyle(color: Colors.white54, fontSize: 18),
-              ),
               const SizedBox(height: 48),
               Wrap(
                 spacing: 24,
@@ -288,74 +291,75 @@ class _FocusableTargetCardState extends State<FocusableTargetCard> {
         }
         return KeyEventResult.ignored;
       },
-      child: AnimatedScale(
-        scale: _isFocused ? 1.06 : 1.0,
-        duration: const Duration(milliseconds: 180),
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 280,
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 280,
+          height: 180,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: BoxDecoration(
+            color: _isFocused
+                ? widget.color.withValues(alpha: 0.12)
+                : AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
               color: _isFocused
-                  ? widget.color.withValues(alpha: 0.22)
-                  : AppTheme.cardSurface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _isFocused ? widget.color : widget.color.withValues(alpha: 0.35),
-                width: _isFocused ? 3.5 : 1.5,
+                  ? widget.color.withValues(alpha: 0.65)
+                  : widget.color.withValues(alpha: 0.25),
+              width: _isFocused ? 2.0 : 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _isFocused
+                    ? widget.color.withValues(alpha: 0.20)
+                    : widget.color.withValues(alpha: 0.04),
+                blurRadius: _isFocused ? 14 : 8,
+                spreadRadius: _isFocused ? 1 : 0,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: _isFocused
-                      ? widget.color.withValues(alpha: 0.65)
-                      : widget.color.withValues(alpha: 0.08),
-                  blurRadius: _isFocused ? 28 : 16,
-                  spreadRadius: _isFocused ? 4 : 1,
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                widget.icon,
+                size: 48,
+                color: _isFocused ? Colors.white : widget.color,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: _isFocused ? Colors.white : Colors.white.withValues(alpha: 0.85),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  widget.icon,
-                  size: 52,
-                  color: _isFocused ? Colors.white : widget.color,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  widget.title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    color: _isFocused ? Colors.white : Colors.white.withValues(alpha: 0.9),
+              ),
+              const SizedBox(height: 8),
+              Opacity(
+                opacity: _isFocused ? 1.0 : 0.0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ),
-                if (_isFocused) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: widget.color,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'PRESS ENTER / SELECT',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                        letterSpacing: 0.8,
-                      ),
+                  child: const Text(
+                    'PRESS ENTER / SELECT',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black,
+                      letterSpacing: 0.8,
                     ),
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

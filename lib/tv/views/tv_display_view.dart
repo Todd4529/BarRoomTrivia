@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,7 +71,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
       if (mounted) setState(() => _playerBaseUrl = savedBaseUrl);
     } else if (kIsWeb) {
-      if (mounted) setState(() => _playerBaseUrl = Uri.base.origin);
+      final origin = Uri.base.origin;
+      final path = Uri.base.path.replaceAll(RegExp(r'/+$'), '');
+      if (mounted) {
+        setState(() => _playerBaseUrl = path.isNotEmpty ? '$origin$path' : origin);
+      }
     }
   }
 
@@ -412,10 +417,27 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.darkBackground,
-      body: SafeArea(
-        child: Stack(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (context.mounted) {
+          context.go('/hub');
+        }
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (context.mounted) context.go('/hub');
+          },
+          const SingleActivator(LogicalKeyboardKey.goBack): () {
+            if (context.mounted) context.go('/hub');
+          },
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.darkBackground,
+          body: SafeArea(
+            child: Stack(
           children: [
             Container(
               padding: const EdgeInsets.all(24.0),
@@ -576,7 +598,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   /// Official 4-Page Scrolling Advertisement Screen (Active when no game is running)
@@ -1104,28 +1128,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       backgroundColor: Colors.white,
                       eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
                       dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'ROOM: ${widget.roomCode}',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 3.0,
-                      color: AppTheme.neonYellow,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    playUrl,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white60,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
