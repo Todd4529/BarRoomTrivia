@@ -2,6 +2,9 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.type.television" android:required="false" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:label="Bar Rooms Trivia"
         android:name="${applicationName}"
@@ -29,6 +32,45 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Android App Links for Cross-Device QR Auth (/tv-auth) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="barroomstrivia.com"
+                    android:pathPrefix="/tv-auth" />
+                <data
+                    android:scheme="https"
+                    android:host="www.barroomstrivia.com"
+                    android:pathPrefix="/tv-auth" />
+                <data
+                    android:scheme="https"
+                    android:host="todd4529.github.io"
+                    android:pathPrefix="/BarRoomTrivia/tv-auth" />
+            </intent-filter>
+
+            <!-- Custom Scheme Deep Linking fallback (barroomstrivia://tv-auth) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="barroomstrivia"
+                    android:host="tv-auth" />
+            </intent-filter>
+
+            <!-- Supabase OAuth Redirect Callback (Google & Apple Sign-In on Android) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="io.supabase.barroomstrivia"
+                    android:host="login-callback" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -45,6 +45,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -55,6 +57,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>io.supabase.barroomstrivia</string>
+				<string>barroomstrivia</string>
 			</array>
 		</dict>
 	</array>

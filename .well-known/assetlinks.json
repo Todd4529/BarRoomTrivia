@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.barroomstrivia.myapp",
+      "sha256_cert_fingerprints": [
+        "14:6D:E9:01:C8:2E:FE:7B:1E:8E:5E:86:11:98:B0:80:C5:0B:4D:21:E4:74:58:24:E0:4F:B5:12:0A:0E:60:25"
+      ]
+    }
+  }
+]

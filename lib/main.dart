@@ -13,6 +13,7 @@ import 'host/views/host_dashboard_view.dart';
 import 'onboarding/onboarding_page.dart';
 import 'auth/auth_page.dart';
 import 'auth/reset_password_page.dart';
+import 'auth/tv_auth_verify_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -59,6 +60,19 @@ final GoRouter _router = GoRouter(
             state.uri.queryParameters['room_id'] ??
             'TRIV';
         return TvDisplayView(roomCode: roomCode);
+      },
+    ),
+    GoRoute(
+      path: '/tv-auth',
+      builder: (context, state) {
+        final deviceToken = state.uri.queryParameters['device_token'] ??
+            state.uri.queryParameters['token'] ??
+            state.uri.queryParameters['code'];
+        final userCode = state.uri.queryParameters['user_code'];
+        return TvAuthVerifyView(
+          deviceToken: deviceToken,
+          userCode: userCode,
+        );
       },
     ),
     GoRoute(
@@ -123,6 +137,11 @@ class _BarRoomTriviaAppState extends State<BarRoomTriviaApp> {
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
         _router.go('/reset-password');
+      } else if (data.event == AuthChangeEvent.signedIn) {
+        final location = _router.routerDelegate.currentConfiguration.uri.path;
+        if (location == '/auth' || location == '/onboarding') {
+          _router.go('/hub');
+        }
       }
     });
     _checkForUpdate();

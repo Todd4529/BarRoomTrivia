@@ -1,0 +1,27 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID1234.com.barroomstrivia.myapp",
+        "paths": [
+          "/tv-auth",
+          "/tv-auth/*",
+          "/BarRoomTrivia/tv-auth",
+          "/BarRoomTrivia/tv-auth/*"
+        ],
+        "components": [
+          {
+            "/": "/tv-auth*",
+            "comment": "Matches TV QR code authentication deep link with tokens"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID1234.com.barroomstrivia.myapp"
+    ]
+  }
+}
