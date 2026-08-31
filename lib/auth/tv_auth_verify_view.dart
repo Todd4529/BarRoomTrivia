@@ -188,55 +188,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
     }
   }
 
-  Future<void> _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
 
-    try {
-      await SupabaseService().signInWithGoogle();
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null && widget.deviceToken != null) {
-        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
-      }
-    } on AuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Google Sign-In failed: ${e.toString()}';
-      });
-    }
-  }
-
-  Future<void> _handleAppleSignIn() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await SupabaseService().signInWithApple();
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null && widget.deviceToken != null) {
-        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
-      }
-    } on AuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.message;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Apple Sign-In failed: ${e.toString()}';
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -546,42 +498,6 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
               _isSignUpMode ? 'CREATE ACCOUNT & PAIR TV' : 'SIGN IN & PAIR TV',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10.0),
-                child: Text('OR', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
-              ),
-              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 24),
-            label: const Text('Sign In with Google & Pair TV', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-            onPressed: _handleGoogleSignIn,
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: const Icon(Icons.apple, color: Colors.white, size: 20),
-            label: const Text('Sign In with Apple & Pair TV', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-            onPressed: _handleAppleSignIn,
           ),
           const SizedBox(height: 16),
           TextButton(
