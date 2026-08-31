@@ -1,7 +1,12 @@
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import mqtt from 'mqtt';
+import { createClient } from '@supabase/supabase-js';
 import { fetchRealtimeTriviaQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
+
+const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let mqttClient = null;
 
@@ -116,6 +121,7 @@ let playersLeaderboard = [...defaultMockPlayers];
 function initApp() {
   initOpenTdbToken();
   initNavigation();
+  initAuthView();
   initQrCodes();
   initHostControls();
   initPlayerControls();
@@ -140,6 +146,177 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
   initApp();
+}
+
+// HOST AUTHENTICATION LOGIC (Mobile & Web)
+function initAuthView() {
+  const form = document.getElementById('form-host-auth');
+  const emailInput = document.getElementById('auth-email-input');
+  const passwordInput = document.getElementById('auth-password-input');
+  const btnSubmit = document.getElementById('btn-submit-auth');
+  const btnToggleSignMode = document.getElementById('btn-toggle-sign-mode');
+  const btnGoogle = document.getElementById('btn-oauth-google');
+  const btnApple = document.getElementById('btn-oauth-apple');
+  const alertBox = document.getElementById('auth-status-alert');
+  const tvCodePill = document.getElementById('auth-tv-code-pill');
+  const tvCodeLabel = document.getElementById('auth-tv-code-label');
+  const subtitleText = document.getElementById('auth-subtitle-text');
+
+  let isSignUpMode = false;
+
+  // Extract device_token and user_code from query params or hash
+  const urlParams = new URLSearchParams(window.location.search);
+  let deviceToken = urlParams.get('device_token');
+  let userCode = urlParams.get('user_code');
+
+  if (!deviceToken && window.location.hash.includes('device_token=')) {
+    const hashQuery = window.location.hash.split('?')[1] || '';
+    const hashParams = new URLSearchParams(hashQuery);
+    deviceToken = hashParams.get('device_token');
+    userCode = hashParams.get('user_code');
+  }
+
+  if (userCode && tvCodeLabel && tvCodePill) {
+    tvCodeLabel.textContent = userCode;
+    tvCodePill.classList.remove('hidden');
+  }
+
+  function showAlert(msg, isError = true) {
+    if (!alertBox) return;
+    alertBox.textContent = msg;
+    alertBox.className = `auth-alert ${isError ? 'error' : 'success'}`;
+    alertBox.classList.remove('hidden');
+  }
+
+  function hideAlert() {
+    if (alertBox) alertBox.classList.add('hidden');
+  }
+
+  btnToggleSignMode?.addEventListener('click', (e) => {
+    e.preventDefault();
+    isSignUpMode = !isSignUpMode;
+    if (isSignUpMode) {
+      subtitleText.textContent = 'Create a Host Account to Connect TV';
+      btnSubmit.textContent = 'CREATE ACCOUNT & CONNECT TV';
+      btnToggleSignMode.innerHTML = 'Already have an account? <strong>Sign In</strong>';
+    } else {
+      subtitleText.textContent = 'Sign In as Host to Connect TV Display';
+      btnSubmit.textContent = 'SIGN IN & CONNECT TV';
+      btnToggleSignMode.innerHTML = "Don't have an account? <strong>Sign Up</strong>";
+    }
+  });
+
+  async function broadcastDeviceAuth(user) {
+    const token = deviceToken || `tv_auth_${Date.now()}`;
+    const payload = {
+      device_token: token,
+      user_id: user.id,
+      user_info: {
+        email: user.email || 'Host User',
+        display_name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'Host',
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    // 1. Broadcast via Supabase Realtime channel for TV pickup
+    try {
+      const authChannel = supabase.channel(`device_auth_${token}`);
+      await authChannel.subscribe();
+      await authChannel.send({
+        type: 'broadcast',
+        event: 'device_authorized',
+        payload
+      });
+
+      const roomChannel = supabase.channel('room_TRIV');
+      await roomChannel.subscribe();
+      await roomChannel.send({
+        type: 'broadcast',
+        event: 'device_authorized',
+        payload
+      });
+    } catch (err) {
+      console.warn('Realtime broadcast error:', err);
+    }
+
+    // 2. Broadcast via window BroadcastChannel
+    try {
+      channel.postMessage({
+        type: 'DEVICE_AUTHORIZED',
+        ...payload
+      });
+    } catch (_) {}
+
+    showAlert('TV Connected Successfully! Launching Host Panel...', false);
+    setTimeout(() => {
+      switchView('host');
+    }, 1000);
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAlert();
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
+      showAlert('Please fill in both email and password.');
+      return;
+    }
+
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'AUTHENTICATING...';
+
+    try {
+      let result;
+      if (isSignUpMode) {
+        result = await supabase.auth.signUp({ email, password });
+      } else {
+        result = await supabase.auth.signInWithPassword({ email, password });
+      }
+
+      if (result.error) {
+        showAlert(result.error.message);
+      } else if (result.data?.user) {
+        await broadcastDeviceAuth(result.data.user);
+      } else {
+        showAlert('Check your email for confirmation if required.', false);
+      }
+    } catch (err) {
+      showAlert(err.message || 'Authentication failed.');
+    } finally {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = isSignUpMode ? 'CREATE ACCOUNT & CONNECT TV' : 'SIGN IN & CONNECT TV';
+    }
+  });
+
+  btnGoogle?.addEventListener('click', async () => {
+    hideAlert();
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.href
+        }
+      });
+    } catch (err) {
+      showAlert(err.message || 'Google sign-in failed.');
+    }
+  });
+
+  btnApple?.addEventListener('click', async () => {
+    hideAlert();
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: window.location.href
+        }
+      });
+    } catch (err) {
+      showAlert(err.message || 'Apple sign-in failed.');
+    }
+  });
 }
 
 // TV DISPLAY MODE TOGGLE (PROMO CAROUSEL VS LIVE QUESTION STAGE)
@@ -279,7 +456,7 @@ function initNavigation() {
 
   // Browser Back / Forward button support
   window.addEventListener('popstate', (e) => {
-    const view = e.state?.view || new URLSearchParams(window.location.search).get('view') || 'hub';
+    const view = e.state?.view || new URLSearchParams(window.location.search).get('view') || 'auth';
     switchView(view);
   });
 
@@ -298,6 +475,7 @@ function initNavigation() {
   // Initial load view resolution
   const urlParams = new URLSearchParams(window.location.search);
   const roomParam = urlParams.get('room') || urlParams.get('room_id');
+  const deviceToken = urlParams.get('device_token') || (window.location.hash.includes('device_token=') ? 'yes' : null);
   if (roomParam) {
     currentRoomCode = roomParam.toUpperCase();
     const roomInput = document.getElementById('input-room-code');
@@ -305,10 +483,14 @@ function initNavigation() {
   }
 
   const viewParam = urlParams.get('view');
-  if (viewParam && ['tv', 'player', 'host', 'hub'].includes(viewParam)) {
+  if (viewParam && ['tv', 'player', 'host', 'auth'].includes(viewParam)) {
     switchView(viewParam);
+  } else if (deviceToken || window.location.hash.includes('tv-auth')) {
+    switchView('auth');
+  } else if (urlParams.has('room') && viewParam !== 'tv') {
+    switchView('player');
   } else {
-    switchView('hub');
+    switchView('auth');
   }
 }
 

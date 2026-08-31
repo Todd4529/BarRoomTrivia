@@ -73,7 +73,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _deviceToken = 'tv_${timestamp}_$randomHex';
 
     // Universal pairing URL (opens mobile auth view with token & code)
-    _qrAuthUrl = 'https://todd4529.github.io/BarRoomTrivia/#/tv-auth?device_token=$_deviceToken&user_code=$_userCode';
+    _qrAuthUrl = 'https://todd4529.github.io/BarRoomTrivia/?view=auth&device_token=$_deviceToken&user_code=$_userCode';
 
     _remainingSeconds = 300;
     _subscribeToPairingChannel();

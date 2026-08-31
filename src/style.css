@@ -2120,3 +2120,233 @@ body[data-view="player"] .logo-container {
     font-size: 24px;
   }
 }
+
+/* ==========================================================================
+   HOST SIGN-IN & SIGN-UP VIEW (Mobile & Web)
+   ========================================================================== */
+.auth-card-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 120px);
+  padding: 24px 16px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-card);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-radius: 24px;
+  padding: 36px 28px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 229, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-brand {
+  text-align: center;
+}
+
+.auth-logo-badge {
+  font-size: 40px;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.auth-brand h2 {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ffffff;
+}
+
+.auth-brand p {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.auth-code-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 214, 0, 0.12);
+  border: 1px solid var(--accent-yellow);
+  color: var(--accent-yellow);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 12px;
+  margin-top: 10px;
+}
+
+.auth-alert {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.auth-alert.error {
+  background: rgba(229, 57, 53, 0.15);
+  border: 1px solid #e53935;
+  color: #ff8a80;
+}
+
+.auth-alert.success {
+  background: rgba(0, 230, 118, 0.15);
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+}
+
+.auth-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.form-group input {
+  background: #0d0d12;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: #fff;
+  font-size: 15px;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.2);
+}
+
+.btn-primary {
+  background: var(--accent-cyan);
+  color: #000;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: none;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+  background: #26ebff;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.auth-separator {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.auth-separator::before,
+.auth-separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.auth-separator span {
+  padding: 0 10px;
+}
+
+.auth-social-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-social-google {
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s;
+}
+
+.btn-social-google:hover {
+  background: #f1f3f4;
+}
+
+.btn-social-apple {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.15s;
+}
+
+.btn-social-apple:hover {
+  background: #151515;
+}
+
+.auth-mode-switch {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.btn-text-link {
+  background: none;
+  border: none;
+  color: var(--accent-cyan);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.btn-text-link strong {
+  text-decoration: underline;
+}
+
+.hidden {
+  display: none !important;
+}
+
