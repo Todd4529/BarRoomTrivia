@@ -338,7 +338,7 @@ class _FocusableTargetCardState extends State<FocusableTargetCard> {
           duration: const Duration(milliseconds: 180),
           width: 280,
           height: 180,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: _isFocused
                 ? widget.color.withValues(alpha: 0.12)
@@ -365,10 +365,10 @@ class _FocusableTargetCardState extends State<FocusableTargetCard> {
             children: [
               Icon(
                 widget.icon,
-                size: 48,
+                size: 40,
                 color: _isFocused ? Colors.white : widget.color,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
