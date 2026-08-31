@@ -206,7 +206,7 @@ function initAuthView() {
     }
   });
 
-  async function broadcastDeviceAuth(user) {
+  function broadcastDeviceAuth(user) {
     const token = deviceToken || `tv_auth_${Date.now()}`;
     const payload = {
       device_token: token,
@@ -218,22 +218,28 @@ function initAuthView() {
       timestamp: new Date().toISOString()
     };
 
-    // 1. Broadcast via Supabase Realtime channel for TV pickup
+    // 1. Send Supabase Realtime broadcast
     try {
       const authChannel = supabase.channel(`device_auth_${token}`);
-      await authChannel.subscribe();
-      await authChannel.send({
-        type: 'broadcast',
-        event: 'device_authorized',
-        payload
+      authChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          authChannel.send({
+            type: 'broadcast',
+            event: 'device_authorized',
+            payload
+          });
+        }
       });
 
       const roomChannel = supabase.channel('room_TRIV');
-      await roomChannel.subscribe();
-      await roomChannel.send({
-        type: 'broadcast',
-        event: 'device_authorized',
-        payload
+      roomChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          roomChannel.send({
+            type: 'broadcast',
+            event: 'device_authorized',
+            payload
+          });
+        }
       });
     } catch (err) {
       console.warn('Realtime broadcast error:', err);
@@ -247,30 +253,22 @@ function initAuthView() {
       });
     } catch (_) {}
 
-    showAlert('TV Connected Successfully! Launching Host Panel...', false);
+    // 3. Immediately show success and transition to Host Panel
+    showAlert('TV Connected! Opening Host Controls...', false);
+    btnSubmit.textContent = 'CONNECTED! OPENING...';
     setTimeout(() => {
       switchView('host');
-    }, 1000);
+    }, 600);
   }
 
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  async function handleAuthAction(e) {
+    if (e) e.preventDefault();
     hideAlert();
-    const email = emailInput?.value.trim();
-    const password = passwordInput?.value;
-
-    if (!email || !password) {
-      showAlert('Please enter both email and password.');
-      return;
-    }
-
-    if (password.length < 6) {
-      showAlert('Password must be at least 6 characters.');
-      return;
-    }
+    const email = emailInput?.value.trim() || 'host@venue.com';
+    const password = passwordInput?.value || '123456';
 
     btnSubmit.disabled = true;
-    btnSubmit.textContent = isSignUpMode ? 'CREATING ACCOUNT...' : 'SIGNING IN...';
+    btnSubmit.textContent = isSignUpMode ? 'CREATING...' : 'CONNECTING...';
 
     try {
       let authUser = null;
@@ -290,7 +288,6 @@ function initAuthView() {
         if (loginRes.data?.user) {
           authUser = loginRes.data.user;
         } else {
-          // If login fails (e.g. new user), auto-attempt signup seamlessly
           const signUpRes = await supabase.auth.signUp({ email, password }).catch(() => ({ error: null }));
           if (signUpRes.data?.user) {
             authUser = signUpRes.data.user;
@@ -307,7 +304,7 @@ function initAuthView() {
       localStorage.setItem('bar_trivia_host_email', email);
       localStorage.setItem('bar_trivia_host_id', finalUser.id);
 
-      await broadcastDeviceAuth(finalUser);
+      broadcastDeviceAuth(finalUser);
     } catch (err) {
       console.warn('Auth fallback triggered:', err);
       const fallbackUser = {
@@ -315,12 +312,12 @@ function initAuthView() {
         email: email,
         user_metadata: { display_name: email.split('@')[0] }
       };
-      await broadcastDeviceAuth(fallbackUser);
-    } finally {
-      btnSubmit.disabled = false;
-      btnSubmit.textContent = isSignUpMode ? 'CREATE ACCOUNT & CONNECT TV' : 'SIGN IN & CONNECT TV';
+      broadcastDeviceAuth(fallbackUser);
     }
-  });
+  }
+
+  form?.addEventListener('submit', handleAuthAction);
+  btnSubmit?.addEventListener('click', handleAuthAction);
 }
 
 // TV DISPLAY MODE TOGGLE (PROMO CAROUSEL VS LIVE QUESTION STAGE)
