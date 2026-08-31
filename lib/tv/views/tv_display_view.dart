@@ -65,8 +65,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _startAdSlideTimer();
   }
 
+  String _savedRoomCode = '';
+
+  String get _displayRoomCode {
+    if (widget.roomCode.isNotEmpty && widget.roomCode != 'TRIV') {
+      return widget.roomCode;
+    }
+    return _savedRoomCode.isNotEmpty ? _savedRoomCode : 'TRIV';
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedCode = prefs.getString('tv_room_code');
+    if (savedCode != null && savedCode.isNotEmpty) {
+      if (mounted) setState(() => _savedRoomCode = savedCode);
+    }
     final savedBaseUrl = prefs.getString('player_base_url');
     if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
       if (mounted) setState(() => _playerBaseUrl = savedBaseUrl);
@@ -81,7 +94,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   String _getPlayUrl() {
     final cleanBase = _playerBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    return '$cleanBase/?view=player&room=${widget.roomCode}';
+    return '$cleanBase/?view=player&room=$_displayRoomCode';
   }
 
   void _showEditPlayerUrlDialog() {
@@ -743,26 +756,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Text(
-                    'ROOM: ${widget.roomCode}',
+                    'ROOM: $_displayRoomCode',
                     style: const TextStyle(
-                      fontSize: 22,
+                      fontSize: 24,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: 3.0,
+                      letterSpacing: 3.5,
                       color: AppTheme.neonYellow,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    playUrl,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white60,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

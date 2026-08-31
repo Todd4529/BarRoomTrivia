@@ -168,11 +168,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     await prefs.setBool('onboardingCompleted', true);
     await prefs.setString('tv_authorized_user', _authorizedUserName);
     await prefs.setString('tv_authorized_id', payload['user_id']?.toString() ?? '');
+    await prefs.setString('tv_room_code', _userCode);
 
     // Brief delay to display connected state, then transition to Waiting for Host TV stage
     await Future.delayed(const Duration(milliseconds: 1400));
     if (mounted) {
-      context.go('/tv?room=TRIV');
+      context.go('/tv?room=$_userCode');
     }
   }
 

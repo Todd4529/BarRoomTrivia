@@ -548,6 +548,11 @@ function initQrCodes() {
       if (err) console.error('Promo QR Code error:', err);
     });
   }
+
+  const roomLabels = document.querySelectorAll('.qr-room-code');
+  roomLabels.forEach(el => {
+    el.textContent = currentRoomCode;
+  });
 }
 
 // 3. BROADCAST CHANNEL & MQTT WEBSOCKET REAL-TIME ENGINE
