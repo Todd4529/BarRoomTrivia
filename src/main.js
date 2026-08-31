@@ -560,6 +560,26 @@ function getMqttTopic() {
   return `barrooms_trivia/room_${currentRoomCode.toUpperCase()}`;
 }
 
+let liveRoomChannel = null;
+let liveDefaultChannel = null;
+let liveGlobalChannel = null;
+
+function initRealtimeSupabaseChannels() {
+  try {
+    const norm = currentRoomCode.toUpperCase();
+    liveRoomChannel = supabase.channel(`room_${norm}`);
+    liveRoomChannel.subscribe();
+
+    liveDefaultChannel = supabase.channel('room_TRIV');
+    liveDefaultChannel.subscribe();
+
+    liveGlobalChannel = supabase.channel('room_GLOBAL');
+    liveGlobalChannel.subscribe();
+  } catch (e) {
+    console.warn('Error setting up Supabase Realtime channels:', e);
+  }
+}
+
 function broadcastRealtimeEvent(event, payload = {}) {
   const fullPayload = {
     ...payload,
@@ -581,6 +601,30 @@ function broadcastRealtimeEvent(event, payload = {}) {
     } catch (e) {
       console.warn('[Realtime MQTT] Failed to publish:', e);
     }
+  }
+
+  // 3. Internet-Wide Supabase Realtime Gateway
+  try {
+    if (!liveRoomChannel || !liveDefaultChannel) {
+      initRealtimeSupabaseChannels();
+    }
+    liveRoomChannel?.send({
+      type: 'broadcast',
+      event: event,
+      payload: fullPayload
+    });
+    liveDefaultChannel?.send({
+      type: 'broadcast',
+      event: event,
+      payload: fullPayload
+    });
+    liveGlobalChannel?.send({
+      type: 'broadcast',
+      event: event,
+      payload: fullPayload
+    });
+  } catch (err) {
+    console.warn('[Supabase Realtime Broadcast] Error:', err);
   }
 }
 

@@ -7,6 +7,8 @@ import 'broadcast_sync.dart';
 
 class RealtimeService {
   RealtimeChannel? _channel;
+  RealtimeChannel? _defaultChannel;
+  RealtimeChannel? _globalChannel;
 
   // Static event bus for local dev testing / multi-view synchronization
   static final StreamController<Map<String, dynamic>> _localEventBus =
@@ -30,7 +32,16 @@ class RealtimeService {
       if (rawData is Map<String, dynamic>) {
         final data = rawData;
         final eventRoom = (data['room_code'] as String?)?.toUpperCase();
-        if (eventRoom != null && eventRoom != roomCode.toUpperCase()) return;
+        final currentRoom = roomCode.toUpperCase();
+        
+        // Accept events if room matches, or if either is TRIV / GLOBAL
+        if (eventRoom != null &&
+            eventRoom != currentRoom &&
+            eventRoom != 'TRIV' &&
+            eventRoom != 'GLOBAL' &&
+            currentRoom != 'TRIV') {
+          return;
+        }
 
         final event = data['event'] as String?;
         if (event == 'pre_game_countdown' && onPreGameCountdownBroadcast != null) {
@@ -63,11 +74,9 @@ class RealtimeService {
     // 2. Listen to cross-tab web localStorage events
     BroadcastSync.listen(handleEvent);
 
-    // 3. Subscribe to Supabase Realtime channel if available
-    try {
-      _channel = SupabaseConfig.client.channel('room_$roomCode');
-
-      _channel!
+    // Helper to register callbacks on any RealtimeChannel
+    void attachListeners(RealtimeChannel ch) {
+      ch
           .onBroadcast(
             event: 'question_start',
             callback: (payload) => onQuestionBroadcast(payload),
@@ -93,6 +102,30 @@ class RealtimeService {
             },
           )
           .onBroadcast(
+            event: 'game_resuming',
+            callback: (payload) {
+              if (onGameResumingBroadcast != null) {
+                onGameResumingBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'game_reset',
+            callback: (payload) {
+              if (onGameResetBroadcast != null) {
+                onGameResetBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'round_completed',
+            callback: (payload) {
+              if (onRoundCompletedBroadcast != null) {
+                onRoundCompletedBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
             event: 'leaderboard_updated',
             callback: (payload) {
               if (payload['players'] != null) {
@@ -104,6 +137,20 @@ class RealtimeService {
             },
           )
           .subscribe();
+    }
+
+    // 3. Subscribe to Supabase Realtime channels
+    try {
+      _channel = SupabaseConfig.client.channel('room_$roomCode');
+      attachListeners(_channel!);
+
+      if (roomCode.toUpperCase() != 'TRIV') {
+        _defaultChannel = SupabaseConfig.client.channel('room_TRIV');
+        attachListeners(_defaultChannel!);
+      }
+
+      _globalChannel = SupabaseConfig.client.channel('room_GLOBAL');
+      attachListeners(_globalChannel!);
     } catch (_) {}
 
     return _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -335,6 +382,18 @@ class RealtimeService {
         SupabaseConfig.client.removeChannel(_channel!);
       } catch (_) {}
       _channel = null;
+    }
+    if (_defaultChannel != null) {
+      try {
+        SupabaseConfig.client.removeChannel(_defaultChannel!);
+      } catch (_) {}
+      _defaultChannel = null;
+    }
+    if (_globalChannel != null) {
+      try {
+        SupabaseConfig.client.removeChannel(_globalChannel!);
+      } catch (_) {}
+      _globalChannel = null;
     }
   }
 }
