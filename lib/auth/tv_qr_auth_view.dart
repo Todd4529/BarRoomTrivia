@@ -176,6 +176,10 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     }
   }
 
+  void _handleEnterTvStage() {
+    _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}});
+  }
+
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -322,8 +326,8 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                       color: Colors.white70,
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  // D-Pad Remote Refresh Button
+                  const SizedBox(height: 28),
+                  // D-Pad Remote Action Buttons
                   Focus(
                     focusNode: _refreshFocusNode,
                     autofocus: true,
@@ -333,8 +337,9 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                         if (key == LogicalKeyboardKey.select ||
                             key == LogicalKeyboardKey.enter ||
                             key == LogicalKeyboardKey.space ||
-                            key == LogicalKeyboardKey.gameButtonA) {
-                          _handleRefresh();
+                            key == LogicalKeyboardKey.gameButtonA ||
+                            key == LogicalKeyboardKey.numpadEnter) {
+                          _handleEnterTvStage();
                           return KeyEventResult.handled;
                         }
                       }
@@ -343,28 +348,39 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                     child: Builder(
                       builder: (context) {
                         final isFocused = Focus.of(context).hasFocus;
-                        return OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: isFocused ? AppTheme.neonPurple.withValues(alpha: 0.3) : Colors.transparent,
-                            foregroundColor: isFocused ? Colors.white : AppTheme.neonPurple,
-                            side: BorderSide(
-                              color: isFocused ? AppTheme.neonYellow : AppTheme.neonPurple,
-                              width: isFocused ? 2.5 : 1.5,
+                        return Row(
+                          children: [
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isFocused ? AppTheme.neonYellow : AppTheme.neonCyan,
+                                foregroundColor: Colors.black,
+                                elevation: isFocused ? 12 : 4,
+                                side: BorderSide(
+                                  color: isFocused ? Colors.white : AppTheme.neonCyan,
+                                  width: isFocused ? 3.0 : 1.5,
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              onPressed: _handleEnterTvStage,
+                              icon: const Icon(Icons.play_circle_filled, size: 24, color: Colors.black),
+                              label: const Text(
+                                'ENTER TV STAGE (Press Remote OK)',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _handleRefresh,
-                          icon: const Icon(Icons.refresh, size: 20),
-                          label: Text(
-                            _isRefreshing ? 'REFRESHING...' : 'REFRESH QR CODE',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                              color: isFocused ? Colors.white : AppTheme.neonPurple,
+                            const SizedBox(width: 14),
+                            IconButton(
+                              tooltip: 'Refresh QR Code',
+                              icon: const Icon(Icons.refresh, color: Colors.white70),
+                              onPressed: _handleRefresh,
                             ),
-                          ),
+                          ],
                         );
                       },
                     ),
@@ -507,12 +523,26 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppTheme.neonYellow, letterSpacing: 3),
             ),
             const SizedBox(height: 24),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: _handleEnterTvStage,
+              icon: const Icon(Icons.play_circle_filled, size: 22, color: Colors.black),
+              label: const Text(
+                'ENTER TV STAGE',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
-              focusNode: _refreshFocusNode,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.neonPurple,
                 side: const BorderSide(color: AppTheme.neonPurple),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
               onPressed: _handleRefresh,
               icon: const Icon(Icons.refresh, size: 18),
