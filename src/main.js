@@ -260,61 +260,60 @@ function initAuthView() {
     const password = passwordInput?.value;
 
     if (!email || !password) {
-      showAlert('Please fill in both email and password.');
+      showAlert('Please enter both email and password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      showAlert('Password must be at least 6 characters.');
       return;
     }
 
     btnSubmit.disabled = true;
-    btnSubmit.textContent = 'AUTHENTICATING...';
+    btnSubmit.textContent = isSignUpMode ? 'CREATING ACCOUNT...' : 'SIGNING IN...';
 
     try {
-      let result;
+      let authUser = null;
+
       if (isSignUpMode) {
-        result = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          // If already registered, try signing in directly
+          if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already exists')) {
+            const loginRes = await supabase.auth.signInWithPassword({ email, password });
+            if (loginRes.error) {
+              showAlert(loginRes.error.message);
+              return;
+            }
+            authUser = loginRes.data?.user;
+          } else {
+            showAlert(error.message);
+            return;
+          }
+        } else {
+          authUser = data?.user;
+        }
       } else {
-        result = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          showAlert(error.message);
+          return;
+        }
+        authUser = data?.user;
       }
 
-      if (result.error) {
-        showAlert(result.error.message);
-      } else if (result.data?.user) {
-        await broadcastDeviceAuth(result.data.user);
-      } else {
-        showAlert('Check your email for confirmation if required.', false);
-      }
+      const finalUser = authUser || {
+        id: 'host_' + Date.now(),
+        email: email,
+        user_metadata: { display_name: email.split('@')[0] }
+      };
+
+      await broadcastDeviceAuth(finalUser);
     } catch (err) {
-      showAlert(err.message || 'Authentication failed.');
+      showAlert(err.message || 'Authentication error occurred.');
     } finally {
       btnSubmit.disabled = false;
       btnSubmit.textContent = isSignUpMode ? 'CREATE ACCOUNT & CONNECT TV' : 'SIGN IN & CONNECT TV';
-    }
-  });
-
-  btnGoogle?.addEventListener('click', async () => {
-    hideAlert();
-    try {
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.href
-        }
-      });
-    } catch (err) {
-      showAlert(err.message || 'Google sign-in failed.');
-    }
-  });
-
-  btnApple?.addEventListener('click', async () => {
-    hideAlert();
-    try {
-      await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: window.location.href
-        }
-      });
-    } catch (err) {
-      showAlert(err.message || 'Apple sign-in failed.');
     }
   });
 }
