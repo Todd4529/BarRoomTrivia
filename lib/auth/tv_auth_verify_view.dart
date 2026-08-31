@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../shared/config/supabase_config.dart';
+import '../shared/services/supabase_service.dart';
 import '../shared/theme/app_theme.dart';
 
+/// Mobile Verification & Host Auth View
+/// Scanned by the host's phone from the TV QR Code.
+/// Allows the host to Sign In or Sign Up directly on their phone.
+/// Once authenticated, it broadcasts the session to the TV over Supabase Realtime
+/// and advances the phone router directly to the Host Controls.
 class TvAuthVerifyView extends StatefulWidget {
   final String? deviceToken;
   final String? userCode;
@@ -22,9 +29,15 @@ class TvAuthVerifyView extends StatefulWidget {
 }
 
 class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerProviderStateMixin {
+  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _passwordCtrl = TextEditingController();
+
+  bool _isSignUpMode = false;
   bool _isLoading = false;
   bool _isSuccess = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
+
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
 
@@ -40,40 +53,24 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       curve: Curves.elasticOut,
     );
 
-    // If deviceToken is present, attempt verification if authenticated or wait for user login
+    // If user is already authenticated on this phone, verify immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAuthAndVerify();
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null && widget.deviceToken != null) {
+        _verifyDeviceWithSupabase(widget.deviceToken!, user);
+      }
     });
   }
 
   @override
   void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
     _animController.dispose();
     super.dispose();
   }
 
-  Future<void> _checkAuthAndVerify() async {
-    final token = widget.deviceToken;
-    if (token == null || token.trim().isEmpty) {
-      setState(() {
-        _errorMessage = 'Invalid QR Code. No device pairing token was found in the link.';
-      });
-      return;
-    }
-
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      // User is already logged in, proceed to verify immediately
-      await _verifyDeviceWithBackend(token, user);
-    } else {
-      // User needs to sign in first
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _verifyDeviceWithBackend(String token, User user) async {
+  Future<void> _verifyDeviceWithSupabase(String token, User user) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -81,8 +78,6 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
 
     try {
       final session = Supabase.instance.client.auth.currentSession;
-      final uri = Uri.parse('${widget.backendBaseUrl.replaceAll(RegExp(r'/+$'), '')}/auth/device/verify');
-
       final payload = {
         'device_token': token,
         'user_id': user.id,
@@ -92,65 +87,153 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         },
         'auth_tokens': {
           'access_token': session?.accessToken ?? '',
-        }
+        },
+        'timestamp': DateTime.now().toIso8601String(),
       };
 
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-      ).timeout(const Duration(seconds: 10));
+      // 1. Broadcast to Supabase Realtime channel for instant TV pickup
+      final channelName = 'device_auth_$token';
+      final channel = SupabaseConfig.client.channel(channelName);
+      await channel.subscribe();
+      await channel.sendBroadcastMessage(
+        event: 'device_authorized',
+        payload: payload,
+      );
 
-      final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+      // 2. Also broadcast to global room_TRIV channel as redundancy
+      final roomChannel = SupabaseConfig.client.channel('room_TRIV');
+      await roomChannel.subscribe();
+      await roomChannel.sendBroadcastMessage(
+        event: 'device_authorized',
+        payload: payload,
+      );
 
-      if (response.statusCode >= 200 && response.statusCode < 300 && responseData['success'] == true) {
-        // Pairing successful!
+      // 3. Optional HTTP fallback attempt
+      try {
+        final uri = Uri.parse('${widget.backendBaseUrl.replaceAll(RegExp(r'/+$'), '')}/auth/device/verify');
+        await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        ).timeout(const Duration(milliseconds: 1200));
+      } catch (_) {}
+
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _isSuccess = true;
         });
         _animController.forward();
 
-        // Brief delay to display success animation, then immediately push router to Host Controls
-        await Future.delayed(const Duration(milliseconds: 1200));
+        // Brief delay to show success animation, then advance to Host Controls
+        await Future.delayed(const Duration(milliseconds: 1300));
         if (mounted) {
           context.go('/host');
         }
-      } else {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = responseData['error'] ?? 'Device pairing failed. The session may have expired.';
-        });
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Network error during verification: ${e.toString()}';
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Pairing error: ${e.toString()}';
+        });
+      }
     }
   }
 
-  Future<void> _handleQuickAnonymousLogin() async {
+  Future<void> _handleEmailAuthSubmit() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Please enter both email and password.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final authResponse = await Supabase.instance.client.auth.signInAnonymously();
-      final user = authResponse.user;
+      final supabaseService = SupabaseService();
+      final User? user;
+
+      if (_isSignUpMode) {
+        user = await supabaseService.signUpWithEmail(email, password);
+      } else {
+        user = await supabaseService.signInWithEmail(email, password);
+      }
+
       if (user != null && widget.deviceToken != null) {
-        await _verifyDeviceWithBackend(widget.deviceToken!, user);
+        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
+      } else if (user != null) {
+        if (mounted) context.go('/host');
       } else {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Could not authenticate. Please try standard login.';
+          _errorMessage = 'Authentication completed. Check your email for confirmation if required.';
         });
       }
+    } on AuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Sign in failed: ${e.toString()}';
+        _errorMessage = 'Auth failed: ${e.toString()}';
+      });
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await SupabaseService().signInWithGoogle();
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null && widget.deviceToken != null) {
+        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Google Sign-In failed: ${e.toString()}';
+      });
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await SupabaseService().signInWithApple();
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null && widget.deviceToken != null) {
+        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Apple Sign-In failed: ${e.toString()}';
       });
     }
   }
@@ -169,7 +252,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
           onPressed: () => context.go('/hub'),
         ),
         title: const Text(
-          'TV AUTHENTICATION',
+          'HOST AUTHENTICATION',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -181,25 +264,14 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_isSuccess)
-                  _buildSuccessCard()
-                else if (_isLoading)
-                  _buildLoadingCard()
-                else if (_errorMessage != null)
-                  _buildErrorCard()
-                else if (user == null)
-                  _buildLoginPromptCard()
-                else
-                  _buildConfirmPairingCard(user),
-              ],
-            ),
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: _isSuccess
+                ? _buildSuccessCard()
+                : (_isLoading
+                    ? _buildLoadingCard()
+                    : (user != null ? _buildConnectedUserCard(user) : _buildMobileAuthForm())),
           ),
         ),
       ),
@@ -208,15 +280,15 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
 
   Widget _buildLoadingCard() {
     return Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(36),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonCyan.withOpacity(0.1),
-            blurRadius: 20,
+            color: AppTheme.neonCyan.withValues(alpha: 0.15),
+            blurRadius: 24,
             spreadRadius: 2,
           ),
         ],
@@ -224,8 +296,8 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       child: Column(
         children: [
           const SizedBox(
-            width: 64,
-            height: 64,
+            width: 56,
+            height: 56,
             child: CircularProgressIndicator(
               strokeWidth: 4,
               valueColor: AlwaysStoppedAnimation<Color>(AppTheme.neonCyan),
@@ -233,23 +305,16 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
           ),
           const SizedBox(height: 28),
           const Text(
-            'Pairing with TV...',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            'Connecting with TV...',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 10),
           Text(
             widget.userCode != null
-                ? 'Authorizing display code: ${widget.userCode}'
-                : 'Connecting phone session to big screen...',
+                ? 'Authorizing Display: ${widget.userCode}'
+                : 'Broadcasting authentication to big screen...',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.white70),
           ),
         ],
       ),
@@ -264,11 +329,11 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         decoration: BoxDecoration(
           color: AppTheme.cardSurface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFF10B981), width: 2),
+          border: Border.all(color: AppTheme.neonGreen, width: 2),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF10B981).withOpacity(0.2),
-              blurRadius: 24,
+              color: AppTheme.neonGreen.withValues(alpha: 0.25),
+              blurRadius: 28,
               spreadRadius: 4,
             ),
           ],
@@ -278,33 +343,22 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(
-                color: Color(0xFF10B981),
+                color: AppTheme.neonGreen,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 48,
-              ),
+              child: const Icon(Icons.check, color: Colors.black, size: 48),
             ),
             const SizedBox(height: 24),
             const Text(
-              'TV Paired Successfully!',
+              'TV Connected!',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-              ),
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             const Text(
-              'Launching Host Controls...',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.neonCyan,
-                fontWeight: FontWeight.w600,
-              ),
+              'Big screen is now waiting for you.\nOpening Host Controls on your phone...',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: AppTheme.neonCyan, height: 1.5),
             ),
           ],
         ),
@@ -312,31 +366,23 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
     );
   }
 
-  Widget _buildConfirmPairingCard(User user) {
+  Widget _buildConnectedUserCard(User user) {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(
-            Icons.tv_rounded,
-            color: AppTheme.neonCyan,
-            size: 64,
-          ),
+          const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 60),
           const SizedBox(height: 16),
           const Text(
             'Connect TV Display',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 8),
           Text(
@@ -349,7 +395,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -360,148 +406,190 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 2,
-                  color: AppTheme.neonPurple,
+                  color: AppTheme.neonYellow,
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonCyan,
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedCornerShape(14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () {
               if (widget.deviceToken != null) {
-                _verifyDeviceWithBackend(widget.deviceToken!, user);
+                _verifyDeviceWithSupabase(widget.deviceToken!, user);
               }
             },
             child: const Text(
-              'AUTHORIZE & LAUNCH HOST',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
+              'AUTHORIZE BIG SCREEN & LAUNCH HOST',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileAuthForm() {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonCyan.withValues(alpha: 0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.local_bar, color: AppTheme.neonCyan, size: 28),
+              const SizedBox(width: 10),
+              const Text(
+                'BAR ROOMS TRIVIA',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _isSignUpMode ? 'Create Host Account to Connect TV' : 'Sign In as Host to Connect TV',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          if (widget.userCode != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Pairing with Code: ${widget.userCode}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: AppTheme.neonYellow, fontWeight: FontWeight.bold),
+            ),
+          ],
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          TextField(
+            controller: _emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Email Address',
+              labelStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+              prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.neonCyan, size: 20),
+              filled: true,
+              fillColor: const Color(0xFF0F172A),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2),
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoginPromptCard() {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Icon(
-            Icons.lock_person_outlined,
-            color: AppTheme.neonPurple,
-            size: 56,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Sign In to Pair TV',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordCtrl,
+            obscureText: _obscurePassword,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              labelStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+              prefixIcon: const Icon(Icons.lock_outlined, color: AppTheme.neonCyan, size: 20),
+              suffixIcon: IconButton(
+                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white54, size: 20),
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              filled: true,
+              fillColor: const Color(0xFF0F172A),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2),
+              ),
             ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: _handleEmailAuthSubmit,
+            child: Text(
+              _isSignUpMode ? 'CREATE ACCOUNT & PAIR TV' : 'SIGN IN & PAIR TV',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10.0),
+                child: Text('OR', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.g_mobiledata, color: Color(0xFF4285F4), size: 24),
+            label: const Text('Sign In with Google & Pair TV', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            onPressed: _handleGoogleSignIn,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'You must be signed in with your host account to link this TV screen.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.white70),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonPurple,
+              backgroundColor: Colors.black,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedCornerShape(12),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
-              context.push('/auth');
-            },
-            child: const Text(
-              'SIGN IN / REGISTER',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.neonCyan,
-              side: const BorderSide(color: AppTheme.neonCyan),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedCornerShape(12),
-            ),
-            onPressed: _handleQuickAnonymousLogin,
-            child: const Text(
-              'CONTINUE AS GUEST HOST',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorCard() {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            color: Colors.redAccent,
-            size: 56,
+            icon: const Icon(Icons.apple, color: Colors.white, size: 20),
+            label: const Text('Sign In with Apple & Pair TV', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            onPressed: _handleAppleSignIn,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Pairing Failed',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.redAccent,
+          TextButton(
+            onPressed: () => setState(() => _isSignUpMode = !_isSignUpMode),
+            child: Text(
+              _isSignUpMode ? 'Already have an account? Sign In' : "Don't have an account? Sign Up",
+              style: const TextStyle(color: AppTheme.neonCyan, fontSize: 13, fontWeight: FontWeight.bold),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _errorMessage ?? 'An error occurred.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Colors.white70),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.cardSurface,
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white30),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedCornerShape(12),
-            ),
-            onPressed: () => context.go('/hub'),
-            child: const Text('BACK TO DASHBOARD'),
           ),
         ],
       ),

@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../models/question.dart';
 import 'trivia_genres.dart';
+import 'genre_questions_engine.dart';
 
 /// Comprehensive Multi-Genre Trivia Question Repository for Bar Rooms Trivia
 class TriviaRepository {
@@ -742,8 +743,11 @@ class TriviaRepository {
   }
 
   static final Map<String, List<Question>> _categoryCache = {};
+  static final Map<String, List<Question>> _shuffledSessionDecks = {};
+  static final Map<String, int> _sessionDeckCursors = {};
+  static final Set<String> _globallyServedQuestionIds = {};
 
-  /// Guaranteed 500+ questions for EVERY single trivia genre
+  /// Guaranteed 500+ unique, non-repeating questions for EVERY single trivia genre
   static List<Question> getQuestionsForCategory(String category) {
     final key = category.trim();
     if (_categoryCache.containsKey(key) && _categoryCache[key]!.length >= 500) {
@@ -751,187 +755,88 @@ class TriviaRepository {
     }
 
     final List<Question> pool = [];
+    final Set<String> seenTexts = {};
 
     // 1. Include hand-crafted seeds if present in _genreBank
     if (_genreBank.containsKey(key)) {
-      pool.addAll(_genreBank[key]!);
+      for (var q in _genreBank[key]!) {
+        final textLower = q.questionText.trim().toLowerCase();
+        if (!seenTexts.contains(textLower)) {
+          seenTexts.add(textLower);
+          pool.add(q);
+        }
+      }
     } else {
       for (var entry in _genreBank.entries) {
         if (entry.key.toLowerCase() == key.toLowerCase()) {
-          pool.addAll(entry.value);
+          for (var q in entry.value) {
+            final textLower = q.questionText.trim().toLowerCase();
+            if (!seenTexts.contains(textLower)) {
+              seenTexts.add(textLower);
+              pool.add(q);
+            }
+          }
         }
       }
     }
 
-    // 2. Generate 500+ genre-specific questions to ensure at least 500 questions for EVERY genre
-    final generated = _generate500QuestionsForCategory(key);
+    // 2. Load authentic factual questions from GenreQuestionsEngine (500+ unique per genre)
+    final generated = GenreQuestionsEngine.generateGenreQuestions(key);
     for (var q in generated) {
-      if (pool.length >= 500) break;
-      pool.add(q);
+      final textLower = q.questionText.trim().toLowerCase();
+      if (!seenTexts.contains(textLower)) {
+        seenTexts.add(textLower);
+        pool.add(q);
+      }
     }
 
     _categoryCache[key] = pool;
     return pool;
   }
 
-  static List<Question> _generate500QuestionsForCategory(String category) {
-    final List<Question> list = [];
-    final List<Map<String, String>> topics = _getGenreTopics(category);
-
-    for (int i = 0; i < 500; i++) {
-      final t = topics[i % topics.length];
-      list.add(
-        Question(
-          id: '${category.replaceAll(' ', '_')}-gen-$i',
-          category: category,
-          difficulty: i % 3 == 0 ? 'Advanced' : (i % 2 == 0 ? 'Standard' : 'Beginner'),
-          questionText: '${t['q']}',
-          optionA: t['a']!,
-          optionB: t['b']!,
-          optionC: t['c']!,
-          optionD: t['d']!,
-          correctOption: 'A',
-        ),
-      );
-    }
-    return list;
+  /// Reset session deck to start a completely fresh non-repeating cycle
+  static void resetSessionDecks() {
+    _shuffledSessionDecks.clear();
+    _sessionDeckCursors.clear();
+    _globallyServedQuestionIds.clear();
   }
 
-  static List<Map<String, String>> _getGenreTopics(String category) {
-    final catLower = category.toLowerCase();
-
-    if (catLower.contains('broadway') || catLower.contains('theater')) {
-      return [
-        {'q': 'Which Andrew Lloyd Webber musical features the famous song "Memory"?', 'a': 'Cats', 'b': 'Phantom of the Opera', 'c': 'Evita', 'd': 'Sunset Boulevard'},
-        {'q': 'Who wrote the music and lyrics for the Broadway hit "Hamilton"?', 'a': 'Lin-Manuel Miranda', 'b': 'Stephen Sondheim', 'c': 'Benj Pasek', 'd': 'Jonathan Larson'},
-        {'q': 'Which show holds the record for the longest-running show in Broadway history?', 'a': 'The Phantom of the Opera', 'b': 'Chicago', 'c': 'The Lion King', 'd': 'Les Misérables'},
-        {'q': 'In "Wicked", what is the name of the Wicked Witch of the West?', 'a': 'Elphaba', 'b': 'Glinda', 'c': 'Nessarose', 'd': 'Madame Morrible'},
-        {'q': 'Which Broadway musical features "Cell Block Tango" and "All That Jazz"?', 'a': 'Chicago', 'b': 'Cabaret', 'c': 'Guys and Dolls', 'd': 'Anything Goes'},
-        {'q': 'Which musical features the songs "Seasons of Love" and "La Vie Bohème"?', 'a': 'RENT', 'b': 'Grease', 'c': 'Hairspray', 'd': 'Dear Evan Hansen'},
-        {'q': 'Who composed "Sweeney Todd", "Into the Woods", and "Company"?', 'a': 'Stephen Sondheim', 'b': 'Andrew Lloyd Webber', 'c': 'Richard Rodgers', 'd': 'Leonard Bernstein'},
-        {'q': 'What Tony-winning musical tells the story of Evan Hansen and a viral letter?', 'a': 'Dear Evan Hansen', 'b': 'Be More Chill', 'c': 'Spring Awakening', 'd': 'Hadestown'},
-        {'q': 'Which musical set in 19th-century France features Jean Valjean and Javert?', 'a': 'Les Misérables', 'b': 'The Phantom of the Opera', 'c': 'Miss Saigon', 'd': 'Amadeus'},
-        {'q': 'What annual award ceremony recognizes excellence in Broadway theater?', 'a': 'The Tony Awards', 'b': 'The Olivier Awards', 'c': 'The Drama Desk Awards', 'd': 'The Obie Awards'},
-      ];
-    }
-
-    if (catLower.contains('literature')) {
-      return [
-        {'q': 'Who authored the epic 1851 novel "Moby-Dick"?', 'a': 'Herman Melville', 'b': 'Nathaniel Hawthorne', 'c': 'Mark Twain', 'd': 'Charles Dickens'},
-        {'q': 'Which Shakespeare play features the famous "To be, or not to be" soliloquy?', 'a': 'Hamlet', 'b': 'Macbeth', 'c': 'Othello', 'd': 'King Lear'},
-        {'q': 'Who wrote "Pride and Prejudice" published in 1813?', 'a': 'Jane Austen', 'b': 'Charlotte Brontë', 'c': 'Emily Brontë', 'd': 'Virginia Woolf'},
-        {'q': 'In George Orwell\'s "1984", who is the omniscient leader of Oceania?', 'a': 'Big Brother', 'b': 'Goldstein', 'c': 'O\'Brien', 'd': 'Charrington'},
-        {'q': 'Which F. Scott Fitzgerald novel centers on the mysterious Jay Gatsby?', 'a': 'The Great Gatsby', 'b': 'Tender Is the Night', 'c': 'This Side of Paradise', 'd': 'The Beautiful and Damned'},
-      ];
-    }
-
-    if (catLower.contains('art') || catLower.contains('architecture')) {
-      return [
-        {'q': 'Which Italian master painted the "Mona Lisa" and "The Last Supper"?', 'a': 'Leonardo da Vinci', 'b': 'Michelangelo', 'c': 'Raphael', 'd': 'Donatello'},
-        {'q': 'Who sculpted the famous Renaissance masterpiece "David"?', 'a': 'Michelangelo', 'b': 'Bernini', 'c': 'Donatello', 'd': 'Rodin'},
-        {'q': 'Which Dutch Post-Impressionist painted "The Starry Night" in 1889?', 'a': 'Vincent van Gogh', 'b': 'Claude Monet', 'c': 'Pablo Picasso', 'd': 'Rembrandt'},
-        {'q': 'What iconic American architect designed Fallingwater and the Guggenheim Museum?', 'a': 'Frank Lloyd Wright', 'b': 'I. M. Pei', 'c': 'Le Corbusier', 'd': 'Louis Sullivan'},
-      ];
-    }
-
-    if (catLower.contains('astronomy') || catLower.contains('space')) {
-      return [
-        {'q': 'Which planet in our solar system is known as the "Red Planet"?', 'a': 'Mars', 'b': 'Venus', 'c': 'Jupiter', 'd': 'Mercury'},
-        {'q': 'What space telescope launched in 2021 succeeded Hubble as NASA\'s primary observatory?', 'a': 'James Webb Space Telescope', 'b': 'Chandra Observatory', 'c': 'Kepler Telescope', 'd': 'Spitzer Telescope'},
-        {'q': 'Which Apollo mission landed the first humans on the Moon in July 1969?', 'a': 'Apollo 11', 'b': 'Apollo 13', 'c': 'Apollo 8', 'd': 'Apollo 17'},
-        {'q': 'What is the largest planet in our solar system?', 'a': 'Jupiter', 'b': 'Saturn', 'c': 'Neptune', 'd': 'Uranus'},
-      ];
-    }
-
-    if (catLower.contains('history')) {
-      return [
-        {'q': 'In which year did the Berlin Wall fall, signaling the end of the Cold War?', 'a': '1989', 'b': '1991', 'c': '1975', 'd': '1983'},
-        {'q': 'Which historic charter signed in 1215 limited the power of King John of England?', 'a': 'Magna Carta', 'b': 'Edict of Nantes', 'c': 'Treaty of Westphalia', 'd': 'Mayflower Compact'},
-        {'q': 'Who was the first President of the United States?', 'a': 'George Washington', 'b': 'Thomas Jefferson', 'c': 'John Adams', 'd': 'Benjamin Franklin'},
-        {'q': 'Which ancient civilization built the Great Pyramids at Giza?', 'a': 'Ancient Egyptians', 'b': 'Mesopotamians', 'c': 'Babylonians', 'd': 'Phoenicians'},
-      ];
-    }
-
-    if (catLower.contains('geography')) {
-      return [
-        {'q': 'What is the official capital city of Australia?', 'a': 'Canberra', 'b': 'Sydney', 'c': 'Melbourne', 'd': 'Brisbane'},
-        {'q': 'Which river is recognized as the longest river in South America?', 'a': 'Amazon River', 'b': 'Orinoco River', 'c': 'Parana River', 'd': 'Magdalena River'},
-        {'q': 'What mountain range stretches across the western border of South America?', 'a': 'Andes Mountains', 'b': 'Rocky Mountains', 'c': 'Alps', 'd': 'Himalayas'},
-        {'q': 'Which country has the largest land area in the world?', 'a': 'Russia', 'b': 'Canada', 'c': 'China', 'd': 'United States'},
-      ];
-    }
-
-    if (catLower.contains('science') || catLower.contains('technology')) {
-      return [
-        {'q': 'What chemical element has the atomic symbol "Au" on the periodic table?', 'a': 'Gold', 'b': 'Silver', 'c': 'Aluminum', 'd': 'Argon'},
-        {'q': 'What cellular organelle is known as the "powerhouse of the cell"?', 'a': 'Mitochondria', 'b': 'Nucleus', 'c': 'Ribosome', 'd': 'Golgi Apparatus'},
-        {'q': 'What is the speed of light in a vacuum approximately?', 'a': '300,000 km/sec', 'b': '150,000 km/sec', 'c': '500,000 km/sec', 'd': '1,000,000 km/sec'},
-        {'q': 'What gene-editing technology won the Nobel Prize in Chemistry in 2020?', 'a': 'CRISPR-Cas9', 'b': 'TALENs', 'c': 'Zinc Finger', 'd': 'PCR'},
-      ];
-    }
-
-    if (catLower.contains('comics') || catLower.contains('superhero')) {
-      return [
-        {'q': 'What fictional rare metal forms Captain America\'s shield and Black Panther\'s suit?', 'a': 'Vibranium', 'b': 'Adamantium', 'c': 'Kryptonite', 'd': 'Mithril'},
-        {'q': 'What is the real name of Batman in DC Comics?', 'a': 'Bruce Wayne', 'b': 'Clark Kent', 'c': 'Barry Allen', 'd': 'Peter Parker'},
-        {'q': 'Which Marvel superhero gained powers after being bitten by a radioactive spider?', 'a': 'Spider-Man', 'b': 'Iron Man', 'c': 'Thor', 'd': 'Ant-Man'},
-      ];
-    }
-
-    if (catLower.contains('movie') || catLower.contains('hollywood')) {
-      return [
-        {'q': 'Which film won the first-ever Academy Award for Best Picture in 1929?', 'a': 'Wings', 'b': 'Sunrise', 'c': 'Metropolis', 'd': 'The Jazz Singer'},
-        {'q': 'Who directed the 1993 blockbuster dinosaur classic "Jurassic Park"?', 'a': 'Steven Spielberg', 'b': 'James Cameron', 'c': 'George Lucas', 'd': 'Ridley Scott'},
-        {'q': 'What is the highest-grossing film of all time unadjusted for inflation?', 'a': 'Avatar', 'b': 'Avengers: Endgame', 'c': 'Titanic', 'd': 'Star Wars: The Force Awakens'},
-      ];
-    }
-
-    if (catLower.contains('sports') || catLower.contains('stadium')) {
-      return [
-        {'q': 'How many regulation minutes are played in a standard FIFA soccer match?', 'a': '90 Minutes', 'b': '80 Minutes', 'c': '100 Minutes', 'd': '60 Minutes'},
-        {'q': 'What iconic 37-foot green wall is located in left field at Fenway Park in Boston?', 'a': 'The Green Monster', 'b': 'The Emerald Wall', 'c': 'The Big Greenie', 'd': 'Boston Wall'},
-        {'q': 'Which athlete has won a record 23 Grand Slam singles titles in men\'s tennis?', 'a': 'Novak Djokovic', 'b': 'Rafael Nadal', 'c': 'Roger Federer', 'd': 'Pete Sampras'},
-      ];
-    }
-
-    // Default rich topic generator for any custom or new genre
-    return [
-      {'q': 'Which major landmark achievement is historically celebrated in $category?', 'a': 'The Premier Masterpiece', 'b': 'The Secondary Record', 'c': 'The Minor Echo', 'd': 'The Initial Draft'},
-      {'q': 'What core principle forms the foundation of modern $category?', 'a': 'Fundamental Standard Theory', 'b': 'Secondary Hypothesis', 'c': 'Arbitrary Rule', 'd': 'Transient Motion'},
-      {'q': 'Which major era established the golden age of $category?', 'a': 'The 20th Century Era', 'b': 'The 19th Century Shift', 'c': 'The Modern Wave', 'd': 'The Classical Period'},
-      {'q': 'In $category, what term describes the primary creative structure?', 'a': 'Core Masterwork Framework', 'b': 'Peripheral Outline', 'c': 'Transient Motif', 'd': 'Subordinate Element'},
-      {'q': 'Which pioneer is widely credited with revolutionizing $category?', 'a': 'The Master Innovator', 'b': 'The Assistant Apprentice', 'c': 'The Local Historian', 'd': 'The Quiet Observer'},
-    ];
-  }
-
-  /// Fetch a question matching the provided queued genres (or random if empty / auto select)
+  /// Fetch a non-repeating question matching the queued genres (or random if auto/mixed)
   static Question getQuestionForGenres(List<String> queuedGenres, int questionIndex) {
     // Filter out 'Auto Select' or 'Random (Mixed)'
     final validGenres = queuedGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)').toList();
 
-    List<Question> candidatePool = [];
-
+    String targetGenre;
     if (validGenres.isNotEmpty) {
-      // Pick genre based on question index (rotation through selected genres)
-      final targetGenre = validGenres[questionIndex % validGenres.length];
-      candidatePool = getQuestionsForCategory(targetGenre);
+      targetGenre = validGenres[questionIndex % validGenres.length];
     } else {
-      // If Auto Select or Random (Mixed) or empty queue, pick from all valid genres
       final allAvailableGenres = TriviaGenres.allGenres
           .where((g) => g != 'Auto Select' && g != 'Random (Mixed)')
           .toList();
-      final randomGenre = allAvailableGenres[questionIndex % allAvailableGenres.length];
-      candidatePool = getQuestionsForCategory(randomGenre);
+      targetGenre = allAvailableGenres[questionIndex % allAvailableGenres.length];
     }
 
-    if (candidatePool.isEmpty) {
-      candidatePool = _generateBroadwayQuestions();
+    // Retrieve or initialize the randomized non-repeating deck for this genre
+    if (!_shuffledSessionDecks.containsKey(targetGenre) || _shuffledSessionDecks[targetGenre]!.isEmpty) {
+      final fullPool = getQuestionsForCategory(targetGenre);
+      _shuffledSessionDecks[targetGenre] = List<Question>.from(fullPool)..shuffle(_random);
+      _sessionDeckCursors[targetGenre] = 0;
     }
 
-    // Pick a seed question from candidate pool
-    final seed = candidatePool[questionIndex % candidatePool.length];
+    final deck = _shuffledSessionDecks[targetGenre]!;
+    int cursor = _sessionDeckCursors[targetGenre] ?? 0;
 
-    // Shuffle options to randomize answer positions
+    // Reshuffle deck only when all 500+ questions have been exhausted
+    if (cursor >= deck.length) {
+      deck.shuffle(_random);
+      cursor = 0;
+    }
+
+    final seed = deck[cursor];
+    _sessionDeckCursors[targetGenre] = cursor + 1;
+    _globallyServedQuestionIds.add(seed.id);
+
+    // Shuffle options dynamically on every serve to randomize answer positions across A, B, C, D
     final rawOptions = [seed.optionA, seed.optionB, seed.optionC, seed.optionD];
     final shuffled = List<String>.from(rawOptions)..shuffle(_random);
 
@@ -942,7 +847,7 @@ class TriviaRepository {
     if (shuffled[3] == correctText) correctOptLetter = 'D';
 
     return Question(
-      id: '${seed.id}-$questionIndex',
+      id: '${seed.id}-round-$questionIndex',
       category: seed.category,
       difficulty: seed.difficulty,
       questionText: seed.questionText,

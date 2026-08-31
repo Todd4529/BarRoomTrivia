@@ -519,6 +519,21 @@ class _AuthPageState extends State<AuthPage> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 12, color: Colors.white60),
                       ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.neonYellow,
+                          side: const BorderSide(color: AppTheme.neonYellow, width: 1.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () => context.go('/tv-qr-auth'),
+                        icon: const Icon(Icons.qr_code_scanner, size: 18, color: AppTheme.neonYellow),
+                        label: const Text(
+                          'On TV? Scan QR Code with Phone',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.neonYellow),
+                        ),
+                      ),
                       const SizedBox(height: 12),
 
                       // Glassmorphic Auth Form Card with Ordered Focus Traversal

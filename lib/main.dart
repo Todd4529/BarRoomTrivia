@@ -14,6 +14,7 @@ import 'onboarding/onboarding_page.dart';
 import 'auth/auth_page.dart';
 import 'auth/reset_password_page.dart';
 import 'auth/tv_auth_verify_view.dart';
+import 'auth/tv_qr_auth_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -63,6 +64,10 @@ final GoRouter _router = GoRouter(
       },
     ),
     GoRoute(
+      path: '/tv-qr-auth',
+      builder: (context, state) => const TvQrAuthView(),
+    ),
+    GoRoute(
       path: '/tv-auth',
       builder: (context, state) {
         final deviceToken = state.uri.queryParameters['device_token'] ??
@@ -108,11 +113,20 @@ class InitialRouteDecider extends StatelessWidget {
         final prefs = snapshot.data!;
         final onboardingDone = prefs.getBool('onboardingCompleted') ?? false;
         final user = Supabase.instance.client.auth.currentUser;
+        final isTvAuthorized = (prefs.getString('tv_authorized_user') ?? '').isNotEmpty;
+
+        final size = MediaQuery.of(context).size;
+        final isTvScreen = size.width > 700 && size.width > size.height;
+
+        if (isTvScreen && !isTvAuthorized && user == null) {
+          // On TV / large landscape screens, launch directly into the QR Code Auth Screen
+          return const TvQrAuthView();
+        }
 
         if (!onboardingDone) {
-          return const OnboardingPage();
-        } else if (user == null) {
-          return const AuthPage();
+          return isTvScreen ? const TvQrAuthView() : const OnboardingPage();
+        } else if (user == null && !isTvAuthorized) {
+          return isTvScreen ? const TvQrAuthView() : const AuthPage();
         } else {
           return const MainNavigationHub();
         }
@@ -255,6 +269,13 @@ class MainNavigationHub extends StatelessWidget {
                     color: AppTheme.neonPurple,
                     autofocus: false,
                     onTap: () => context.go('/host'),
+                  ),
+                  FocusableTargetCard(
+                    title: 'PHONE QR PAIRING',
+                    icon: Icons.qr_code_scanner_rounded,
+                    color: AppTheme.neonYellow,
+                    autofocus: false,
+                    onTap: () => context.go('/tv-qr-auth'),
                   ),
                 ],
               ),

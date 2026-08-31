@@ -1,10 +1,7 @@
-package com.barroomstrivia.myapp.tv
+package com.barroomtrivia.tv
 
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +22,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -128,7 +124,7 @@ fun TvQrAuthScreen(
             var secondsLeft = currentState.remainingSeconds
 
             while (isActive && secondsLeft > 0) {
-                delay(4000L) // Poll every 4 seconds
+                delay(4000L) // Poll status every 4 seconds
                 secondsLeft -= 4
 
                 val statusResult = withContext(Dispatchers.IO) {
