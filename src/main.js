@@ -206,8 +206,15 @@ function initAuthView() {
     }
   });
 
+  // Pre-subscribe Realtime channels immediately so websocket is warm
+  const activeToken = deviceToken || `tv_auth_${Date.now()}`;
+  const authChannel = supabase.channel(`device_auth_${activeToken}`);
+  authChannel.subscribe();
+  const roomChannel = supabase.channel('room_TRIV');
+  roomChannel.subscribe();
+
   function broadcastDeviceAuth(user) {
-    const token = deviceToken || `tv_auth_${Date.now()}`;
+    const token = activeToken;
     const payload = {
       device_token: token,
       user_id: user.id,
@@ -218,47 +225,46 @@ function initAuthView() {
       timestamp: new Date().toISOString()
     };
 
-    // 1. Send Supabase Realtime broadcast
-    try {
-      const authChannel = supabase.channel(`device_auth_${token}`);
-      authChannel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          authChannel.send({
-            type: 'broadcast',
-            event: 'device_authorized',
-            payload
-          });
-        }
-      });
+    function sendAll() {
+      try {
+        authChannel.send({
+          type: 'broadcast',
+          event: 'device_authorized',
+          payload
+        });
+        roomChannel.send({
+          type: 'broadcast',
+          event: 'device_authorized',
+          payload
+        });
+      } catch (err) {
+        console.warn('Realtime broadcast error:', err);
+      }
 
-      const roomChannel = supabase.channel('room_TRIV');
-      roomChannel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          roomChannel.send({
-            type: 'broadcast',
-            event: 'device_authorized',
-            payload
-          });
-        }
-      });
-    } catch (err) {
-      console.warn('Realtime broadcast error:', err);
+      try {
+        broadcastRealtimeEvent('device_authorized', payload);
+      } catch (_) {}
+
+      try {
+        channel.postMessage({
+          type: 'DEVICE_AUTHORIZED',
+          ...payload
+        });
+      } catch (_) {}
     }
 
-    // 2. Broadcast via window BroadcastChannel
-    try {
-      channel.postMessage({
-        type: 'DEVICE_AUTHORIZED',
-        ...payload
-      });
-    } catch (_) {}
+    // Send immediately and retry 3 times to ensure delivery
+    sendAll();
+    setTimeout(sendAll, 300);
+    setTimeout(sendAll, 800);
+    setTimeout(sendAll, 1600);
 
-    // 3. Immediately show success and transition to Host Panel
+    // Immediately show success and transition to Host Panel
     showAlert('TV Connected! Opening Host Controls...', false);
     btnSubmit.textContent = 'CONNECTED! OPENING...';
     setTimeout(() => {
       switchView('host');
-    }, 600);
+    }, 700);
   }
 
   async function handleAuthAction(e) {

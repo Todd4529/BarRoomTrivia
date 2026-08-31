@@ -58,6 +58,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   @override
   void dispose() {
     _authChannel?.unsubscribe();
+    _roomChannel?.unsubscribe();
     _countdownTimer?.cancel();
     _animController.dispose();
     _refreshFocusNode.dispose();
@@ -80,14 +81,27 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _startCountdown();
   }
 
+  RealtimeChannel? _roomChannel;
+
   void _subscribeToPairingChannel() {
     _authChannel?.unsubscribe();
+    _roomChannel?.unsubscribe();
 
     try {
       final channelName = 'device_auth_$_deviceToken';
       _authChannel = SupabaseConfig.client.channel(channelName);
 
       _authChannel!
+          .onBroadcast(
+            event: 'device_authorized',
+            callback: (payload) {
+              _handleDeviceAuthorized(payload);
+            },
+          )
+          .subscribe();
+
+      _roomChannel = SupabaseConfig.client.channel('room_TRIV');
+      _roomChannel!
           .onBroadcast(
             event: 'device_authorized',
             callback: (payload) {
