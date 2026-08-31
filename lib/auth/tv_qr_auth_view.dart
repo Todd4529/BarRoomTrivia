@@ -59,6 +59,8 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   void dispose() {
     _authChannel?.unsubscribe();
     _roomChannel?.unsubscribe();
+    _globalChannel?.unsubscribe();
+    _pollingTimer?.cancel();
     _countdownTimer?.cancel();
     _animController.dispose();
     _refreshFocusNode.dispose();
@@ -82,10 +84,14 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   }
 
   RealtimeChannel? _roomChannel;
+  RealtimeChannel? _globalChannel;
+  Timer? _pollingTimer;
 
   void _subscribeToPairingChannel() {
     _authChannel?.unsubscribe();
     _roomChannel?.unsubscribe();
+    _globalChannel?.unsubscribe();
+    _pollingTimer?.cancel();
 
     try {
       final channelName = 'device_auth_$_deviceToken';
@@ -108,7 +114,41 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
               _handleDeviceAuthorized(payload);
             },
           )
+          .onBroadcast(
+            event: 'question_start',
+            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
+          )
+          .onBroadcast(
+            event: 'pre_game_countdown',
+            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
+          )
           .subscribe();
+
+      _globalChannel = SupabaseConfig.client.channel('tv_pairing');
+      _globalChannel!
+          .onBroadcast(
+            event: 'device_authorized',
+            callback: (payload) {
+              _handleDeviceAuthorized(payload);
+            },
+          )
+          .subscribe();
+
+      // Polling fallback to check if game session exists or is active
+      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        if (_isAuthorized || !mounted) return;
+        try {
+          final res = await SupabaseConfig.client
+              .from('game_sessions')
+              .select()
+              .eq('room_code', 'TRIV')
+              .maybeSingle()
+              .timeout(const Duration(seconds: 1));
+          if (res != null && mounted) {
+            _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}});
+          }
+        } catch (_) {}
+      });
     } catch (e) {
       debugPrint('Error subscribing to TV auth channel: $e');
     }
@@ -117,6 +157,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   void _handleDeviceAuthorized(Map<String, dynamic> payload) async {
     if (_isAuthorized) return;
 
+    _pollingTimer?.cancel();
     setState(() {
       _isAuthorized = true;
       final userInfo = payload['user_info'] as Map<String, dynamic>?;

@@ -212,6 +212,8 @@ function initAuthView() {
   authChannel.subscribe();
   const roomChannel = supabase.channel('room_TRIV');
   roomChannel.subscribe();
+  const globalChannel = supabase.channel('tv_pairing');
+  globalChannel.subscribe();
 
   function broadcastDeviceAuth(user) {
     const token = activeToken;
@@ -237,6 +239,11 @@ function initAuthView() {
           event: 'device_authorized',
           payload
         });
+        globalChannel.send({
+          type: 'broadcast',
+          event: 'device_authorized',
+          payload
+        });
       } catch (err) {
         console.warn('Realtime broadcast error:', err);
       }
@@ -253,7 +260,17 @@ function initAuthView() {
       } catch (_) {}
     }
 
-    // Send immediately and retry 3 times to ensure delivery
+    // Try DB upsert
+    try {
+      supabase.from('game_sessions').upsert({
+        room_code: 'TRIV',
+        host_id: user.id,
+        status: 'waiting_for_host',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
+
+    // Send immediately and retry multiple times
     sendAll();
     setTimeout(sendAll, 300);
     setTimeout(sendAll, 800);
