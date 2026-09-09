@@ -59,6 +59,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   void dispose() {
     _authChannel?.unsubscribe();
     _roomChannel?.unsubscribe();
+    _userCodeChannel?.unsubscribe();
     _globalChannel?.unsubscribe();
     _pollingTimer?.cancel();
     _countdownTimer?.cancel();
@@ -76,7 +77,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _deviceToken = 'tv_${timestamp}_$randomHex';
 
     // Universal pairing URL (opens mobile auth view with token & code)
-    _qrAuthUrl = 'https://todd4529.github.io/BarRoomTrivia/?view=auth&device_token=$_deviceToken&user_code=$_userCode';
+    _qrAuthUrl = 'https://todd4529.github.io/BarRoomTrivia/?view=auth&device_token=$_deviceToken&user_code=$_userCode&room=$_userCode';
 
     _remainingSeconds = 300;
     _subscribeToPairingChannel();
@@ -84,12 +85,14 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   }
 
   RealtimeChannel? _roomChannel;
+  RealtimeChannel? _userCodeChannel;
   RealtimeChannel? _globalChannel;
   Timer? _pollingTimer;
 
   void _subscribeToPairingChannel() {
     _authChannel?.unsubscribe();
     _roomChannel?.unsubscribe();
+    _userCodeChannel?.unsubscribe();
     _globalChannel?.unsubscribe();
     _pollingTimer?.cancel();
 
@@ -124,6 +127,24 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           )
           .subscribe();
 
+      _userCodeChannel = SupabaseConfig.client.channel('room_$_userCode');
+      _userCodeChannel!
+          .onBroadcast(
+            event: 'device_authorized',
+            callback: (payload) {
+              _handleDeviceAuthorized(payload);
+            },
+          )
+          .onBroadcast(
+            event: 'question_start',
+            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
+          )
+          .onBroadcast(
+            event: 'pre_game_countdown',
+            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
+          )
+          .subscribe();
+
       _globalChannel = SupabaseConfig.client.channel('tv_pairing');
       _globalChannel!
           .onBroadcast(
@@ -141,7 +162,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           final res = await SupabaseConfig.client
               .from('game_sessions')
               .select()
-              .eq('room_code', 'TRIV')
+              .or('room_code.eq.$_userCode,room_code.eq.TRIV')
               .maybeSingle()
               .timeout(const Duration(seconds: 1));
           if (res != null && mounted) {

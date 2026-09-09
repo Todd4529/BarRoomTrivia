@@ -104,34 +104,33 @@ class InitialRouteDecider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SharedPreferences>(
-      future: SharedPreferences.getInstance(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
-        }
-        final prefs = snapshot.data!;
-        final onboardingDone = prefs.getBool('onboardingCompleted') ?? false;
-        final user = Supabase.instance.client.auth.currentUser;
-        final isTvAuthorized = (prefs.getString('tv_authorized_user') ?? '').isNotEmpty;
+    final size = MediaQuery.of(context).size;
+    final isPortraitPhone = size.width < 600 && size.height > size.width;
 
-        final size = MediaQuery.of(context).size;
-        final isTvScreen = size.width > 700 && size.width > size.height;
+    if (isPortraitPhone) {
+      return FutureBuilder<SharedPreferences>(
+        future: SharedPreferences.getInstance(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
+          }
+          final prefs = snapshot.data!;
+          final onboardingDone = prefs.getBool('onboardingCompleted') ?? false;
+          final user = Supabase.instance.client.auth.currentUser;
+          if (!onboardingDone) {
+            return const OnboardingPage();
+          } else if (user == null) {
+            return const AuthPage();
+          } else {
+            return const MainNavigationHub();
+          }
+        },
+      );
+    }
 
-        if (isTvScreen && !isTvAuthorized && user == null) {
-          // On TV / large landscape screens, launch directly into the QR Code Auth Screen
-          return const TvQrAuthView();
-        }
-
-        if (!onboardingDone) {
-          return isTvScreen ? const TvQrAuthView() : const OnboardingPage();
-        } else if (user == null && !isTvAuthorized) {
-          return isTvScreen ? const TvQrAuthView() : const AuthPage();
-        } else {
-          return const MainNavigationHub();
-        }
-      },
-    );
+    // For the initial screen on TV displays, always start on the phone QR pairing page.
+    // This forces the admin to sign-in or create an account on their phone.
+    return const TvQrAuthView();
   }
 }
 

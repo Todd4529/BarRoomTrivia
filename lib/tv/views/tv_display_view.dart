@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../shared/config/supabase_config.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
 import '../../shared/services/realtime_service.dart';
@@ -187,8 +188,63 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     });
   }
 
+  Timer? _tvSessionPollingTimer;
+
+  void _startTvSessionPolling() {
+    _tvSessionPollingTimer?.cancel();
+    _tvSessionPollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted) return;
+      try {
+        final code = _displayRoomCode;
+        final res = await SupabaseConfig.client
+            .from('game_sessions')
+            .select()
+            .or('room_code.eq.$code,room_code.eq.TRIV')
+            .maybeSingle()
+            .timeout(const Duration(seconds: 1));
+
+        if (res != null && mounted) {
+          final status = res['status'] as String?;
+          if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
+            final startsAt = res['starts_at'] as int?;
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final rem = startsAt != null ? ((startsAt - now) / 1000).ceil().clamp(0, 30) : 10;
+            setState(() {
+              _isPreGameCountdown = true;
+              _preGameSeconds = rem > 0 ? rem : 10;
+              _isGameActive = false;
+              _isTimerExpired = false;
+            });
+            _startPreGameTimer();
+          } else if (status == 'question_active' && !_isGameActive) {
+            final qData = res['question_data'] as Map<String, dynamic>?;
+            if (qData != null) {
+              final q = Question.fromJson(qData);
+              final dur = res['duration_seconds'] as int? ?? 20;
+              final qIdx = res['current_question_index'] as int? ?? 1;
+              _interQuestionTimer?.cancel();
+              setState(() {
+                _currentQuestion = q;
+                _totalDuration = dur;
+                _remainingSeconds = dur;
+                _questionIndex = qIdx;
+                _totalQuestionsInRound = 10;
+                _isGameActive = true;
+                _isPreGameCountdown = false;
+                _isTimerExpired = false;
+                _isInterQuestionPhase = false;
+              });
+              _startTimer();
+            }
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
   void _initTvSession() {
     _loadLeaderboard();
+    _startTvSessionPolling();
 
     _realtimeService.joinRoomChannel(
       roomCode: widget.roomCode,
@@ -421,6 +477,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   @override
   void dispose() {
+    _tvSessionPollingTimer?.cancel();
     _timer?.cancel();
     _preGameTimer?.cancel();
     _adSlideTimer?.cancel();

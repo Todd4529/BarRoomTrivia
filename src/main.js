@@ -15,7 +15,11 @@ const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
 const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
 
 const initialUrlParams = new URLSearchParams(window.location.search);
-let currentRoomCode = (initialUrlParams.get('room') || initialUrlParams.get('room_id') || 'TRIV').toUpperCase();
+const urlRoomCode = initialUrlParams.get('room') || initialUrlParams.get('room_id') || initialUrlParams.get('user_code');
+let currentRoomCode = (urlRoomCode || localStorage.getItem('bar_trivia_current_room') || 'TRIV').toUpperCase();
+if (urlRoomCode) {
+  localStorage.setItem('bar_trivia_current_room', currentRoomCode);
+}
 let currentPlayer = null;
 let currentQuestionIndex = 0;
 let selectedQuestionDuration = 20; // Default 20 seconds
@@ -176,9 +180,13 @@ function initAuthView() {
     userCode = hashParams.get('user_code');
   }
 
-  if (userCode && tvCodeLabel && tvCodePill) {
-    tvCodeLabel.textContent = userCode;
-    tvCodePill.classList.remove('hidden');
+  if (userCode) {
+    currentRoomCode = userCode.trim().toUpperCase();
+    localStorage.setItem('bar_trivia_current_room', currentRoomCode);
+    if (tvCodeLabel && tvCodePill) {
+      tvCodeLabel.textContent = userCode;
+      tvCodePill.classList.remove('hidden');
+    }
   }
 
   function showAlert(msg, isError = true) {
@@ -567,14 +575,36 @@ let liveGlobalChannel = null;
 function initRealtimeSupabaseChannels() {
   try {
     const norm = currentRoomCode.toUpperCase();
-    liveRoomChannel = supabase.channel(`room_${norm}`);
-    liveRoomChannel.subscribe();
+    if (liveRoomChannel) {
+      try { supabase.removeChannel(liveRoomChannel); } catch (_) {}
+    }
+    if (liveDefaultChannel) {
+      try { supabase.removeChannel(liveDefaultChannel); } catch (_) {}
+    }
+    if (liveGlobalChannel) {
+      try { supabase.removeChannel(liveGlobalChannel); } catch (_) {}
+    }
 
-    liveDefaultChannel = supabase.channel('room_TRIV');
-    liveDefaultChannel.subscribe();
+    function attachListener(ch) {
+      ch.on('broadcast', { event: '*' }, ({ event, payload }) => {
+        console.log(`[Supabase Realtime ${ch.topic}] Event:`, event, payload);
+        handleRealtimeIncomingEvent(event, payload);
+      });
+      ch.subscribe((status, err) => {
+        console.log(`[Supabase Realtime ${ch.topic}] status:`, status, err || '');
+      });
+    }
+
+    liveRoomChannel = supabase.channel(`room_${norm}`);
+    attachListener(liveRoomChannel);
+
+    if (norm !== 'TRIV') {
+      liveDefaultChannel = supabase.channel('room_TRIV');
+      attachListener(liveDefaultChannel);
+    }
 
     liveGlobalChannel = supabase.channel('room_GLOBAL');
-    liveGlobalChannel.subscribe();
+    attachListener(liveGlobalChannel);
   } catch (e) {
     console.warn('Error setting up Supabase Realtime channels:', e);
   }
@@ -605,27 +635,42 @@ function broadcastRealtimeEvent(event, payload = {}) {
 
   // 3. Internet-Wide Supabase Realtime Gateway
   try {
-    if (!liveRoomChannel || !liveDefaultChannel) {
+    if (!liveRoomChannel) {
       initRealtimeSupabaseChannels();
     }
-    liveRoomChannel?.send({
+    const sendObj = {
       type: 'broadcast',
       event: event,
       payload: fullPayload
-    });
-    liveDefaultChannel?.send({
-      type: 'broadcast',
-      event: event,
-      payload: fullPayload
-    });
-    liveGlobalChannel?.send({
-      type: 'broadcast',
-      event: event,
-      payload: fullPayload
-    });
+    };
+    liveRoomChannel?.send(sendObj);
+    liveDefaultChannel?.send(sendObj);
+    liveGlobalChannel?.send(sendObj);
   } catch (err) {
     console.warn('[Supabase Realtime Broadcast] Error:', err);
   }
+}
+
+function handleIncomingPreGameCountdown(rawPayload) {
+  const payload = rawPayload?.payload || rawPayload || {};
+  console.log('[Realtime] Processing pre_game_countdown:', payload);
+  const countdownSecs = payload.countdown_seconds || 10;
+  currentGameState = 'COUNTDOWN';
+
+  const playerQuestionText = document.getElementById('player-question-text');
+  if (playerQuestionText) {
+    playerQuestionText.textContent = `🎮 GAME STARTING IN ${countdownSecs} SECONDS! Get ready...`;
+  }
+  const playerStatusBadge = document.getElementById('player-status-badge');
+  if (playerStatusBadge) {
+    playerStatusBadge.className = 'status-badge status-active';
+    playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> STARTING IN ${countdownSecs}s`;
+  }
+  const answerBtns = document.querySelectorAll('.btn-answer');
+  answerBtns.forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+  });
 }
 
 function handleIncomingQuestionStart(rawPayload) {
@@ -681,7 +726,9 @@ function handleRealtimeIncomingEvent(event, data) {
   const normEvent = (event || '').toLowerCase();
   const payload = data.payload || data;
 
-  if (normEvent === 'question_start') {
+  if (normEvent === 'pre_game_countdown') {
+    handleIncomingPreGameCountdown(payload);
+  } else if (normEvent === 'question_start') {
     handleIncomingQuestionStart(payload);
   } else if (normEvent === 'timer_expired') {
     handleIncomingTimerExpired(payload);
@@ -721,6 +768,9 @@ function handleRealtimeIncomingEvent(event, data) {
 }
 
 function initRealtimeEngine() {
+  // Always initialize Supabase Realtime Channels for Internet-wide broadcasting
+  initRealtimeSupabaseChannels();
+
   if (mqttClient) {
     try { mqttClient.end(true); } catch (_) {}
   }
@@ -973,10 +1023,34 @@ function initHostControls() {
 
   btnStartAuto?.addEventListener('click', async () => {
     if (isAutomatedEngineRunning) return;
-    await initOpenTdbToken();
     isAutomatedEngineRunning = true;
     updateHostEngineUI('IN PROGRESS');
-    runNextAutomatedStep();
+
+    // 1. Broadcast pre-game countdown (10s) immediately to TV and players
+    const countdownSecs = 10;
+    const startsAtMs = Date.now() + (countdownSecs * 1000);
+    broadcastRealtimeEvent('pre_game_countdown', {
+      countdown_seconds: countdownSecs,
+      starts_at_epoch_ms: startsAtMs,
+      room_code: currentRoomCode
+    });
+
+    try {
+      supabase.from('game_sessions').upsert({
+        room_code: currentRoomCode,
+        status: 'pre_game_countdown',
+        starts_at: startsAtMs,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
+
+    // 2. Fetch questions during the countdown
+    await initOpenTdbToken();
+
+    // 3. Start Question 1 automatically after the countdown finishes
+    autoEngineTimeout = setTimeout(() => {
+      runNextAutomatedStep();
+    }, countdownSecs * 1000);
   });
 
   btnPauseAuto?.addEventListener('click', () => {
@@ -1192,6 +1266,30 @@ async function runNextAutomatedStep() {
     option_d: question.options.D,
     correct_option: question.correct,
   });
+
+  try {
+    supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'question_active',
+      current_question_index: currentQuestionIndex + 1,
+      duration_seconds: durationSeconds,
+      starts_at: Date.now(),
+      timer_ends_at: timerEndsAtGlobalMs,
+      question_data: {
+        id: question.id,
+        category: question.category,
+        difficulty: selectedDifficulty,
+        question_text: question.text,
+        option_a: question.options.A,
+        option_b: question.options.B,
+        option_c: question.options.C,
+        option_d: question.options.D,
+        correct_option: question.correct,
+      },
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }).catch(() => {});
+  } catch (_) {}
+
   onQuestionStart(payload);
 
   autoEngineTimeout = setTimeout(() => {
@@ -1749,6 +1847,34 @@ function initPlayerControls() {
       const optD = document.getElementById('p-opt-d');
       if (optD) optD.textContent = currentQuestionData.options?.D || 'D';
     }
+
+    function checkActiveGameSession() {
+      supabase.from('game_sessions')
+        .select('*')
+        .or(`room_code.eq.${currentRoomCode},room_code.eq.TRIV`)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            if (data.status === 'pre_game_countdown') {
+              const rem = Math.max(1, Math.ceil((data.starts_at - Date.now()) / 1000));
+              handleIncomingPreGameCountdown({ countdown_seconds: rem });
+            } else if (data.status === 'question_active' && data.question_data) {
+              const qData = data.question_data;
+              if (!currentQuestionData || currentQuestionData.id !== qData.id) {
+                handleIncomingQuestionStart({
+                  ...qData,
+                  question_index: data.current_question_index || 1,
+                  duration_seconds: data.duration_seconds || 20,
+                  timer_ends_at_epoch_ms: data.timer_ends_at
+                });
+              }
+            }
+          }
+        }).catch(() => {});
+    }
+
+    checkActiveGameSession();
+    setInterval(checkActiveGameSession, 2000);
   }
 
   formJoin?.addEventListener('submit', (e) => {
