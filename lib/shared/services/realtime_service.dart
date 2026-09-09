@@ -4,6 +4,7 @@ import '../config/supabase_config.dart';
 import '../models/question.dart';
 import 'supabase_service.dart';
 import 'broadcast_sync.dart';
+import 'mqtt_service.dart';
 
 class RealtimeService {
   RealtimeChannel? _channel;
@@ -15,6 +16,7 @@ class RealtimeService {
       StreamController<Map<String, dynamic>>.broadcast();
 
   StreamSubscription<Map<String, dynamic>>? _localSubscription;
+  StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
 
   /// Subscribe to a room's broadcast channel
   RealtimeChannel joinRoomChannel({
@@ -73,6 +75,13 @@ class RealtimeService {
 
     // 2. Listen to cross-tab web localStorage events
     BroadcastSync.listen(handleEvent);
+
+    // 3. Connect to EMQX MQTT broker for 100% reliable internet cross-device events
+    final mqtt = MqttService();
+    mqtt.connect();
+    mqtt.subscribeToRoom(roomCode);
+    _mqttSubscription?.cancel();
+    _mqttSubscription = mqtt.eventStream.listen(handleEvent);
 
     // Helper to register callbacks on any RealtimeChannel
     void attachListeners(RealtimeChannel ch) {
@@ -169,6 +178,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -178,6 +188,15 @@ class RealtimeService {
         payload: payload,
       );
     } catch (_) {}
+  }
+
+  void _publishMqtt(String roomCode, Map<String, dynamic> payload) {
+    final mqtt = MqttService();
+    final norm = roomCode.toUpperCase().trim();
+    mqtt.publish('barrooms_trivia/room_$norm', payload);
+    if (norm != 'TRIV') {
+      mqtt.publish('barrooms_trivia/room_TRIV', payload);
+    }
   }
 
   /// Broadcast question start payload from Host to all connected player & TV views
@@ -209,6 +228,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -238,6 +258,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -259,6 +280,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -286,6 +308,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -311,6 +334,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -336,6 +360,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -363,6 +388,7 @@ class RealtimeService {
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
 
     try {
       final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -377,6 +403,8 @@ class RealtimeService {
   void leaveChannel() {
     _localSubscription?.cancel();
     _localSubscription = null;
+    _mqttSubscription?.cancel();
+    _mqttSubscription = null;
     if (_channel != null) {
       try {
         SupabaseConfig.client.removeChannel(_channel!);

@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
+import '../shared/services/mqtt_service.dart';
 import '../shared/theme/app_theme.dart';
 
 /// Pure Android TV & Big-Screen QR Code Authentication Screen
@@ -63,6 +64,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _globalChannel?.unsubscribe();
     _pollingTimer?.cancel();
     _countdownTimer?.cancel();
+    _mqttPairingSubscription?.cancel();
     _animController.dispose();
     _refreshFocusNode.dispose();
     super.dispose();
@@ -88,6 +90,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   RealtimeChannel? _userCodeChannel;
   RealtimeChannel? _globalChannel;
   Timer? _pollingTimer;
+  StreamSubscription<Map<String, dynamic>>? _mqttPairingSubscription;
 
   void _subscribeToPairingChannel() {
     _authChannel?.unsubscribe();
@@ -95,6 +98,27 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _userCodeChannel?.unsubscribe();
     _globalChannel?.unsubscribe();
     _pollingTimer?.cancel();
+    _mqttPairingSubscription?.cancel();
+
+    // 1. MQTT real-time subscription (works globally across devices)
+    final mqtt = MqttService();
+    mqtt.connect();
+    mqtt.subscribeTopic('device_auth_$_deviceToken');
+    mqtt.subscribeTopic('barrooms_trivia/room_$_userCode');
+    mqtt.subscribeTopic('barrooms_trivia/room_TRIV');
+    mqtt.subscribeTopic('tv_pairing');
+
+    _mqttPairingSubscription = mqtt.eventStream.listen((data) {
+      if (_isAuthorized || !mounted) return;
+      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
+      if (ev == 'device_authorized' ||
+          ev == 'pre_game_countdown' ||
+          ev == 'question_start' ||
+          ev == 'start_game') {
+        _countdownTimer?.cancel();
+        _handleDeviceAuthorized(data);
+      }
+    });
 
     try {
       final channelName = 'device_auth_$_deviceToken';
@@ -179,6 +203,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     if (_isAuthorized) return;
 
     _pollingTimer?.cancel();
+    _countdownTimer?.cancel();
+    _mqttPairingSubscription?.cancel();
+
+    final ev = (payload['event'] ?? payload['type'])?.toString().toLowerCase();
+    final isGameImmediate = (ev == 'pre_game_countdown' || ev == 'question_start' || ev == 'start_game');
+
     setState(() {
       _isAuthorized = true;
       final userInfo = payload['user_info'] as Map<String, dynamic>?;
@@ -191,8 +221,9 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     await prefs.setString('tv_authorized_id', payload['user_id']?.toString() ?? '');
     await prefs.setString('tv_room_code', _userCode);
 
-    // Brief delay to display connected state, then transition to Waiting for Host TV stage
-    await Future.delayed(const Duration(milliseconds: 1400));
+    // If game has already started, transition to TV stage instantly!
+    final delayMs = isGameImmediate ? 150 : 1200;
+    await Future.delayed(Duration(milliseconds: delayMs));
     if (mounted) {
       context.go('/tv?room=$_userCode');
     }

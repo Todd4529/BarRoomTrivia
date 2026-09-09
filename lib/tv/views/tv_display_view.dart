@@ -249,15 +249,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _realtimeService.joinRoomChannel(
       roomCode: widget.roomCode,
       onPreGameCountdownBroadcast: (payload) {
+        _adSlideTimer?.cancel();
+        _interQuestionTimer?.cancel();
         final startsAtEpochMs = payload['starts_at_epoch_ms'] as int?;
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         final remaining = startsAtEpochMs != null
             ? ((startsAtEpochMs - nowMs) / 1000).ceil().clamp(0, 60)
-            : 30;
+            : (payload['countdown_seconds'] as int? ?? 10);
 
         setState(() {
           _isPreGameCountdown = true;
-          _preGameSeconds = remaining > 0 ? remaining : 30;
+          _preGameSeconds = remaining > 0 ? remaining : 10;
           _isGameActive = false;
           _isTimerExpired = false;
         });
@@ -280,6 +282,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
 
         if (question != null) {
+          _adSlideTimer?.cancel();
+          _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
           setState(() {
             _currentQuestion = question;

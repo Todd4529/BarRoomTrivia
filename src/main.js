@@ -38,6 +38,7 @@ let promoCarouselInterval = null;
 let currentPromoSlideIndex = 1;
 let playerChoiceSubmitted = null;
 let mockPlayerTimeouts = [];
+let currentRoundQuestions = [];
 
 let remainingTimerSeconds = 0;
 let totalTimerDuration = 20;
@@ -627,7 +628,13 @@ function broadcastRealtimeEvent(event, payload = {}) {
   // 2. Internet-Wide Realtime MQTT WebSockets
   if (mqttClient && mqttClient.connected) {
     try {
-      mqttClient.publish(getMqttTopic(), JSON.stringify(fullPayload));
+      const topic = getMqttTopic();
+      const jsonStr = JSON.stringify(fullPayload);
+      mqttClient.publish(topic, jsonStr);
+      if (topic !== 'barrooms_trivia/room_TRIV') {
+        mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
+      }
+      mqttClient.publish('tv_pairing', jsonStr);
     } catch (e) {
       console.warn('[Realtime MQTT] Failed to publish:', e);
     }
@@ -656,6 +663,24 @@ function handleIncomingPreGameCountdown(rawPayload) {
   console.log('[Realtime] Processing pre_game_countdown:', payload);
   const countdownSecs = payload.countdown_seconds || 10;
   currentGameState = 'COUNTDOWN';
+
+  hideResultModal();
+  hideWinnerModals();
+
+  // If in TV view, automatically transition from rotating promo ads to live stage
+  const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvLiveGrid = document.getElementById('tv-live-grid');
+  const btnPromo = document.getElementById('btn-tv-toggle-promo');
+  const btnLive = document.getElementById('btn-tv-toggle-live');
+  if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+  if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+  if (btnPromo) btnPromo.classList.remove('active');
+  if (btnLive) btnLive.classList.add('active');
+
+  const tvCategory = document.getElementById('tv-category');
+  const tvQuestionText = document.getElementById('tv-question-text');
+  if (tvCategory) tvCategory.textContent = '🚀 GAME STARTING';
+  if (tvQuestionText) tvQuestionText.textContent = `Get ready! Question 1 starts in ${countdownSecs} seconds...`;
 
   const playerQuestionText = document.getElementById('player-question-text');
   if (playerQuestionText) {
@@ -1024,6 +1049,8 @@ function initHostControls() {
   btnStartAuto?.addEventListener('click', async () => {
     if (isAutomatedEngineRunning) return;
     isAutomatedEngineRunning = true;
+    currentRoundQuestions = [];
+    currentQuestionIndex = 0;
     updateHostEngineUI('IN PROGRESS');
 
     // 1. Broadcast pre-game countdown (10s) immediately to TV and players
@@ -1219,99 +1246,98 @@ function updateHostEngineUI(statusText) {
 async function runNextAutomatedStep() {
   if (!isAutomatedEngineRunning) return;
 
-  const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
-  const questionInRound = (currentQuestionIndex % 10) + 1;
-
-  let activeRoundGenre = 'Auto Select';
-
-  // QUEUE OR AUTO SELECT ROTATION LOGIC
-  if (selectedGenreQueue.length > 0) {
-    const qIndex = (currentRound - 1) % selectedGenreQueue.length;
-    activeRoundGenre = selectedGenreQueue[qIndex];
-  } else {
-    // AUTO SELECT: PICK ONE SINGLE SPECIFIC GENRE FOR THIS GAME/ROUND, AND ROTATE NEXT GAME!
-    const autoGenre = shuffledAutoGenres[(currentRound - 1) % shuffledAutoGenres.length];
-    activeRoundGenre = autoGenre;
-  }
-
-  // FETCH REAL-TIME QUESTIONS
-  const durationSeconds = selectedQuestionDuration;
-  const questionBatch = await fetchRealtimeTriviaQuestions(activeRoundGenre, selectedDifficulty, 10);
-  const question = questionBatch[(questionInRound - 1) % questionBatch.length];
-
-  timerEndsAtGlobalMs = Date.now() + (durationSeconds * 1000);
-
-  const payload = {
-    questionIndex: currentQuestionIndex,
-    roundNumber: currentRound,
-    questionNumberInRound: questionInRound,
-    questionData: question,
-    difficulty: selectedDifficulty,
-    durationSeconds,
-    timerEndsAtMs: timerEndsAtGlobalMs
-  };
-
-  currentGameState = 'QUESTION_ACTIVE';
-  broadcastRealtimeEvent('question_start', {
-    question_index: currentQuestionIndex + 1,
-    question_id: question.id,
-    duration_seconds: durationSeconds,
-    timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
-    category: question.category,
-    difficulty: selectedDifficulty,
-    question_text: question.text,
-    option_a: question.options.A,
-    option_b: question.options.B,
-    option_c: question.options.C,
-    option_d: question.options.D,
-    correct_option: question.correct,
-  });
-
   try {
-    supabase.from('game_sessions').upsert({
-      room_code: currentRoomCode,
-      status: 'question_active',
-      current_question_index: currentQuestionIndex + 1,
-      duration_seconds: durationSeconds,
-      starts_at: Date.now(),
-      timer_ends_at: timerEndsAtGlobalMs,
-      question_data: {
-        id: question.id,
-        category: question.category,
-        difficulty: selectedDifficulty,
-        question_text: question.text,
-        option_a: question.options.A,
-        option_b: question.options.B,
-        option_c: question.options.C,
-        option_d: question.options.D,
-        correct_option: question.correct,
-      },
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'room_code' }).catch(() => {});
-  } catch (_) {}
+    const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+    const questionInRound = (currentQuestionIndex % 10) + 1;
 
-  onQuestionStart(payload);
+    let activeRoundGenre = 'Auto Select';
 
-  autoEngineTimeout = setTimeout(() => {
-    const expiredPayload = {
-      correctOption: question.correct,
-      correctText: `${question.correct}) ${question.options[question.correct]}`,
+    // QUEUE OR AUTO SELECT ROTATION LOGIC
+    if (selectedGenreQueue.length > 0) {
+      const qIndex = (currentRound - 1) % selectedGenreQueue.length;
+      activeRoundGenre = selectedGenreQueue[qIndex];
+    } else {
+      const autoGenre = shuffledAutoGenres[(currentRound - 1) % shuffledAutoGenres.length];
+      activeRoundGenre = autoGenre;
+    }
+
+    // CACHE 10 QUESTIONS PER ROUND (Avoids OpenTDB rate limiting & network failures per question)
+    if (questionInRound === 1 || !currentRoundQuestions || currentRoundQuestions.length < 10) {
+      try {
+        currentRoundQuestions = await fetchRealtimeTriviaQuestions(activeRoundGenre, selectedDifficulty, 10);
+      } catch (err) {
+        console.warn('[Realtime] Failed to fetch round questions, using local:', err);
+      }
+      if (!currentRoundQuestions || currentRoundQuestions.length === 0) {
+        currentRoundQuestions = getLocalQuestions(activeRoundGenre, selectedDifficulty, 10);
+      }
+    }
+
+    // Safe Question Selection with Guaranteed Fallback
+    let question = currentRoundQuestions?.[questionInRound - 1];
+    if (!question || !question.options) {
+      const fallback = getLocalQuestions(activeRoundGenre, selectedDifficulty, 1);
+      question = fallback[0];
+    }
+
+    const durationSeconds = selectedQuestionDuration || 20;
+    timerEndsAtGlobalMs = Date.now() + (durationSeconds * 1000);
+
+    const payload = {
       questionIndex: currentQuestionIndex,
       roundNumber: currentRound,
-      questionNumberInRound: questionInRound
+      questionNumberInRound: questionInRound,
+      questionData: question,
+      difficulty: selectedDifficulty,
+      durationSeconds,
+      timerEndsAtMs: timerEndsAtGlobalMs
     };
 
-    currentGameState = 'QUESTION_REVIEW';
+    currentGameState = 'QUESTION_ACTIVE';
+    broadcastRealtimeEvent('question_start', {
+      question_index: currentQuestionIndex + 1,
+      question_id: question.id,
+      duration_seconds: durationSeconds,
+      timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+      category: question.category,
+      difficulty: selectedDifficulty,
+      question_text: question.text,
+      option_a: question.options.A,
+      option_b: question.options.B,
+      option_c: question.options.C,
+      option_d: question.options.D,
+      correct_option: question.correct,
+    });
 
-    setTimeout(() => {
+    onQuestionStart(payload);
+
+    clearTimeout(autoEngineTimeout);
+
+    // 1. Wait for active question duration to finish
+    autoEngineTimeout = setTimeout(() => {
+      if (!isAutomatedEngineRunning) return;
+
+      const expiredPayload = {
+        correctOption: question.correct,
+        correctText: `${question.correct}) ${question.options[question.correct]}`,
+        questionIndex: currentQuestionIndex,
+        roundNumber: currentRound,
+        questionNumberInRound: questionInRound
+      };
+
+      currentGameState = 'QUESTION_REVIEW';
+      const reviewDurationMs = 6000; // 6-second exciting review instead of 20 seconds!
+
       broadcastRealtimeEvent('timer_expired', {
         correct_option: question.correct,
         correctText: `${question.correct}) ${question.options[question.correct]}`,
-        next_question_starts_at_epoch_ms: Date.now() + 20000,
+        next_question_starts_at_epoch_ms: Date.now() + reviewDurationMs,
       });
       onTimerExpired(expiredPayload);
 
+      // 2. Advance to next question after 6s review
       autoEngineTimeout = setTimeout(() => {
+        if (!isAutomatedEngineRunning) return;
         currentQuestionIndex++;
 
         if (questionInRound === 10) {
@@ -1330,25 +1356,37 @@ async function runNextAutomatedStep() {
             roundNumber: currentRound,
             winnerName: roundWinner.nickname,
             winnerScore: roundWinner.score,
-            delaySeconds: 60
+            delaySeconds: 15
           };
 
           broadcastRealtimeEvent('round_completed', {
             top3_winners: playersLeaderboard.slice(0, 3),
-            next_round_starts_at_epoch_ms: Date.now() + 60000,
+            next_round_starts_at_epoch_ms: Date.now() + 15000,
           });
           onRoundWinner(winnerPayload);
 
           autoEngineTimeout = setTimeout(() => {
-            if (isAutomatedEngineRunning) runNextAutomatedStep();
-          }, 60000);
+            if (isAutomatedEngineRunning) {
+              currentRoundQuestions = []; // Reset for new round
+              runNextAutomatedStep();
+            }
+          }, 15000);
         } else {
-          if (isAutomatedEngineRunning) runNextAutomatedStep();
+          if (isAutomatedEngineRunning) {
+            runNextAutomatedStep();
+          }
         }
-      }, 20000);
-    }, 1000);
-
-  }, durationSeconds * 1000);
+      }, reviewDurationMs);
+    }, durationSeconds * 1000);
+  } catch (loopErr) {
+    console.error('[Automated Engine] Recovering from step error:', loopErr);
+    setTimeout(() => {
+      if (isAutomatedEngineRunning) {
+        currentQuestionIndex++;
+        runNextAutomatedStep();
+      }
+    }, 3000);
+  }
 }
 
 // SIMULATE 10 BACKGROUND MOCK PLAYERS WITH SPEED & STREAK MULTIPLIER SCORING
@@ -1402,23 +1440,23 @@ function onQuestionStart(payload) {
 
   hideResultModal();
   hideWinnerModals();
+  clearInterval(modalCountdownInterval);
 
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
   if (btnLive) btnLive.classList.add('active');
   if (btnPromo) btnPromo.classList.remove('active');
 
+  const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvLiveGrid = document.getElementById('tv-live-grid');
+  if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+  if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+
   triggerMockPlayersSimulation(questionData, totalTimerDuration);
 
   const tvNextQBanner = document.getElementById('tv-next-q-banner');
   if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
   clearInterval(tvNextQCountdownInterval);
-
-  const tvPromoScreen = document.getElementById('tv-promo-screen');
-  const tvLiveGrid = document.getElementById('tv-live-grid');
-
-  if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-  if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
 
   // Update Host Stats
   const statRound = document.getElementById('stat-round');
@@ -1602,7 +1640,7 @@ function onTimerExpired(payload) {
 
   if (tvNextQBanner && tvNextQVal) {
     tvNextQBanner.classList.remove('hidden');
-    let remNextQSecs = 20;
+    let remNextQSecs = 6;
     tvNextQVal.textContent = remNextQSecs;
 
     clearInterval(tvNextQCountdownInterval);
@@ -1647,14 +1685,14 @@ function onTimerExpired(payload) {
     });
 
     const randomQuote = getRandomItem(funnyCorrectQuotes);
-    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 20);
+    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 6);
     confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
   } else {
     if (currentPlayer) {
       currentPlayer.streak = 0;
     }
     const randomQuote = getRandomItem(funnyWrongQuotes);
-    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 20);
+    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 6);
   }
 }
 
@@ -1662,7 +1700,7 @@ function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 20) {
+function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 6) {
   const overlay = document.getElementById('result-modal-overlay');
   const card = document.getElementById('result-modal-box');
   const icon = document.getElementById('result-modal-icon');
