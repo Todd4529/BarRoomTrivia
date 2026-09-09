@@ -338,14 +338,23 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                 children: [
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.neonCyan.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.neonCyan, width: 2),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/app_logo.png',
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppTheme.neonCyan, width: 2),
+                            ),
+                            child: const Icon(Icons.tv, color: AppTheme.neonCyan, size: 36),
+                          ),
                         ),
-                        child: const Icon(Icons.tv, color: AppTheme.neonCyan, size: 36),
                       ),
                       const SizedBox(width: 16),
                       const Text(

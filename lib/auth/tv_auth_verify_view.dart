@@ -329,7 +329,19 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 60),
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset(
+                'assets/images/app_logo.png',
+                width: 64,
+                height: 64,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 60),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           const Text(
             'Connect TV Display',
@@ -407,8 +419,18 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.local_bar, color: AppTheme.neonCyan, size: 28),
-              const SizedBox(width: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.local_bar, color: AppTheme.neonCyan, size: 28),
+                ),
+              ),
+              const SizedBox(width: 12),
               const Text(
                 'BAR ROOMS TRIVIA',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white),
