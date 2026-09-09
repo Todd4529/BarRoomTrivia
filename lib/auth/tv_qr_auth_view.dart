@@ -225,7 +225,8 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     final delayMs = isGameImmediate ? 150 : 1200;
     await Future.delayed(Duration(milliseconds: delayMs));
     if (mounted) {
-      context.go('/tv?room=$_userCode');
+      final autoParam = isGameImmediate ? '&auto_start=true' : '';
+      context.go('/tv?room=$_userCode$autoParam');
     }
   }
 

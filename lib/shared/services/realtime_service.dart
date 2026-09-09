@@ -29,6 +29,7 @@ class RealtimeService {
     void Function(Map<String, dynamic>)? onGameResetBroadcast,
     void Function(Map<String, dynamic>)? onRoundCompletedBroadcast,
     void Function(Map<String, dynamic>)? onLeaderboardUpdatedBroadcast,
+    void Function(Map<String, dynamic>)? onRequestStateSyncBroadcast,
   }) {
     void handleEvent(dynamic rawData) {
       if (rawData is Map<String, dynamic>) {
@@ -60,6 +61,8 @@ class RealtimeService {
           onGameResetBroadcast(data);
         } else if (event == 'round_completed' && onRoundCompletedBroadcast != null) {
           onRoundCompletedBroadcast(data);
+        } else if (event == 'request_state_sync' && onRequestStateSyncBroadcast != null) {
+          onRequestStateSyncBroadcast(data);
         } else if (event == 'leaderboard_updated' && onLeaderboardUpdatedBroadcast != null) {
           if (data['players'] != null) {
             SupabaseService.syncPlayersFromBroadcast(eventRoom ?? roomCode, data['players']);
@@ -145,6 +148,14 @@ class RealtimeService {
               }
             },
           )
+          .onBroadcast(
+            event: 'request_state_sync',
+            callback: (payload) {
+              if (onRequestStateSyncBroadcast != null) {
+                onRequestStateSyncBroadcast(payload);
+              }
+            },
+          )
           .subscribe();
     }
 
@@ -197,6 +208,28 @@ class RealtimeService {
     if (norm != 'TRIV') {
       mqtt.publish('barrooms_trivia/room_TRIV', payload);
     }
+  }
+
+  /// Broadcast state sync request across all connected clients
+  Future<void> broadcastSyncRequest({required String roomCode}) async {
+    final payload = {
+      'event': 'request_state_sync',
+      'room_code': roomCode,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
+
+    try {
+      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'request_state_sync',
+        payload: payload,
+      );
+    } catch (_) {}
   }
 
   /// Broadcast question start payload from Host to all connected player & TV views

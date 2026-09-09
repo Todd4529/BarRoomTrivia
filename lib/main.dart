@@ -60,7 +60,8 @@ final GoRouter _router = GoRouter(
         final roomCode = state.uri.queryParameters['room'] ??
             state.uri.queryParameters['room_id'] ??
             'TRIV';
-        return TvDisplayView(roomCode: roomCode);
+        final autoStart = state.uri.queryParameters['auto_start'] == 'true';
+        return TvDisplayView(roomCode: roomCode, autoStart: autoStart);
       },
     ),
     GoRoute(

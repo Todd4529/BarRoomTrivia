@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/config/supabase_config.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
+import '../../shared/data/homebrewing_database.dart';
 import '../../shared/services/realtime_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
@@ -17,8 +18,9 @@ import '../widgets/timer_ring.dart';
 
 class TvDisplayView extends StatefulWidget {
   final String roomCode;
+  final bool autoStart;
 
-  const TvDisplayView({super.key, required this.roomCode});
+  const TvDisplayView({super.key, required this.roomCode, this.autoStart = false});
 
   @override
   State<TvDisplayView> createState() => _TvDisplayViewState();
@@ -61,6 +63,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   @override
   void initState() {
     super.initState();
+    if (widget.autoStart) {
+      _isGameActive = true;
+      _isPreGameCountdown = false;
+    }
     _loadSettings();
     _initTvSession();
     _startAdSlideTimer();
@@ -246,6 +252,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _loadLeaderboard();
     _startTvSessionPolling();
 
+    // Broadcast state sync request immediately to sync with running host
+    _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
+
     _realtimeService.joinRoomChannel(
       roomCode: widget.roomCode,
       onPreGameCountdownBroadcast: (payload) {
@@ -408,6 +417,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _preGameTimer?.cancel();
         setState(() {
           _isPreGameCountdown = false;
+          _isGameActive = true; // Crucial: never revert to waiting carousel!
+        });
+        _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
+        // Fallback: if no question arrived after 2.5s, generate question 1 locally
+        Timer(const Duration(milliseconds: 2500), () {
+          if (mounted && _isGameActive && _currentQuestion == null) {
+            final fallback = HomebrewingDatabase.generate500Questions().first;
+            setState(() {
+              _currentQuestion = fallback;
+              _remainingSeconds = _totalDuration > 0 ? _totalDuration : 20;
+            });
+            _startTimer();
+          }
         });
       }
     });
@@ -471,6 +493,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             setState(() {
               _isInterQuestionPhase = false;
             });
+            _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
           }
         }
       });
@@ -1329,7 +1352,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          _currentQuestion?.questionText ?? 'Waiting for host...',
+                          _currentQuestion?.questionText ??
+                              '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 34,

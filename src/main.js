@@ -46,6 +46,54 @@ let timerEndsAtGlobalMs = 0;
 let currentQuestionData = null;
 let currentGameState = 'LOBBY';
 
+// Screen WakeLock to prevent mobile browsers (Safari / Chrome) from sleeping during game
+let screenWakeLock = null;
+async function requestScreenWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      screenWakeLock = await navigator.wakeLock.request('screen');
+      console.log('[WakeLock] Screen wake lock acquired');
+      screenWakeLock.addEventListener('release', () => {
+        console.log('[WakeLock] Screen wake lock released');
+        screenWakeLock = null;
+      });
+    }
+  } catch (err) {
+    console.warn('[WakeLock] Unable to acquire wake lock:', err);
+  }
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && !screenWakeLock) {
+    await requestScreenWakeLock();
+  }
+});
+document.addEventListener('click', () => {
+  if (!screenWakeLock) requestScreenWakeLock();
+});
+document.addEventListener('touchstart', () => {
+  if (!screenWakeLock) requestScreenWakeLock();
+});
+
+// Robust Host Heartbeat Engine (Epoch Timestamp-Based, Immune to Mobile OS Throttling)
+let hostTargetEpochMs = 0;
+let hostEngineState = 'IDLE'; // 'PRE_GAME', 'QUESTION_ACTIVE', 'QUESTION_REVIEW', 'ROUND_SUMMARY'
+let hostHeartbeatInterval = null;
+
+function startHostHeartbeatLoop() {
+  if (hostHeartbeatInterval) clearInterval(hostHeartbeatInterval);
+  hostHeartbeatInterval = setInterval(checkHostEngineTick, 200);
+}
+
+function stopHostHeartbeatLoop() {
+  if (hostHeartbeatInterval) {
+    clearInterval(hostHeartbeatInterval);
+    hostHeartbeatInterval = null;
+  }
+  hostTargetEpochMs = 0;
+  hostEngineState = 'IDLE';
+}
+
 // Auto Select Tracking across games
 let shuffledAutoGenres = [...ALL_SPECIFIC_GENRES].sort(() => 0.5 - Math.random());
 
@@ -764,21 +812,37 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'game_reset') {
     onGameReset();
   } else if (normEvent === 'request_state_sync') {
-    if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
-      broadcastRealtimeEvent('question_start', {
-        question_index: currentQuestionIndex + 1,
-        question_id: currentQuestionData.id,
-        duration_seconds: remainingTimerSeconds,
-        timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
-        category: currentQuestionData.category,
-        difficulty: selectedDifficulty,
-        question_text: currentQuestionData.text,
-        option_a: currentQuestionData.options.A,
-        option_b: currentQuestionData.options.B,
-        option_c: currentQuestionData.options.C,
-        option_d: currentQuestionData.options.D,
-        correct_option: currentQuestionData.correct,
-      });
+    if (isAutomatedEngineRunning) {
+      if (hostEngineState === 'PRE_GAME') {
+        const rem = Math.max(1, Math.ceil((hostTargetEpochMs - Date.now()) / 1000));
+        broadcastRealtimeEvent('pre_game_countdown', {
+          countdown_seconds: rem,
+          starts_at_epoch_ms: hostTargetEpochMs,
+          room_code: currentRoomCode
+        });
+      } else if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+        const rem = Math.max(1, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
+        broadcastRealtimeEvent('question_start', {
+          question_index: currentQuestionIndex + 1,
+          question_id: currentQuestionData.id,
+          duration_seconds: rem,
+          timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+          category: currentQuestionData.category,
+          difficulty: selectedDifficulty,
+          question_text: currentQuestionData.text,
+          option_a: currentQuestionData.options.A,
+          option_b: currentQuestionData.options.B,
+          option_c: currentQuestionData.options.C,
+          option_d: currentQuestionData.options.D,
+          correct_option: currentQuestionData.correct,
+        });
+      } else if (hostEngineState === 'QUESTION_REVIEW' && currentQuestionData) {
+        broadcastRealtimeEvent('timer_expired', {
+          correct_option: currentQuestionData.correct,
+          correctText: `${currentQuestionData.correct}) ${currentQuestionData.options[currentQuestionData.correct]}`,
+          next_question_starts_at_epoch_ms: hostTargetEpochMs,
+        });
+      }
     }
   } else if (normEvent === 'player_joined') {
     onPlayerJoined(payload);
@@ -1047,6 +1111,7 @@ function initHostControls() {
   });
 
   btnStartAuto?.addEventListener('click', async () => {
+    requestScreenWakeLock();
     if (isAutomatedEngineRunning) return;
     isAutomatedEngineRunning = true;
     currentRoundQuestions = [];
@@ -1056,6 +1121,10 @@ function initHostControls() {
     // 1. Broadcast pre-game countdown (10s) immediately to TV and players
     const countdownSecs = 10;
     const startsAtMs = Date.now() + (countdownSecs * 1000);
+    hostTargetEpochMs = startsAtMs;
+    hostEngineState = 'PRE_GAME';
+    startHostHeartbeatLoop();
+
     broadcastRealtimeEvent('pre_game_countdown', {
       countdown_seconds: countdownSecs,
       starts_at_epoch_ms: startsAtMs,
@@ -1074,14 +1143,16 @@ function initHostControls() {
     // 2. Fetch questions during the countdown
     await initOpenTdbToken();
 
-    // 3. Start Question 1 automatically after the countdown finishes
+    // 3. Start Question 1 automatically after countdown finishes
+    clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
-      runNextAutomatedStep();
+      checkHostEngineTick();
     }, countdownSecs * 1000);
   });
 
   btnPauseAuto?.addEventListener('click', () => {
     isAutomatedEngineRunning = false;
+    stopHostHeartbeatLoop();
     clearTimeout(autoEngineTimeout);
     clearInterval(countdownInterval);
     clearInterval(modalCountdownInterval);
@@ -1093,6 +1164,7 @@ function initHostControls() {
 
   btnResetGame?.addEventListener('click', () => {
     isAutomatedEngineRunning = false;
+    stopHostHeartbeatLoop();
     clearTimeout(autoEngineTimeout);
     clearInterval(countdownInterval);
     clearInterval(modalCountdownInterval);
@@ -1282,6 +1354,9 @@ async function runNextAutomatedStep() {
 
     const durationSeconds = selectedQuestionDuration || 20;
     timerEndsAtGlobalMs = Date.now() + (durationSeconds * 1000);
+    hostTargetEpochMs = timerEndsAtGlobalMs;
+    hostEngineState = 'QUESTION_ACTIVE';
+    startHostHeartbeatLoop();
 
     const payload = {
       questionIndex: currentQuestionIndex,
@@ -1312,71 +1387,8 @@ async function runNextAutomatedStep() {
     onQuestionStart(payload);
 
     clearTimeout(autoEngineTimeout);
-
-    // 1. Wait for active question duration to finish
     autoEngineTimeout = setTimeout(() => {
-      if (!isAutomatedEngineRunning) return;
-
-      const expiredPayload = {
-        correctOption: question.correct,
-        correctText: `${question.correct}) ${question.options[question.correct]}`,
-        questionIndex: currentQuestionIndex,
-        roundNumber: currentRound,
-        questionNumberInRound: questionInRound
-      };
-
-      currentGameState = 'QUESTION_REVIEW';
-      const reviewDurationMs = 6000; // 6-second exciting review instead of 20 seconds!
-
-      broadcastRealtimeEvent('timer_expired', {
-        correct_option: question.correct,
-        correctText: `${question.correct}) ${question.options[question.correct]}`,
-        next_question_starts_at_epoch_ms: Date.now() + reviewDurationMs,
-      });
-      onTimerExpired(expiredPayload);
-
-      // 2. Advance to next question after 6s review
-      autoEngineTimeout = setTimeout(() => {
-        if (!isAutomatedEngineRunning) return;
-        currentQuestionIndex++;
-
-        if (questionInRound === 10) {
-          currentGameState = 'ROUND_SUMMARY';
-          
-          playersLeaderboard.sort((a, b) => b.score - a.score);
-          const roundWinner = playersLeaderboard[0] || { nickname: 'Player 1', score: 0 };
-          
-          roundWinner.score += 250;
-          renderLeaderboard();
-          broadcastRealtimeEvent('leaderboard_updated', {
-            players: playersLeaderboard,
-          });
-
-          const winnerPayload = {
-            roundNumber: currentRound,
-            winnerName: roundWinner.nickname,
-            winnerScore: roundWinner.score,
-            delaySeconds: 15
-          };
-
-          broadcastRealtimeEvent('round_completed', {
-            top3_winners: playersLeaderboard.slice(0, 3),
-            next_round_starts_at_epoch_ms: Date.now() + 15000,
-          });
-          onRoundWinner(winnerPayload);
-
-          autoEngineTimeout = setTimeout(() => {
-            if (isAutomatedEngineRunning) {
-              currentRoundQuestions = []; // Reset for new round
-              runNextAutomatedStep();
-            }
-          }, 15000);
-        } else {
-          if (isAutomatedEngineRunning) {
-            runNextAutomatedStep();
-          }
-        }
-      }, reviewDurationMs);
+      checkHostEngineTick();
     }, durationSeconds * 1000);
   } catch (loopErr) {
     console.error('[Automated Engine] Recovering from step error:', loopErr);
@@ -1386,6 +1398,109 @@ async function runNextAutomatedStep() {
         runNextAutomatedStep();
       }
     }, 3000);
+  }
+}
+
+function handleHostQuestionTimeout(question, currentRound, questionInRound) {
+  if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
+
+  const expiredPayload = {
+    correctOption: question.correct,
+    correctText: `${question.correct}) ${question.options[question.correct]}`,
+    questionIndex: currentQuestionIndex,
+    roundNumber: currentRound,
+    questionNumberInRound: questionInRound
+  };
+
+  currentGameState = 'QUESTION_REVIEW';
+  hostEngineState = 'QUESTION_REVIEW';
+  const reviewDurationMs = 6000; // 6-second exciting review
+  hostTargetEpochMs = Date.now() + reviewDurationMs;
+
+  broadcastRealtimeEvent('timer_expired', {
+    correct_option: question.correct,
+    correctText: `${question.correct}) ${question.options[question.correct]}`,
+    next_question_starts_at_epoch_ms: hostTargetEpochMs,
+  });
+  onTimerExpired(expiredPayload);
+
+  clearTimeout(autoEngineTimeout);
+  autoEngineTimeout = setTimeout(() => {
+    checkHostEngineTick();
+  }, reviewDurationMs);
+}
+
+function handleHostAdvanceAfterReview(questionInRound, currentRound) {
+  if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_REVIEW') return;
+  currentQuestionIndex++;
+
+  if (questionInRound === 10) {
+    currentGameState = 'ROUND_SUMMARY';
+    hostEngineState = 'ROUND_SUMMARY';
+    hostTargetEpochMs = Date.now() + 15000;
+    
+    playersLeaderboard.sort((a, b) => b.score - a.score);
+    const roundWinner = playersLeaderboard[0] || { nickname: 'Player 1', score: 0 };
+    
+    roundWinner.score += 250;
+    renderLeaderboard();
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+    });
+
+    const winnerPayload = {
+      roundNumber: currentRound,
+      winnerName: roundWinner.nickname,
+      winnerScore: roundWinner.score,
+      delaySeconds: 15
+    };
+
+    broadcastRealtimeEvent('round_completed', {
+      top3_winners: playersLeaderboard.slice(0, 3),
+      next_round_starts_at_epoch_ms: hostTargetEpochMs,
+    });
+    onRoundWinner(winnerPayload);
+
+    clearTimeout(autoEngineTimeout);
+    autoEngineTimeout = setTimeout(() => {
+      checkHostEngineTick();
+    }, 15000);
+  } else {
+    hostEngineState = 'QUESTION_ACTIVE';
+    runNextAutomatedStep();
+  }
+}
+
+function handleHostAdvanceAfterRoundSummary() {
+  if (!isAutomatedEngineRunning || hostEngineState !== 'ROUND_SUMMARY') return;
+  currentRoundQuestions = [];
+  hostEngineState = 'QUESTION_ACTIVE';
+  runNextAutomatedStep();
+}
+
+function checkHostEngineTick() {
+  if (!isAutomatedEngineRunning || hostTargetEpochMs <= 0) return;
+  const now = Date.now();
+  if (now >= hostTargetEpochMs) {
+    if (hostEngineState === 'PRE_GAME') {
+      hostTargetEpochMs = 0;
+      hostEngineState = 'QUESTION_ACTIVE';
+      runNextAutomatedStep();
+    } else if (hostEngineState === 'QUESTION_ACTIVE') {
+      const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+      const questionInRound = (currentQuestionIndex % 10) + 1;
+      let question = currentRoundQuestions?.[questionInRound - 1];
+      if (!question || !question.options) {
+        question = currentQuestionData || { correct: 'A', options: { A: '' } };
+      }
+      handleHostQuestionTimeout(question, currentRound, questionInRound);
+    } else if (hostEngineState === 'QUESTION_REVIEW') {
+      const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+      const questionInRound = (currentQuestionIndex % 10) + 1;
+      handleHostAdvanceAfterReview(questionInRound, currentRound);
+    } else if (hostEngineState === 'ROUND_SUMMARY') {
+      handleHostAdvanceAfterRoundSummary();
+    }
   }
 }
 
@@ -1558,16 +1673,32 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
-  remainingTimerSeconds = seconds;
+  const initialRem = timerEndsAtGlobalMs > 0 ? Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)) : seconds;
+  remainingTimerSeconds = Math.min(seconds, initialRem);
   updateTimerUI();
 
   countdownInterval = setInterval(() => {
-    remainingTimerSeconds--;
+    if (timerEndsAtGlobalMs > 0) {
+      remainingTimerSeconds = Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
+    } else {
+      remainingTimerSeconds--;
+    }
     updateTimerUI();
     if (remainingTimerSeconds <= 0) {
       clearInterval(countdownInterval);
+      // Autonomous fallback: if timer expired and still in QUESTION_ACTIVE,
+      // reveal answer locally and prepare to sync if host was delayed!
+      if (currentGameState === 'QUESTION_ACTIVE') {
+        currentGameState = 'QUESTION_REVIEW';
+        onTimerExpired({ correctOption: currentQuestionData?.correct });
+        setTimeout(() => {
+          if (currentGameState === 'QUESTION_REVIEW') {
+            broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+          }
+        }, 6000);
+      }
     }
-  }, 1000);
+  }, 500);
 }
 
 function updateTimerUI() {
@@ -1866,11 +1997,15 @@ function initPlayerControls() {
     // Re-initialize Realtime connection for this specific room code
     initRealtimeEngine();
 
-    // Broadcast join
+    // Acquire screen wake lock so player's phone screen doesn't turn off
+    requestScreenWakeLock();
+
+    // Broadcast join and request state sync immediately
     broadcastRealtimeEvent('player_joined', {
       nickname: currentPlayer.nickname,
       score: currentPlayer.score,
     });
+    broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
     onPlayerJoined(currentPlayer);
 
     if (currentQuestionData) {
