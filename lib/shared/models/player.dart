@@ -16,13 +16,19 @@ class Player {
   });
 
   factory Player.fromJson(Map<String, dynamic> json) {
+    final nick = (json['nickname'] ?? json['name'] ?? 'Player').toString();
+    final uid = (json['player_uid'] ?? json['id'] ?? nick).toString();
+    final room = (json['room_code'] ?? 'TRIV').toString();
+    final score = (json['cumulative_score'] ?? json['score'] as num?)?.toInt() ?? 0;
+    final conn = (json['is_connected'] as bool?) ?? true;
+
     return Player(
-      id: json['id'] as String,
-      playerUid: json['player_uid'] as String,
-      roomCode: json['room_code'] as String,
-      nickname: json['nickname'] as String,
-      cumulativeScore: json['cumulative_score'] as int? ?? 0,
-      isConnected: json['is_connected'] as bool? ?? true,
+      id: (json['id'] ?? uid).toString(),
+      playerUid: uid,
+      roomCode: room,
+      nickname: nick,
+      cumulativeScore: score,
+      isConnected: conn,
     );
   }
 

@@ -276,21 +276,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _startPreGameTimer();
       },
       onQuestionBroadcast: (payload) async {
-        final duration = payload['duration_seconds'] as int? ?? 60;
-        final qIdx = payload['question_index'] as int? ?? 1;
-        final totalQ = payload['total_questions'] as int? ?? 10;
+        final duration = (payload['duration_seconds'] as num?)?.toInt() ?? 20;
+        final qIdx = (payload['question_index'] as num?)?.toInt() ?? 1;
+        final totalQ = (payload['total_questions'] as num?)?.toInt() ?? 10;
         Question? question;
 
-        if (payload.containsKey('question_text')) {
-          question = Question.fromJson(payload);
-        } else {
-          final qId = (payload['question_id'] ?? payload['id']) as String?;
-          if (qId != null) {
-            question = await _supabaseService.getQuestionById(qId);
+        try {
+          if (payload.containsKey('question_text') || payload.containsKey('text')) {
+            question = Question.fromJson(payload);
+          } else {
+            final qId = (payload['question_id'] ?? payload['id'])?.toString();
+            if (qId != null) {
+              question = await _supabaseService.getQuestionById(qId);
+            }
           }
+        } catch (e) {
+          debugPrint('[TV] Error parsing incoming question: $e');
         }
 
-        if (question != null) {
+        if (question == null) {
+          final fallbackList = HomebrewingDatabase.generate500Questions();
+          question = fallbackList[(qIdx - 1) % fallbackList.length];
+        }
+
+        if (mounted) {
           _adSlideTimer?.cancel();
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
@@ -1344,22 +1353,31 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         Text(
                           'Question $_questionIndex out of $_totalQuestionsInRound',
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.w900,
                             color: AppTheme.neonCyan,
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _currentQuestion?.questionText ??
-                              '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            height: 1.3,
+                        const SizedBox(height: 8),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 820),
+                              child: Text(
+                                _currentQuestion?.questionText ??
+                                    '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
+                                textAlign: TextAlign.center,
+                                maxLines: 4,
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],

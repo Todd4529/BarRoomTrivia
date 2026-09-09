@@ -153,8 +153,8 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: const [
+          const Row(
+            children: [
               Icon(Icons.emoji_events, color: AppTheme.neonYellow, size: 28),
               SizedBox(width: 10),
               Text(

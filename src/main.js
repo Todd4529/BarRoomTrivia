@@ -824,6 +824,7 @@ function handleRealtimeIncomingEvent(event, data) {
         const rem = Math.max(1, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
         broadcastRealtimeEvent('question_start', {
           question_index: currentQuestionIndex + 1,
+          id: currentQuestionData.id,
           question_id: currentQuestionData.id,
           duration_seconds: rem,
           timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
@@ -843,6 +844,12 @@ function handleRealtimeIncomingEvent(event, data) {
           next_question_starts_at_epoch_ms: hostTargetEpochMs,
         });
       }
+
+      broadcastRealtimeEvent('leaderboard_updated', {
+        players: playersLeaderboard,
+        leaderboard: playersLeaderboard,
+        room_code: currentRoomCode
+      });
     }
   } else if (normEvent === 'player_joined') {
     onPlayerJoined(payload);
@@ -1131,6 +1138,12 @@ function initHostControls() {
       room_code: currentRoomCode
     });
 
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: currentRoomCode
+    });
+
     try {
       supabase.from('game_sessions').upsert({
         room_code: currentRoomCode,
@@ -1371,6 +1384,7 @@ async function runNextAutomatedStep() {
     currentGameState = 'QUESTION_ACTIVE';
     broadcastRealtimeEvent('question_start', {
       question_index: currentQuestionIndex + 1,
+      id: question.id,
       question_id: question.id,
       duration_seconds: durationSeconds,
       timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
@@ -1432,6 +1446,9 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
 
 function handleHostAdvanceAfterReview(questionInRound, currentRound) {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_REVIEW') return;
+  hostEngineState = 'TRANSITIONING';
+  hostTargetEpochMs = 0;
+  clearTimeout(autoEngineTimeout);
   currentQuestionIndex++;
 
   if (questionInRound === 10) {
@@ -1461,12 +1478,10 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
     });
     onRoundWinner(winnerPayload);
 
-    clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
       checkHostEngineTick();
     }, 15000);
   } else {
-    hostEngineState = 'QUESTION_ACTIVE';
     runNextAutomatedStep();
   }
 }
@@ -2100,11 +2115,26 @@ function initPlayerControls() {
 }
 
 function onPlayerJoined(player) {
+  if (!player || !player.nickname) return;
   const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
   if (!exists) {
-    playersLeaderboard.push({ nickname: player.nickname, score: 0, streak: 0 });
+    playersLeaderboard.push({
+      id: player.nickname,
+      player_uid: player.nickname,
+      room_code: currentRoomCode,
+      nickname: player.nickname,
+      score: 0,
+      cumulative_score: 0,
+      streak: 0,
+      is_connected: true
+    });
     renderLeaderboard();
     channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: currentRoomCode
+    });
   }
   updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
 }

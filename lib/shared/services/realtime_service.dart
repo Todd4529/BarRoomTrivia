@@ -63,9 +63,18 @@ class RealtimeService {
           onRoundCompletedBroadcast(data);
         } else if (event == 'request_state_sync' && onRequestStateSyncBroadcast != null) {
           onRequestStateSyncBroadcast(data);
+        } else if (event == 'player_joined') {
+          final nick = data['nickname']?.toString();
+          if (nick != null && nick.isNotEmpty) {
+            SupabaseService.registerIncomingPlayer(eventRoom ?? roomCode, nick);
+          }
+          if (onLeaderboardUpdatedBroadcast != null) {
+            onLeaderboardUpdatedBroadcast(data);
+          }
         } else if (event == 'leaderboard_updated' && onLeaderboardUpdatedBroadcast != null) {
-          if (data['players'] != null) {
-            SupabaseService.syncPlayersFromBroadcast(eventRoom ?? roomCode, data['players']);
+          final pList = data['players'] ?? data['leaderboard'];
+          if (pList != null) {
+            SupabaseService.syncPlayersFromBroadcast(eventRoom ?? roomCode, pList);
           }
           onLeaderboardUpdatedBroadcast(data);
         }
@@ -142,6 +151,18 @@ class RealtimeService {
             callback: (payload) {
               if (payload['players'] != null) {
                 SupabaseService.syncPlayersFromBroadcast(roomCode, payload['players']);
+              }
+              if (onLeaderboardUpdatedBroadcast != null) {
+                onLeaderboardUpdatedBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'player_joined',
+            callback: (payload) {
+              final nick = payload['nickname']?.toString();
+              if (nick != null && nick.isNotEmpty) {
+                SupabaseService.registerIncomingPlayer(roomCode, nick);
               }
               if (onLeaderboardUpdatedBroadcast != null) {
                 onLeaderboardUpdatedBroadcast(payload);

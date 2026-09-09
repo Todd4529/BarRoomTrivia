@@ -24,17 +24,18 @@ class Question {
   });
 
   factory Question.fromJson(Map<String, dynamic> json) {
+    final opts = json['options'] as Map<String, dynamic>?;
     return Question(
-      id: json['id'] as String,
-      category: json['category'] as String,
-      difficulty: json['difficulty'] as String? ?? 'medium',
-      questionText: json['question_text'] as String,
-      optionA: json['option_a'] as String,
-      optionB: json['option_b'] as String,
-      optionC: json['option_c'] as String,
-      optionD: json['option_d'] as String,
-      correctOption: json['correct_option'] as String,
-      timeLimitSeconds: json['time_limit_seconds'] as int? ?? 20,
+      id: (json['id'] ?? json['question_id'] ?? DateTime.now().millisecondsSinceEpoch.toString()).toString(),
+      category: (json['category'] ?? 'General Knowledge').toString(),
+      difficulty: (json['difficulty'] ?? 'Standard').toString(),
+      questionText: (json['question_text'] ?? json['text'] ?? json['question'] ?? '').toString(),
+      optionA: (json['option_a'] ?? opts?['A'] ?? opts?['a'] ?? 'Option A').toString(),
+      optionB: (json['option_b'] ?? opts?['B'] ?? opts?['b'] ?? 'Option B').toString(),
+      optionC: (json['option_c'] ?? opts?['C'] ?? opts?['c'] ?? 'Option C').toString(),
+      optionD: (json['option_d'] ?? opts?['D'] ?? opts?['d'] ?? 'Option D').toString(),
+      correctOption: (json['correct_option'] ?? json['correct'] ?? 'A').toString().toUpperCase().trim(),
+      timeLimitSeconds: (json['time_limit_seconds'] ?? json['duration_seconds'] as num?)?.toInt() ?? 20,
     );
   }
 
