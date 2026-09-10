@@ -292,6 +292,19 @@ class RealtimeService {
         payload: payload,
       );
     } catch (_) {}
+
+    try {
+      final norm = roomCode.toUpperCase().trim();
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'status': 'question_active',
+        'current_question_index': questionIndex,
+        'current_question_data': payload,
+        'question_data': payload,
+        'duration_seconds': durationSeconds,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
   }
 
   /// Broadcast timer expiration event

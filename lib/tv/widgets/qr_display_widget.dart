@@ -6,12 +6,14 @@ class QrDisplayWidget extends StatelessWidget {
   final String roomCode;
   final String baseUrl;
   final bool showRoomCode;
+  final bool compact;
 
   const QrDisplayWidget({
     super.key,
     required this.roomCode,
     this.baseUrl = 'https://todd4529.github.io/BarRoomTrivia',
     this.showRoomCode = true,
+    this.compact = false,
   });
 
   @override
@@ -20,42 +22,42 @@ class QrDisplayWidget extends StatelessWidget {
     final playUrl = '$cleanBase/?view=player&room=$roomCode';
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 10 : 20),
       decoration: BoxDecoration(
         color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 2),
+        borderRadius: BorderRadius.circular(compact ? 14 : 20),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: compact ? 1.5 : 2),
         boxShadow: [
           BoxShadow(
             color: AppTheme.neonCyan.withValues(alpha: 0.15),
-            blurRadius: 20,
-            spreadRadius: 2,
+            blurRadius: compact ? 12 : 20,
+            spreadRadius: compact ? 1 : 2,
           ),
         ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'SCAN TO PLAY',
             style: TextStyle(
-              fontSize: 22,
+              fontSize: compact ? 14 : 22,
               fontWeight: FontWeight.w900,
-              letterSpacing: 2.0,
+              letterSpacing: compact ? 1.2 : 2.0,
               color: AppTheme.neonCyan,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 6 : 12),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(compact ? 8 : 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(compact ? 12 : 16),
             ),
             child: QrImageView(
               data: playUrl,
               version: QrVersions.auto,
-              size: 180.0,
+              size: compact ? 110.0 : 180.0,
               backgroundColor: Colors.white,
               eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
               dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),

@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import mqtt from 'mqtt';
 import { createClient } from '@supabase/supabase-js';
-import { fetchRealtimeTriviaQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
+import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
 
 const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8';
@@ -882,18 +882,25 @@ function initRealtimeEngine() {
     });
 
     mqttClient.on('connect', () => {
-      console.log(`[Realtime Engine] Connected! Subscribing to ${topic}...`);
-      mqttClient.subscribe(topic, { qos: 0 }, (err) => {
+      console.log(`[Realtime Engine] Connected! Subscribing to room topics...`);
+      const topicsToSub = [topic, 'barrooms_trivia/room_TRIV', 'tv_pairing'];
+      mqttClient.subscribe(topicsToSub, { qos: 0 }, (err) => {
         if (!err) {
-          console.log(`[Realtime Engine] Subscribed to ${topic}!`);
-          // Request current state from host immediately
+          console.log(`[Realtime Engine] Subscribed to ${topicsToSub.join(', ')}!`);
           broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
         }
       });
     });
 
     mqttClient.on('message', (receivedTopic, message) => {
-      if (receivedTopic !== topic) return;
+      const normRoom = currentRoomCode.toUpperCase();
+      const isAllowed = (
+        receivedTopic === topic ||
+        receivedTopic === 'barrooms_trivia/room_TRIV' ||
+        receivedTopic === 'tv_pairing' ||
+        receivedTopic === `barrooms_trivia/room_${normRoom}`
+      );
+      if (!isAllowed) return;
       try {
         const data = JSON.parse(message.toString());
         const event = data.event || data.type || '';
@@ -1378,27 +1385,47 @@ async function runNextAutomatedStep() {
       questionData: question,
       difficulty: selectedDifficulty,
       durationSeconds,
-      timerEndsAtMs: timerEndsAtGlobalMs
-    };
-
-    currentGameState = 'QUESTION_ACTIVE';
-    broadcastRealtimeEvent('question_start', {
+      timerEndsAtMs: timerEndsAtGlobalMs,
+      // Flat properties for TV and standard receivers:
       question_index: currentQuestionIndex + 1,
       id: question.id,
       question_id: question.id,
       duration_seconds: durationSeconds,
       timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
       category: question.category,
-      difficulty: selectedDifficulty,
       question_text: question.text,
       option_a: question.options.A,
       option_b: question.options.B,
       option_c: question.options.C,
       option_d: question.options.D,
       correct_option: question.correct,
-    });
+    };
 
+    currentGameState = 'QUESTION_ACTIVE';
+    broadcastRealtimeEvent('question_start', payload);
     onQuestionStart(payload);
+
+    try {
+      supabase.from('game_sessions').upsert({
+        room_code: currentRoomCode,
+        status: 'question_active',
+        current_question_index: currentQuestionIndex + 1,
+        duration_seconds: durationSeconds,
+        timer_ends_at: timerEndsAtGlobalMs,
+        question_data: {
+          id: question.id,
+          question_id: question.id,
+          category: question.category,
+          difficulty: selectedDifficulty,
+          text: question.text,
+          question_text: question.text,
+          options: question.options,
+          correct: question.correct,
+          correct_option: question.correct,
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
 
     clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
@@ -2024,16 +2051,16 @@ function initPlayerControls() {
     onPlayerJoined(currentPlayer);
 
     if (currentQuestionData) {
-      const qText = document.getElementById('player-question-text');
-      if (qText) qText.textContent = currentQuestionData.text;
-      const optA = document.getElementById('p-opt-a');
-      if (optA) optA.textContent = currentQuestionData.options?.A || 'A';
-      const optB = document.getElementById('p-opt-b');
-      if (optB) optB.textContent = currentQuestionData.options?.B || 'B';
-      const optC = document.getElementById('p-opt-c');
-      if (optC) optC.textContent = currentQuestionData.options?.C || 'C';
-      const optD = document.getElementById('p-opt-d');
-      if (optD) optD.textContent = currentQuestionData.options?.D || 'D';
+      const remSecs = timerEndsAtGlobalMs > 0
+        ? Math.max(1, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000))
+        : (remainingTimerSeconds || 20);
+      onQuestionStart({
+        questionData: currentQuestionData,
+        roundNumber: Math.floor(currentQuestionIndex / 10) + 1,
+        questionNumberInRound: (currentQuestionIndex % 10) + 1,
+        durationSeconds: remSecs,
+        difficulty: selectedDifficulty,
+      });
     }
 
     function checkActiveGameSession() {

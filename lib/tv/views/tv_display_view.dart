@@ -503,12 +503,54 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _isInterQuestionPhase = false;
             });
             _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
+
+            // Autonomous Safety Net: If host engine drops or lags, TV auto-advances question
+            Timer(const Duration(seconds: 3), () {
+              if (mounted && _isGameActive && !_isInterQuestionPhase && _remainingSeconds == 0) {
+                _advanceNextQuestionAutonomously();
+              }
+            });
           }
         }
       });
     }
 
     await _loadLeaderboard();
+  }
+
+  void _advanceNextQuestionAutonomously() async {
+    if (!mounted || !_isGameActive) return;
+
+    final nextIndex = _questionIndex + 1;
+    debugPrint('[TV] Safety Net: Autonomously advancing to Question $nextIndex');
+
+    final fallbackList = HomebrewingDatabase.generate500Questions();
+    final question = fallbackList[(nextIndex - 1) % fallbackList.length];
+    final duration = _totalDuration > 0 ? _totalDuration : 20;
+    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
+
+    setState(() {
+      _currentQuestion = question;
+      _questionIndex = nextIndex;
+      _totalDuration = duration;
+      _remainingSeconds = duration;
+      _isTimerExpired = false;
+      _isInterQuestionPhase = false;
+    });
+
+    _startTimer();
+
+    try {
+      await _realtimeService.broadcastQuestion(
+        roomCode: _displayRoomCode,
+        questionIndex: nextIndex,
+        question: question,
+        durationSeconds: duration,
+        timerEndsAtEpochMs: timerEndsAtEpochMs,
+      );
+    } catch (e) {
+      debugPrint('[TV] Safety Net broadcast error: $e');
+    }
   }
 
   @override
@@ -1415,8 +1457,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               QrDisplayWidget(
                 roomCode: widget.roomCode,
                 showRoomCode: false,
+                compact: true,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               Expanded(
                 child: LeaderboardWidget(players: _leaderboard),
               ),
