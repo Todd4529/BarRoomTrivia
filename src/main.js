@@ -1132,7 +1132,14 @@ function initHostControls() {
     currentQuestionIndex = 0;
     updateHostEngineUI('IN PROGRESS');
 
-    // 1. Broadcast pre-game countdown (10s) immediately to TV and players
+    // 1. Determine active genre and broadcast pre-game countdown (10s) immediately to TV and players
+    let initialGenre = 'General Trivia';
+    if (selectedGenreQueue.length > 0) {
+      initialGenre = selectedGenreQueue[0];
+    } else if (shuffledAutoGenres && shuffledAutoGenres.length > 0) {
+      initialGenre = shuffledAutoGenres[0];
+    }
+
     const countdownSecs = 10;
     const startsAtMs = Date.now() + (countdownSecs * 1000);
     hostTargetEpochMs = startsAtMs;
@@ -1142,7 +1149,10 @@ function initHostControls() {
     broadcastRealtimeEvent('pre_game_countdown', {
       countdown_seconds: countdownSecs,
       starts_at_epoch_ms: startsAtMs,
-      room_code: currentRoomCode
+      room_code: currentRoomCode,
+      genre: initialGenre,
+      current_genre: initialGenre,
+      category: initialGenre
     });
 
     broadcastRealtimeEvent('leaderboard_updated', {
@@ -1156,6 +1166,10 @@ function initHostControls() {
         room_code: currentRoomCode,
         status: 'pre_game_countdown',
         starts_at: startsAtMs,
+        current_question_index: 0,
+        question_data: null,
+        current_question_data: null,
+        genre: initialGenre,
         updated_at: new Date().toISOString()
       }, { onConflict: 'room_code' }).catch(() => {});
     } catch (_) {}
@@ -1392,7 +1406,8 @@ async function runNextAutomatedStep() {
       question_id: question.id,
       duration_seconds: durationSeconds,
       timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
-      category: question.category,
+      category: question.category || activeRoundGenre,
+      genre: question.category || activeRoundGenre,
       question_text: question.text,
       option_a: question.options.A,
       option_b: question.options.B,

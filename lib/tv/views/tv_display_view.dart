@@ -9,6 +9,7 @@ import '../../shared/config/supabase_config.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
 import '../../shared/data/homebrewing_database.dart';
+import '../../shared/data/genre_questions_engine.dart';
 import '../../shared/services/realtime_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
@@ -31,6 +32,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   final RealtimeService _realtimeService = RealtimeService();
 
   Question? _currentQuestion;
+  String _activeGenre = 'General Trivia';
   List<Player> _leaderboard = [];
   int _remainingSeconds = 60;
   int _totalDuration = 60;
@@ -222,15 +224,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _isTimerExpired = false;
             });
             _startPreGameTimer();
-          } else if (status == 'question_active' && !_isGameActive) {
+          } else if (status == 'question_active' && !_isGameActive && !_isPreGameCountdown) {
+            // Validate that this question is not stale from a previous game session
+            final timerEndsAt = res['timer_ends_at'] as int?;
+            final now = DateTime.now().millisecondsSinceEpoch;
+            if (timerEndsAt != null && (now - timerEndsAt) > 60000) {
+              return;
+            }
             final qData = res['question_data'] as Map<String, dynamic>?;
             if (qData != null) {
               final q = Question.fromJson(qData);
               final dur = res['duration_seconds'] as int? ?? 20;
               final qIdx = res['current_question_index'] as int? ?? 1;
+              final cat = qData['category']?.toString() ?? res['category']?.toString();
               _interQuestionTimer?.cancel();
               setState(() {
                 _currentQuestion = q;
+                if (cat != null && cat.isNotEmpty) _activeGenre = cat;
                 _totalDuration = dur;
                 _remainingSeconds = dur;
                 _questionIndex = qIdx;
@@ -260,17 +270,28 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       onPreGameCountdownBroadcast: (payload) {
         _adSlideTimer?.cancel();
         _interQuestionTimer?.cancel();
+        _timer?.cancel();
         final startsAtEpochMs = payload['starts_at_epoch_ms'] as int?;
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         final remaining = startsAtEpochMs != null
             ? ((startsAtEpochMs - nowMs) / 1000).ceil().clamp(0, 60)
             : (payload['countdown_seconds'] as int? ?? 10);
 
+        final incomingGenre = payload['genre']?.toString() ??
+            payload['current_genre']?.toString() ??
+            payload['category']?.toString();
+
         setState(() {
           _isPreGameCountdown = true;
           _preGameSeconds = remaining > 0 ? remaining : 10;
           _isGameActive = false;
           _isTimerExpired = false;
+          _isInterQuestionPhase = false;
+          _currentQuestion = null; // Stale question flushed
+          _questionIndex = 0;
+          if (incomingGenre != null && incomingGenre.isNotEmpty) {
+            _activeGenre = incomingGenre;
+          }
         });
 
         _startPreGameTimer();
@@ -279,6 +300,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final duration = (payload['duration_seconds'] as num?)?.toInt() ?? 20;
         final qIdx = (payload['question_index'] as num?)?.toInt() ?? 1;
         final totalQ = (payload['total_questions'] as num?)?.toInt() ?? 10;
+        final cat = payload['category']?.toString() ?? payload['genre']?.toString();
+        if (cat != null && cat.isNotEmpty) {
+          _activeGenre = cat;
+        }
         Question? question;
 
         try {
@@ -295,7 +320,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
 
         if (question == null) {
-          final fallbackList = HomebrewingDatabase.generate500Questions();
+          final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
           question = fallbackList[(qIdx - 1) % fallbackList.length];
         }
 
@@ -429,12 +454,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _isGameActive = true; // Crucial: never revert to waiting carousel!
         });
         _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
-        // Fallback: if no question arrived after 2.5s, generate question 1 locally
+        // Fallback: if no question arrived after 2.5s, generate question 1 locally using active genre
         Timer(const Duration(milliseconds: 2500), () {
           if (mounted && _isGameActive && _currentQuestion == null) {
-            final fallback = HomebrewingDatabase.generate500Questions().first;
+            final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
+            final fallback = fallbackList.isNotEmpty ? fallbackList.first : HomebrewingDatabase.generate500Questions().first;
             setState(() {
               _currentQuestion = fallback;
+              _questionIndex = 1;
               _remainingSeconds = _totalDuration > 0 ? _totalDuration : 20;
             });
             _startTimer();
@@ -524,8 +551,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final nextIndex = _questionIndex + 1;
     debugPrint('[TV] Safety Net: Autonomously advancing to Question $nextIndex');
 
-    final fallbackList = HomebrewingDatabase.generate500Questions();
-    final question = fallbackList[(nextIndex - 1) % fallbackList.length];
+    final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
+    final question = fallbackList.isNotEmpty
+        ? fallbackList[(nextIndex - 1) % fallbackList.length]
+        : HomebrewingDatabase.generate500Questions()[(nextIndex - 1) % 500];
     final duration = _totalDuration > 0 ? _totalDuration : 20;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
@@ -1353,36 +1382,18 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             letterSpacing: 1.0,
                           ),
                         ),
-                      )
-                    else if (_isInterQuestionPhase)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.neonCyan.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppTheme.neonCyan, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.neonCyan.withOpacity(0.35),
-                              blurRadius: 12,
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          _gamePlayMode == 'Manual'
-                              ? 'NEXT QUESTION, WAITING ON HOST'
-                              : 'NEXT QUESTION IN ${_interQuestionSecondsRemaining}s',
-                          style: const TextStyle(
-                            color: AppTheme.neonCyan,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
                       ),
                     TimerRing(
-                      progress: progress,
-                      remainingSeconds: _remainingSeconds,
+                      progress: _isInterQuestionPhase
+                          ? (_interQuestionSecondsRemaining / 30.0).clamp(0.0, 1.0)
+                          : progress,
+                      remainingSeconds: _isInterQuestionPhase
+                          ? _interQuestionSecondsRemaining
+                          : _remainingSeconds,
+                      label: _isInterQuestionPhase
+                          ? (_gamePlayMode == 'Manual' ? 'WAIT HOST' : 'NEXT QUESTION')
+                          : 'SECONDS',
+                      customColor: _isInterQuestionPhase ? AppTheme.neonCyan : null,
                     ),
                   ],
                 ),
@@ -1390,7 +1401,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Expanded(
                   child: Center(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           'Question $_questionIndex out of $_totalQuestionsInRound',
@@ -1401,24 +1412,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 820),
-                              child: Text(
-                                _currentQuestion?.questionText ??
-                                    '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
-                                textAlign: TextAlign.center,
-                                maxLines: 4,
-                                style: const TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  height: 1.25,
-                                ),
-                              ),
+                        const SizedBox(height: 12),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 900),
+                          child: Text(
+                            _currentQuestion?.questionText ??
+                                '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
+                            textAlign: TextAlign.center,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              height: 1.25,
                             ),
                           ),
                         ),

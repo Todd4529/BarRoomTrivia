@@ -4,20 +4,25 @@ import '../../shared/theme/app_theme.dart';
 class TimerRing extends StatelessWidget {
   final double progress; // 0.0 to 1.0
   final int remainingSeconds;
+  final String label;
+  final Color? customColor;
 
   const TimerRing({
     super.key,
     required this.progress,
     required this.remainingSeconds,
+    this.label = 'SECONDS',
+    this.customColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Color ringColor = remainingSeconds <= 5
-        ? AppTheme.neonPink
-        : remainingSeconds <= 10
-            ? AppTheme.neonYellow
-            : AppTheme.neonCyan;
+    final Color ringColor = customColor ??
+        (remainingSeconds <= 5
+            ? AppTheme.neonPink
+            : remainingSeconds <= 10
+                ? AppTheme.neonYellow
+                : AppTheme.neonCyan);
 
     return Stack(
       alignment: Alignment.center,
@@ -43,13 +48,14 @@ class TimerRing extends StatelessWidget {
                 color: ringColor,
               ),
             ),
-            const Text(
-              'SECONDS',
-              style: TextStyle(
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2.0,
-                color: Colors.white54,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: Colors.white70,
               ),
             ),
           ],

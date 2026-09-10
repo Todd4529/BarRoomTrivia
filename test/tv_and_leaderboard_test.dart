@@ -4,6 +4,8 @@ import 'package:bar_rooms_trivia/shared/models/question.dart';
 import 'package:bar_rooms_trivia/shared/models/player.dart';
 import 'package:bar_rooms_trivia/shared/services/supabase_service.dart';
 import 'package:bar_rooms_trivia/shared/config/supabase_config.dart';
+import 'package:bar_rooms_trivia/shared/data/genre_questions_engine.dart';
+import 'package:bar_rooms_trivia/tv/widgets/timer_ring.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -160,6 +162,34 @@ void main() {
       final leaderboard = await service.getLeaderboard('EMPTY_ROOM_XYZ');
       expect(leaderboard.length, 10);
       expect(leaderboard.first.nickname.isNotEmpty, true);
+    });
+  });
+
+  group('GenreQuestionsEngine & Fallback Integrity', () {
+    test('generateGenreQuestions provides valid questions matching requested genre', () {
+      final sportsQuestions = GenreQuestionsEngine.generateGenreQuestions('Sports & Stadiums');
+      expect(sportsQuestions.isNotEmpty, true);
+      expect(sportsQuestions.first.category, 'Sports & Stadiums');
+      expect(sportsQuestions.first.questionText.isNotEmpty, true);
+      expect(sportsQuestions.first.optionA.isNotEmpty, true);
+      expect(sportsQuestions.first.optionB.isNotEmpty, true);
+      expect(sportsQuestions.first.optionC.isNotEmpty, true);
+      expect(sportsQuestions.first.optionD.isNotEmpty, true);
+
+      // Verify no homebrewing questions in sports
+      for (final q in sportsQuestions.take(20)) {
+        expect(q.category.toLowerCase().contains('homebrew'), false);
+      }
+    });
+
+    test('generateGenreQuestions handles Movie and History genres without homebrewing leakage', () {
+      final movies = GenreQuestionsEngine.generateGenreQuestions('Movies & Hollywood');
+      expect(movies.isNotEmpty, true);
+      expect(movies.first.category, 'Movies & Hollywood');
+
+      final history = GenreQuestionsEngine.generateGenreQuestions('World History');
+      expect(history.isNotEmpty, true);
+      expect(history.first.category, 'World History');
     });
   });
 }
