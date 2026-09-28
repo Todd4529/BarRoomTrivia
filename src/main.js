@@ -1613,6 +1613,7 @@ function onQuestionStart(payload) {
   hideResultModal();
   hideWinnerModals();
   clearInterval(modalCountdownInterval);
+  clearInterval(playerReviewInterval);
 
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
@@ -1783,6 +1784,35 @@ function updateTimerUI() {
   }
 }
 
+let playerReviewInterval = null;
+
+function startPlayerReviewCountdown(seconds) {
+  clearInterval(playerReviewInterval);
+  let rem = seconds;
+
+  const updateBadge = () => {
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    if (playerStatusBadge) {
+      playerStatusBadge.className = 'status-badge status-active';
+      playerStatusBadge.innerHTML = `<span id="status-icon">⏳</span> <span id="status-text">NEXT QUESTION IN ${rem}s...</span>`;
+    }
+  };
+
+  updateBadge();
+  playerReviewInterval = setInterval(() => {
+    rem--;
+    if (rem > 0) {
+      updateBadge();
+    } else {
+      clearInterval(playerReviewInterval);
+      const playerStatusBadge = document.getElementById('player-status-badge');
+      if (playerStatusBadge) {
+        playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> <span id="status-text">PREPARING NEXT QUESTION...</span>`;
+      }
+    }
+  }, 1000);
+}
+
 // 6. TIMER EXPIRED -> HIGHLIGHT CORRECT OPTION TILE ON TV & START NEXT QUESTION COUNTDOWN TIMER ON TV
 function onTimerExpired(payload) {
   const rawCorrect = payload?.correctOption || currentQuestionData?.correct || '';
@@ -1794,10 +1824,13 @@ function onTimerExpired(payload) {
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  if (playerStatusBadge) {
-    playerStatusBadge.className = 'status-badge status-locked';
-    playerStatusBadge.innerHTML = `<span id="status-icon">🔒</span> TIME EXPIRED`;
-  }
+  // Calculate review seconds remaining for next question countdown (default 15s)
+  const nextEpoch = payload?.next_question_starts_at_epoch_ms;
+  const reviewSeconds = nextEpoch
+    ? Math.max(1, Math.ceil((nextEpoch - Date.now()) / 1000))
+    : 15;
+
+  startPlayerReviewCountdown(reviewSeconds);
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
@@ -1807,6 +1840,8 @@ function onTimerExpired(payload) {
       btn.classList.remove('unselected');
     } else if (btn.classList.contains('selected')) {
       btn.classList.add('review-wrong');
+    } else {
+      btn.classList.add('unselected');
     }
   });
 
@@ -1863,24 +1898,50 @@ function onTimerExpired(payload) {
     const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
     if (targetPlayer) {
       targetPlayer.score = currentPlayer.score;
+      targetPlayer.cumulative_score = currentPlayer.score;
       targetPlayer.streak = currentPlayer.streak;
     } else {
-      playersLeaderboard.push({ nickname: currentPlayer.nickname, score: currentPlayer.score, streak: currentPlayer.streak });
+      playersLeaderboard.push({
+        nickname: currentPlayer.nickname,
+        score: currentPlayer.score,
+        cumulative_score: currentPlayer.score,
+        streak: currentPlayer.streak
+      });
     }
     renderLeaderboard();
     broadcastRealtimeEvent('leaderboard_updated', {
       players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: currentRoomCode,
+    });
+    broadcastRealtimeEvent('player_score_updated', {
+      nickname: currentPlayer.nickname,
+      score: currentPlayer.score,
+      cumulative_score: currentPlayer.score,
+      points_earned: pointsEarned,
+      room_code: currentRoomCode,
     });
 
+    // Also persist directly to Supabase DB so score is preserved
+    try {
+      supabase.from('players').upsert({
+        room_code: currentRoomCode.toUpperCase(),
+        nickname: currentPlayer.nickname,
+        player_uid: currentPlayer.nickname,
+        cumulative_score: currentPlayer.score,
+        is_connected: true
+      }, { onConflict: 'room_code, nickname' });
+    } catch (_) {}
+
     const randomQuote = getRandomItem(funnyCorrectQuotes);
-    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 6);
+    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 2.5);
     confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
   } else {
     if (currentPlayer) {
       currentPlayer.streak = 0;
     }
     const randomQuote = getRandomItem(funnyWrongQuotes);
-    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 6);
+    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 2.5);
   }
 }
 
@@ -1888,7 +1949,7 @@ function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 6) {
+function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 2.5) {
   const overlay = document.getElementById('result-modal-overlay');
   const card = document.getElementById('result-modal-box');
   const icon = document.getElementById('result-modal-icon');
@@ -1915,26 +1976,29 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   if (correctTextEl) correctTextEl.textContent = correctTextStr;
   if (quote) quote.textContent = `"${funnyQuote}"`;
 
-  let remSecs = countdownSeconds;
+  let remSecs = Math.round(countdownSeconds);
   if (modalTimerVal) modalTimerVal.textContent = remSecs;
 
   overlay.classList.remove('hidden');
 
-  clearInterval(modalCountdownInterval);
-  modalCountdownInterval = setInterval(() => {
-    remSecs--;
-    if (modalTimerVal) modalTimerVal.textContent = Math.max(0, remSecs);
-    if (remSecs <= 0) {
-      clearInterval(modalCountdownInterval);
-      hideResultModal();
-    }
-  }, 1000);
+  // Dismiss early if player taps or clicks anywhere on the modal
+  overlay.onclick = () => {
+    hideResultModal();
+  };
+
+  clearTimeout(modalCountdownInterval);
+  modalCountdownInterval = setTimeout(() => {
+    hideResultModal();
+  }, Math.round(countdownSeconds * 1000));
 }
 
 function hideResultModal() {
   const overlay = document.getElementById('result-modal-overlay');
-  if (overlay) overlay.classList.add('hidden');
-  clearInterval(modalCountdownInterval);
+  if (overlay) {
+    overlay.classList.add('hidden');
+    overlay.onclick = null;
+  }
+  clearTimeout(modalCountdownInterval);
 }
 
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN

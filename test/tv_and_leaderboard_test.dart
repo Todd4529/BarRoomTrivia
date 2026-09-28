@@ -118,6 +118,29 @@ void main() {
       expect(p.id.isNotEmpty, true);
       expect(p.isConnected, true);
     });
+
+    test('parses speed bonus player score like Troy 110 pts accurately from dynamic map', () {
+      final Map<dynamic, dynamic> json = {
+        'nickname': 'Troy',
+        'score': 110,
+        'cumulative_score': '110',
+      };
+
+      final p = Player.fromJson(json);
+      expect(p.nickname, 'Troy');
+      expect(p.cumulativeScore, 110);
+    });
+
+    test('updatePlayerScoreDirectly updates player score accurately on leaderboard', () async {
+      const room = 'TROY_ROOM';
+      SupabaseService.registerIncomingPlayer(room, 'Troy', 0);
+      SupabaseService.updatePlayerScoreDirectly(roomCode: room, nickname: 'Troy', score: 110);
+
+      final service = SupabaseService();
+      final lb = await service.getLeaderboard(room);
+      final troy = lb.firstWhere((p) => p.nickname == 'Troy');
+      expect(troy.cumulativeScore, 110);
+    });
   });
 
   group('SupabaseService Leaderboard & Player Registration', () {

@@ -15,11 +15,20 @@ class Player {
     required this.isConnected,
   });
 
-  factory Player.fromJson(Map<String, dynamic> json) {
+  factory Player.fromJson(Map<dynamic, dynamic> rawJson) {
+    final json = Map<String, dynamic>.from(rawJson);
     final nick = (json['nickname'] ?? json['name'] ?? 'Player').toString();
     final uid = (json['player_uid'] ?? json['id'] ?? nick).toString();
     final room = (json['room_code'] ?? 'TRIV').toString();
-    final score = (json['cumulative_score'] ?? json['score'] as num?)?.toInt() ?? 0;
+
+    final rawScore = json['cumulative_score'] ?? json['score'] ?? json['points'];
+    int score = 0;
+    if (rawScore is num) {
+      score = rawScore.toInt();
+    } else if (rawScore != null) {
+      score = int.tryParse(rawScore.toString()) ?? 0;
+    }
+
     final conn = (json['is_connected'] as bool?) ?? true;
 
     return Player(

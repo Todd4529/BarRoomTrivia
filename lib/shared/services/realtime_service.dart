@@ -77,6 +77,25 @@ class RealtimeService {
             SupabaseService.syncPlayersFromBroadcast(eventRoom ?? roomCode, pList);
           }
           onLeaderboardUpdatedBroadcast(data);
+        } else if (event == 'player_score_updated') {
+          final nick = data['nickname']?.toString();
+          final rawScore = data['cumulative_score'] ?? data['score'] ?? data['points'];
+          int score = 0;
+          if (rawScore is num) {
+            score = rawScore.toInt();
+          } else if (rawScore != null) {
+            score = int.tryParse(rawScore.toString()) ?? 0;
+          }
+          if (nick != null && nick.isNotEmpty) {
+            SupabaseService.updatePlayerScoreDirectly(
+              roomCode: eventRoom ?? roomCode,
+              nickname: nick,
+              score: score,
+            );
+          }
+          if (onLeaderboardUpdatedBroadcast != null) {
+            onLeaderboardUpdatedBroadcast(data);
+          }
         }
       }
     }
@@ -149,8 +168,29 @@ class RealtimeService {
           .onBroadcast(
             event: 'leaderboard_updated',
             callback: (payload) {
-              if (payload['players'] != null) {
-                SupabaseService.syncPlayersFromBroadcast(roomCode, payload['players']);
+              final pList = payload['players'] ?? payload['leaderboard'];
+              if (pList != null) {
+                SupabaseService.syncPlayersFromBroadcast(roomCode, pList);
+              }
+              if (onLeaderboardUpdatedBroadcast != null) {
+                onLeaderboardUpdatedBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'player_score_updated',
+            callback: (payload) {
+              final nick = payload['nickname']?.toString();
+              final rawScore = payload['cumulative_score'] ?? payload['score'] ?? payload['points'];
+              int score = 0;
+              if (rawScore is num) score = rawScore.toInt();
+              else if (rawScore != null) score = int.tryParse(rawScore.toString()) ?? 0;
+              if (nick != null && nick.isNotEmpty) {
+                SupabaseService.updatePlayerScoreDirectly(
+                  roomCode: roomCode,
+                  nickname: nick,
+                  score: score,
+                );
               }
               if (onLeaderboardUpdatedBroadcast != null) {
                 onLeaderboardUpdatedBroadcast(payload);

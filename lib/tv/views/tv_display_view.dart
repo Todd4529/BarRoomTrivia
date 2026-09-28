@@ -435,6 +435,27 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
       },
       onLeaderboardUpdatedBroadcast: (payload) {
+        final pList = payload['players'] ?? payload['leaderboard'];
+        if (pList is List && pList.isNotEmpty) {
+          final updated = <Player>[];
+          for (var item in pList) {
+            if (item is Map) {
+              try {
+                updated.add(Player.fromJson(item));
+              } catch (_) {}
+            }
+          }
+          if (updated.isNotEmpty) {
+            updated.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+            if (mounted) {
+              setState(() {
+                _leaderboard = updated;
+              });
+            }
+            SupabaseService.setLocalPlayers(widget.roomCode, updated);
+            return;
+          }
+        }
         _loadLeaderboard();
       },
     );
@@ -1313,7 +1334,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         Expanded(
           flex: 65,
           child: Container(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
             decoration: BoxDecoration(
               color: AppTheme.cardSurface,
               borderRadius: BorderRadius.circular(24),
@@ -1397,11 +1418,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
                 Expanded(
-                  child: Center(
+                  child: Align(
+                    alignment: const Alignment(0, -0.65),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Text(
                           'Question $_questionIndex out of $_totalQuestionsInRound',
@@ -1412,20 +1435,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 900),
+                          constraints: const BoxConstraints(maxWidth: 950),
                           child: Text(
                             _currentQuestion?.questionText ??
                                 '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
                             textAlign: TextAlign.center,
-                            maxLines: 4,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 26,
+                              fontSize: 24,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
-                              height: 1.25,
+                              height: 1.22,
                             ),
                           ),
                         ),
@@ -1433,7 +1456,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 if (_currentQuestion != null) ...[
                   Row(
                     children: [

@@ -382,11 +382,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   void _lockInputsAndReveal(String? serverCorrectOption) {
     if (mounted) {
+      final correct = serverCorrectOption ?? _currentQuestion?.correctOption;
+      final wasCorrect = _selectedOption != null && _selectedOption == correct;
+
       setState(() {
         _inputsLocked = true;
         _isReviewPhase = true;
-        _correctOption = serverCorrectOption ?? _currentQuestion?.correctOption;
-        if (!_isScoredForThisQuestion && _selectedOption != null && _selectedOption == _correctOption) {
+        _correctOption = correct;
+        if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
           _myScore += 100;
           if (_player != null) {
@@ -398,6 +401,31 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         }
       });
+
+      if (context.mounted && _selectedOption != null) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+            duration: const Duration(milliseconds: 2200),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  wasCorrect ? '🎉 NAILED IT! +100 PTS' : '❌ OOF! MISSED IT! 0 PTS',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     }
   }
 

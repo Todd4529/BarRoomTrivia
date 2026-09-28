@@ -104,7 +104,7 @@ class SupabaseService {
     if (playersJson is List) {
       final newList = <Player>[];
       for (var item in playersJson) {
-        if (item is Map<String, dynamic>) {
+        if (item is Map) {
           try {
             newList.add(Player.fromJson(item));
           } catch (e) {
@@ -113,11 +113,56 @@ class SupabaseService {
         }
       }
       if (newList.isNotEmpty) {
+        newList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
         _localPlayersMap[normRoom] = newList;
         if (normRoom != 'TRIV') {
           _localPlayersMap['TRIV'] = newList;
         }
       }
+    }
+  }
+
+  static void setLocalPlayers(String roomCode, List<Player> players) {
+    final normRoom = roomCode.toUpperCase();
+    final sorted = List<Player>.from(players);
+    sorted.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+    _localPlayersMap[normRoom] = sorted;
+    if (normRoom != 'TRIV') {
+      _localPlayersMap['TRIV'] = List<Player>.from(sorted);
+    }
+  }
+
+  static void updatePlayerScoreDirectly({
+    required String roomCode,
+    required String nickname,
+    required int score,
+  }) {
+    final normRoom = roomCode.toUpperCase();
+    final list = _localPlayersMap.putIfAbsent(normRoom, () => []);
+    final idx = list.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
+    if (idx >= 0) {
+      final p = list[idx];
+      list[idx] = Player(
+        id: p.id,
+        playerUid: p.playerUid,
+        roomCode: p.roomCode,
+        nickname: p.nickname,
+        cumulativeScore: score,
+        isConnected: true,
+      );
+    } else {
+      list.add(Player(
+        id: nickname,
+        playerUid: nickname,
+        roomCode: normRoom,
+        nickname: nickname,
+        cumulativeScore: score,
+        isConnected: true,
+      ));
+    }
+    list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+    if (normRoom != 'TRIV') {
+      _localPlayersMap['TRIV'] = List<Player>.from(list);
     }
   }
 
