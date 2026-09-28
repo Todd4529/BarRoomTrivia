@@ -12,8 +12,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="./assets/index-D2XtrqlY.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-CFCfY_vq.css">
+  <script type="module" crossorigin src="./assets/index-C5q2oTgg.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DHcnFzIk.css">
 </head>
 <body class="dark-theme">
   <!-- Global App Bar -->
@@ -181,15 +181,18 @@
               </div>
               
               <!-- Countdown Timer Ring for Question Active Phase -->
-              <div id="tv-timer-container" class="timer-ring-wrapper hidden">
-                <svg class="timer-svg" viewBox="0 0 100 100">
-                  <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
-                  <circle id="timer-progress" class="timer-stroke" cx="50" cy="50" r="42"></circle>
-                </svg>
-                <div class="timer-text-container">
-                  <span id="tv-timer-val" class="timer-number">20</span>
-                  <span class="timer-label">SEC</span>
+              <div class="tv-timer-block">
+                <div id="tv-timer-container" class="timer-ring-wrapper hidden">
+                  <svg class="timer-svg" viewBox="0 0 100 100">
+                    <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
+                    <circle id="timer-progress" class="timer-stroke" cx="50" cy="50" r="42"></circle>
+                  </svg>
+                  <div class="timer-text-container">
+                    <span id="tv-timer-val" class="timer-number">20</span>
+                    <span class="timer-label">SEC</span>
+                  </div>
                 </div>
+                <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
               </div>
             </div>
 

@@ -1527,7 +1527,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           ? _interQuestionSecondsRemaining
                           : _remainingSeconds,
                       label: _isInterQuestionPhase
-                          ? (_gamePlayMode == 'Manual' ? 'WAIT HOST' : 'NEXT QUESTION')
+                          ? (_gamePlayMode == 'Manual' ? 'WAIT HOST' : 'Next Question')
                           : 'SECONDS',
                       customColor: _isInterQuestionPhase ? AppTheme.neonCyan : null,
                     ),

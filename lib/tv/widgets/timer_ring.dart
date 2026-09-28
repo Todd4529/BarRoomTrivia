@@ -26,43 +26,47 @@ class TimerRing extends StatelessWidget {
                 ? AppTheme.neonYellow
                 : AppTheme.neonCyan);
 
-    return Stack(
-      alignment: Alignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: size,
-          height: size,
-          child: CircularProgressIndicator(
-            value: progress.clamp(0.0, 1.0),
-            strokeWidth: (size * 0.08).clamp(3.5, 8.0),
-            backgroundColor: Colors.white12,
-            valueColor: AlwaysStoppedAnimation<Color>(ringColor),
-          ),
-        ),
-        Column(
-          mainAxisSize: MainAxisSize.min,
+        Stack(
+          alignment: Alignment.center,
           children: [
-            Text(
-              '$remainingSeconds',
-              style: TextStyle(
-                fontSize: (size * 0.36).clamp(18.0, 36.0),
-                fontWeight: FontWeight.bold,
-                color: ringColor,
-                height: 1.05,
+            SizedBox(
+              width: size,
+              height: size,
+              child: CircularProgressIndicator(
+                value: progress.clamp(0.0, 1.0),
+                strokeWidth: (size * 0.08).clamp(3.5, 8.0),
+                backgroundColor: Colors.white12,
+                valueColor: AlwaysStoppedAnimation<Color>(ringColor),
               ),
             ),
             Text(
-              label,
-              textAlign: TextAlign.center,
+              '$remainingSeconds',
               style: TextStyle(
-                fontSize: (size * 0.12).clamp(7.5, 10.0),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-                color: Colors.white70,
+                fontSize: (size * 0.44).clamp(20.0, 36.0),
+                fontWeight: FontWeight.w900,
+                color: ringColor,
+                height: 1.0,
               ),
             ),
           ],
         ),
+        if (label.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: Colors.white70,
+            ),
+          ),
+        ],
       ],
     );
   }

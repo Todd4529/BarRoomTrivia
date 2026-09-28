@@ -1697,6 +1697,8 @@ function onQuestionStart(payload) {
   clearInterval(playerReviewInterval);
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
   if (timerLabel) timerLabel.textContent = 'SEC';
+  const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
+  if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
 
   // Update Host Stats
   const statRound = document.getElementById('stat-round');
@@ -1956,9 +1958,14 @@ function onTimerExpired(payload) {
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
   const timerProgress = document.getElementById('timer-progress');
 
+  const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
   if (tvTimerContainer) {
     tvTimerContainer.classList.remove('hidden');
-    if (timerLabel) timerLabel.textContent = 'NEXT Q';
+    if (timerLabel) timerLabel.textContent = '';
+    if (tvTimerSublabel) {
+      tvTimerSublabel.textContent = 'Next question';
+      tvTimerSublabel.classList.remove('hidden');
+    }
   }
 
   const updateTvCountdown = () => {
@@ -2387,6 +2394,8 @@ function onGameReset() {
   const tvNextQBanner = document.getElementById('tv-next-q-banner');
   if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
   clearInterval(tvNextQCountdownInterval);
+  const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
+  if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
 
   const tvPromoScreen = document.getElementById('tv-promo-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
