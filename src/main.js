@@ -269,14 +269,22 @@ function initAuthView() {
   authChannel.subscribe();
   const roomChannel = supabase.channel('room_TRIV');
   roomChannel.subscribe();
+  let userCodeChannel = null;
+  if (userCode) {
+    userCodeChannel = supabase.channel(`room_${userCode.trim().toUpperCase()}`);
+    userCodeChannel.subscribe();
+  }
   const globalChannel = supabase.channel('tv_pairing');
   globalChannel.subscribe();
 
   function broadcastDeviceAuth(user) {
     const token = activeToken;
+    const targetRoom = (userCode || currentRoomCode || 'TRIV').trim().toUpperCase();
     const payload = {
       device_token: token,
       user_id: user.id,
+      user_code: targetRoom,
+      room_code: targetRoom,
       user_info: {
         email: user.email || 'Host User',
         display_name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'Host',
@@ -296,6 +304,11 @@ function initAuthView() {
           event: 'device_authorized',
           payload
         });
+        userCodeChannel?.send({
+          type: 'broadcast',
+          event: 'device_authorized',
+          payload
+        });
         globalChannel.send({
           type: 'broadcast',
           event: 'device_authorized',
@@ -303,6 +316,23 @@ function initAuthView() {
         });
       } catch (err) {
         console.warn('Realtime broadcast error:', err);
+      }
+
+      // Also publish via direct MQTT device token topic so TV receives instantly
+      if (mqttClient && mqttClient.connected) {
+        try {
+          const jsonStr = JSON.stringify({
+            ...payload,
+            event: 'device_authorized',
+            type: 'DEVICE_AUTHORIZED'
+          });
+          mqttClient.publish(`device_auth_${token}`, jsonStr);
+          mqttClient.publish(`barrooms_trivia/room_${targetRoom}`, jsonStr);
+          mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
+          mqttClient.publish('tv_pairing', jsonStr);
+        } catch (e) {
+          console.warn('[MQTT device auth publish error]:', e);
+        }
       }
 
       try {
@@ -317,14 +347,22 @@ function initAuthView() {
       } catch (_) {}
     }
 
-    // Try DB upsert
+    // Upsert into game_sessions for both TRIV and the specific room code
     try {
-      supabase.from('game_sessions').upsert({
-        room_code: 'TRIV',
-        host_id: user.id,
-        status: 'waiting_for_host',
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
+      supabase.from('game_sessions').upsert([
+        {
+          room_code: 'TRIV',
+          host_id: user.id,
+          status: 'waiting_for_host',
+          updated_at: new Date().toISOString()
+        },
+        {
+          room_code: targetRoom,
+          host_id: user.id,
+          status: 'waiting_for_host',
+          updated_at: new Date().toISOString()
+        }
+      ], { onConflict: 'room_code' }).catch(() => {});
     } catch (_) {}
 
     // Send immediately and retry multiple times

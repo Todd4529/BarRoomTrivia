@@ -409,7 +409,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                     ),
                   ),
                   const SizedBox(height: 28),
-                  // D-Pad Remote Action Buttons
+                  // D-Pad Remote Action: Refresh QR Code
                   Focus(
                     focusNode: _refreshFocusNode,
                     autofocus: true,
@@ -421,7 +421,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                             key == LogicalKeyboardKey.space ||
                             key == LogicalKeyboardKey.gameButtonA ||
                             key == LogicalKeyboardKey.numpadEnter) {
-                          _handleEnterTvStage();
+                          _handleRefresh();
                           return KeyEventResult.handled;
                         }
                       }
@@ -430,39 +430,34 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                     child: Builder(
                       builder: (context) {
                         final isFocused = Focus.of(context).hasFocus;
-                        return Row(
-                          children: [
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isFocused ? AppTheme.neonYellow : AppTheme.neonCyan,
-                                foregroundColor: Colors.black,
-                                elevation: isFocused ? 12 : 4,
-                                side: BorderSide(
-                                  color: isFocused ? Colors.white : AppTheme.neonCyan,
-                                  width: isFocused ? 3.0 : 1.5,
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              ),
-                              onPressed: _handleEnterTvStage,
-                              icon: const Icon(Icons.play_circle_filled, size: 24, color: Colors.black),
-                              label: const Text(
-                                'ENTER TV STAGE (Press Remote OK)',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.0,
-                                  color: Colors.black,
-                                ),
-                              ),
+                        return OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isFocused ? Colors.black : Colors.white70,
+                            backgroundColor: isFocused ? AppTheme.neonCyan : Colors.transparent,
+                            side: BorderSide(
+                              color: isFocused ? Colors.white : Colors.white24,
+                              width: isFocused ? 2.0 : 1.0,
                             ),
-                            const SizedBox(width: 14),
-                            IconButton(
-                              tooltip: 'Refresh QR Code',
-                              icon: const Icon(Icons.refresh, color: Colors.white70),
-                              onPressed: _handleRefresh,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _handleRefresh,
+                          icon: _isRefreshing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Icon(Icons.refresh, size: 18, color: isFocused ? Colors.black : Colors.white70),
+                          label: Text(
+                            'REFRESH QR CODE',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              color: isFocused ? Colors.black : Colors.white70,
                             ),
-                          ],
+                          ),
                         );
                       },
                     ),
@@ -604,30 +599,21 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
               _userCode,
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppTheme.neonYellow, letterSpacing: 3),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonCyan,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-              onPressed: _handleEnterTvStage,
-              icon: const Icon(Icons.play_circle_filled, size: 22, color: Colors.black),
-              label: const Text(
-                'ENTER TV STAGE',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 12),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.neonPurple,
-                side: const BorderSide(color: AppTheme.neonPurple),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                foregroundColor: AppTheme.neonCyan,
+                side: const BorderSide(color: AppTheme.neonCyan),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: _handleRefresh,
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: _isRefreshing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonCyan),
+                    )
+                  : const Icon(Icons.refresh, size: 18),
               label: const Text('REFRESH QR CODE'),
             ),
           ],
