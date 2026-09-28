@@ -575,12 +575,18 @@ function initNavigation() {
   }
 }
 
-// Global click delegate to catch inner card clicks
+// Global click delegate to catch inner card clicks (e.g. .target-card or .nav-btn)
 document.addEventListener('click', (e) => {
-  const viewTarget = e.target.closest('[data-view]');
+  // Never intercept form controls, inputs, textareas, buttons, or labels
+  if (e.target.closest('input, textarea, select, button, label, form, [contenteditable="true"]')) {
+    return;
+  }
+
+  // Only target elements that are explicit navigation triggers (exclude document.body and view-panel)
+  const viewTarget = e.target.closest('[data-view]:not(body):not(.view-panel)');
   if (viewTarget) {
     const viewName = viewTarget.getAttribute('data-view');
-    if (viewName) {
+    if (viewName && viewName !== document.body.getAttribute('data-view')) {
       e.preventDefault();
       switchView(viewName);
     }
