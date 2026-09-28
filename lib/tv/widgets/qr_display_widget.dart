@@ -57,7 +57,7 @@ class QrDisplayWidget extends StatelessWidget {
             child: QrImageView(
               data: playUrl,
               version: QrVersions.auto,
-              size: compact ? 110.0 : 180.0,
+              size: compact ? 130.0 : 180.0,
               backgroundColor: Colors.white,
               eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
               dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),

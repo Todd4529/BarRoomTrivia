@@ -553,23 +553,28 @@ function initNavigation() {
     window.open(`${window.location.origin}${basePath}/?view=tv`, '_blank', 'width=1280,height=720');
   });
 
-  // Initial load view resolution
+  // Initial load view resolution (supports search query params and hash-based query params)
   const urlParams = new URLSearchParams(window.location.search);
-  const roomParam = urlParams.get('room') || urlParams.get('room_id');
-  const deviceToken = urlParams.get('device_token') || (window.location.hash.includes('device_token=') ? 'yes' : null);
+  const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  const hashParams = new URLSearchParams(hashQuery);
+
+  const roomParam = urlParams.get('room') || urlParams.get('room_id') || hashParams.get('room') || hashParams.get('room_id');
+  const deviceToken = urlParams.get('device_token') || hashParams.get('device_token') || (window.location.hash.includes('device_token=') ? 'yes' : null);
   if (roomParam) {
-    currentRoomCode = roomParam.toUpperCase();
+    currentRoomCode = roomParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const roomInput = document.getElementById('input-room-code');
     if (roomInput) roomInput.value = currentRoomCode;
   }
 
-  const viewParam = urlParams.get('view');
+  const viewParam = urlParams.get('view') || hashParams.get('view');
+  const isPlayPath = window.location.pathname.endsWith('/play') || window.location.hash.includes('/play');
+
   if (viewParam && ['tv', 'player', 'host', 'auth'].includes(viewParam)) {
     switchView(viewParam);
+  } else if (isPlayPath || (roomParam && viewParam !== 'tv' && viewParam !== 'host')) {
+    switchView('player');
   } else if (deviceToken || window.location.hash.includes('tv-auth')) {
     switchView('auth');
-  } else if (urlParams.has('room') && viewParam !== 'tv') {
-    switchView('player');
   } else {
     switchView('auth');
   }
@@ -595,19 +600,24 @@ document.addEventListener('click', (e) => {
 
 // 2. DYNAMIC QR CODES
 function initQrCodes() {
-  const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
-  const playUrl = `${window.location.origin}${basePath}/?view=player&room=${currentRoomCode}`;
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  let playBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+  if (!isLocalhost && window.location.origin && !window.location.origin.startsWith('file://')) {
+    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+    playBaseUrl = `${window.location.origin}${basePath}`;
+  }
+  const playUrl = `${playBaseUrl}/?view=player&room=${currentRoomCode}`;
 
   const canvasStage = document.getElementById('qr-canvas');
   if (canvasStage) {
-    QRCode.toCanvas(canvasStage, playUrl, { width: 150, margin: 1 }, (err) => {
+    QRCode.toCanvas(canvasStage, playUrl, { width: 160, margin: 1 }, (err) => {
       if (err) console.error('Stage QR Code error:', err);
     });
   }
 
   const canvasPromo = document.getElementById('promo-qr-canvas');
   if (canvasPromo) {
-    QRCode.toCanvas(canvasPromo, playUrl, { width: 120, margin: 1 }, (err) => {
+    QRCode.toCanvas(canvasPromo, playUrl, { width: 130, margin: 1 }, (err) => {
       if (err) console.error('Promo QR Code error:', err);
     });
   }
@@ -2190,18 +2200,26 @@ function initPlayerControls() {
   const playerDispNickname = document.getElementById('player-disp-nickname');
   const playerDispRoom = document.getElementById('player-disp-room');
   const answerBtns = document.querySelectorAll('.btn-answer');
+  const nicknameInput = document.getElementById('input-nickname');
+
+  const savedNick = localStorage.getItem('bar_trivia_player_nickname');
+  if (savedNick && nicknameInput && !nicknameInput.value) {
+    nicknameInput.value = savedNick;
+  }
 
   function doJoin() {
     const roomInput = document.getElementById('input-room-code');
-    const nicknameInput = document.getElementById('input-nickname');
 
     const enteredRoom = (roomInput?.value || '').trim();
     if (enteredRoom) {
-      currentRoomCode = enteredRoom.toUpperCase();
+      currentRoomCode = enteredRoom.toUpperCase().replace(/[^A-Z0-9]/g, '');
     }
 
     const rawNick = (nicknameInput?.value || '').trim();
     const nickname = rawNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
+
+    localStorage.setItem('bar_trivia_player_nickname', nickname);
+    localStorage.setItem('bar_trivia_current_room', currentRoomCode);
 
     currentPlayer = { nickname, score: 0, streak: 0 };
     if (playerDispNickname) playerDispNickname.textContent = nickname.toUpperCase();
