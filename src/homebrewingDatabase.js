@@ -102,17 +102,40 @@ export function generate500HomebrewingQuestions() {
   const seenTexts = new Set();
 
   function pushQ(id, text, correct, optB, optC, optD, diff = 'Standard') {
-    const clean = text.trim();
+    let clean = text.replace(/\s*\((?:Focus Point|Batch|Formula|Protocol\s*)?#\d+\)/gi, '')
+                    .replace(/\s*\(#INDEX\)/gi, '')
+                    .replace(/\s*#\d+\b/g, '')
+                    .trim();
     if (seenTexts.has(clean.toLowerCase())) return;
     seenTexts.add(clean.toLowerCase());
+
+    const opts = [
+      { text: correct, isCorrect: true },
+      { text: optB, isCorrect: false },
+      { text: optC, isCorrect: false },
+      { text: optD, isCorrect: false }
+    ];
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [opts[i], opts[j]] = [opts[j], opts[i]];
+    }
+
+    const letters = ['A', 'B', 'C', 'D'];
+    const correctIdx = opts.findIndex(o => o.isCorrect);
+    const correctLetter = letters[correctIdx] || 'A';
 
     pool.push({
       id: `hb_uniq_${pool.length + 1}`,
       category: 'Homebrewing Beer',
       difficulty: diff,
       text: clean,
-      options: { A: correct, B: optB, C: optC, D: optD },
-      correct: 'A'
+      options: {
+        A: opts[0].text,
+        B: opts[1].text,
+        C: opts[2].text,
+        D: opts[3].text
+      },
+      correct: correctLetter
     });
   }
 
@@ -159,15 +182,15 @@ export function generate500HomebrewingQuestions() {
     const s = stylesData[counter % stylesData.length];
 
     if (angle === 0) {
-      pushQ('gen_hop_ipa', `When crafting an authentic ${s.name}, how does dry-hopping with ${h.name} hops impact the final aroma (Batch #${counter})?`, `Infuses vibrant ${h.flavor} without extracting bitter alpha acids`, 'Doubles the alcohol content instantly', 'Causes the beer to turn jet black', 'Eliminates all carbonation');
+      pushQ('gen_hop_ipa', `When crafting an authentic ${s.name}, how does dry-hopping with ${h.name} hops impact the final aroma?`, `Infuses vibrant ${h.flavor} without extracting bitter alpha acids`, 'Doubles the alcohol content instantly', 'Causes the beer to turn jet black', 'Eliminates all carbonation');
     } else if (angle === 1) {
-      pushQ('gen_malt_mash', `In an all-grain recipe for ${s.name}, what sensory contribution is provided by adding ${m.name} (Batch #${counter})?`, `Contributes ${m.role} with ${m.srm} color`, 'Adds artificial lemon flavor', 'Prevents all yeast reproduction', 'Filters out water minerals');
+      pushQ('gen_malt_mash', `In an all-grain recipe for ${s.name}, what sensory contribution is provided by adding ${m.name}?`, `Contributes ${m.role} with ${m.srm} color`, 'Adds artificial lemon flavor', 'Prevents all yeast reproduction', 'Filters out water minerals');
     } else if (angle === 2) {
-      pushQ('gen_style_recipe', `Which hop and malt combination is classic when brewing an authentic homebrew ${s.name} (Formula #${counter})?`, `${h.name} hops paired with ${m.name}`, 'Table sugar and vinegar', 'Instant coffee and orange juice', 'Corn syrup and bleach');
+      pushQ('gen_style_recipe', `Which hop and malt combination is classic when brewing an authentic homebrew ${s.name}?`, `${h.name} hops paired with ${m.name}`, 'Table sugar and vinegar', 'Instant coffee and orange juice', 'Corn syrup and bleach');
     } else if (angle === 3) {
-      pushQ('gen_chem_bjcp', `To achieve target BJCP specifications for ${s.name} (Target: ${s.ibu}), how should boiling additions of ${h.name} be scheduled (Protocol #${counter})?`, `Add at 60 minutes for clean bitterness and at flameout/whirlpool for aroma`, 'Boil for 24 hours continuously', 'Add only to the mash tun cold', 'Inject into bottle caps dry');
+      pushQ('gen_chem_bjcp', `To achieve target BJCP specifications for ${s.name} (Target: ${s.ibu}), how should boiling additions of ${h.name} be scheduled?`, `Add at 60 minutes for clean bitterness and at flameout/whirlpool for aroma`, 'Boil for 24 hours continuously', 'Add only to the mash tun cold', 'Inject into bottle caps dry');
     } else {
-      pushQ('gen_mash_enzyme', `During the mash rest for ${s.name} using ${m.name}, which enzyme converts grain starches into fermentable maltose (Batch #${counter})?`, 'Beta-Amylase (active at 145°F - 150°F)', 'Protease only', 'Lactase enzyme', 'Zymase');
+      pushQ('gen_mash_enzyme', `During the mash rest for ${s.name} using ${m.name}, which enzyme converts grain starches into fermentable maltose?`, 'Beta-Amylase (active at 145°F - 150°F)', 'Protease only', 'Lactase enzyme', 'Zymase');
     }
     counter++;
   }

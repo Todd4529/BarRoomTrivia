@@ -6,6 +6,7 @@ class TimerRing extends StatelessWidget {
   final int remainingSeconds;
   final String label;
   final Color? customColor;
+  final double size;
 
   const TimerRing({
     super.key,
@@ -13,6 +14,7 @@ class TimerRing extends StatelessWidget {
     required this.remainingSeconds,
     this.label = 'SECONDS',
     this.customColor,
+    this.size = 58,
   });
 
   @override
@@ -28,11 +30,11 @@ class TimerRing extends StatelessWidget {
       alignment: Alignment.center,
       children: [
         SizedBox(
-          width: 140,
-          height: 140,
+          width: size,
+          height: size,
           child: CircularProgressIndicator(
             value: progress.clamp(0.0, 1.0),
-            strokeWidth: 12,
+            strokeWidth: (size * 0.08).clamp(3.5, 8.0),
             backgroundColor: Colors.white12,
             valueColor: AlwaysStoppedAnimation<Color>(ringColor),
           ),
@@ -43,18 +45,19 @@ class TimerRing extends StatelessWidget {
             Text(
               '$remainingSeconds',
               style: TextStyle(
-                fontSize: 48,
+                fontSize: (size * 0.36).clamp(18.0, 36.0),
                 fontWeight: FontWeight.bold,
                 color: ringColor,
+                height: 1.05,
               ),
             ),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 10,
+              style: TextStyle(
+                fontSize: (size * 0.12).clamp(7.5, 10.0),
                 fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
+                letterSpacing: 0.8,
                 color: Colors.white70,
               ),
             ),

@@ -15,6 +15,8 @@ class Player {
     required this.isConnected,
   });
 
+  int get score => cumulativeScore;
+
   factory Player.fromJson(Map<dynamic, dynamic> rawJson) {
     final json = Map<String, dynamic>.from(rawJson);
     final nick = (json['nickname'] ?? json['name'] ?? 'Player').toString();

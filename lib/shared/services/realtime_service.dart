@@ -300,16 +300,24 @@ class RealtimeService {
     required Question question,
     required int durationSeconds,
     required int timerEndsAtEpochMs,
+    int totalQuestions = 10,
+    int roundNumber = 1,
   }) async {
     final payload = {
       'event': 'question_start',
       'room_code': roomCode,
-      'question_index': questionIndex,
+      'question_index': ((questionIndex - 1) % totalQuestions) + 1,
+      'cumulative_question_index': questionIndex,
+      'question_number_in_round': ((questionIndex - 1) % totalQuestions) + 1,
+      'total_questions': totalQuestions,
+      'total_questions_in_round': totalQuestions,
+      'round_number': roundNumber,
       'question_id': question.id,
       'id': question.id,
       'duration_seconds': durationSeconds,
       'timer_ends_at_epoch_ms': timerEndsAtEpochMs,
       'category': question.category,
+      'genre': question.category,
       'difficulty': question.difficulty,
       'question_text': question.questionText,
       'option_a': question.optionA,
@@ -354,14 +362,16 @@ class RealtimeService {
     int? nextQuestionStartsAtEpochMs,
     String gamePlayMode = 'Auto',
   }) async {
-    final payload = {
-      'event': 'timer_expired',
-      'room_code': roomCode,
-      'correct_option': correctOption,
-      'next_question_starts_at_epoch_ms': nextQuestionStartsAtEpochMs ?? (DateTime.now().millisecondsSinceEpoch + 30000),
-      'game_play_mode': gamePlayMode,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    };
+      final targetEpoch = nextQuestionStartsAtEpochMs ?? (DateTime.now().millisecondsSinceEpoch + 15000);
+      final payload = {
+        'event': 'timer_expired',
+        'room_code': roomCode,
+        'correct_option': correctOption,
+        'next_question_starts_at_epoch_ms': targetEpoch,
+        'nextQuestionStartsAtEpochMs': targetEpoch,
+        'game_play_mode': gamePlayMode,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
 
     _localEventBus.add(payload);
     BroadcastSync.postEvent(payload);
@@ -484,11 +494,15 @@ class RealtimeService {
     required String roomCode,
     required List<Map<String, dynamic>> top3Winners,
     required int nextRoundStartsAtEpochMs,
+    int? roundNumber,
   }) async {
     final payload = {
       'event': 'round_completed',
       'room_code': roomCode,
       'top_3_winners': top3Winners,
+      'top3_winners': top3Winners,
+      'top3Winners': top3Winners,
+      'round_number': roundNumber,
       'next_round_starts_at_epoch_ms': nextRoundStartsAtEpochMs,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };

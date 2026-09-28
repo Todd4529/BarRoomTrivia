@@ -788,10 +788,15 @@ function handleIncomingQuestionStart(rawPayload) {
 function handleIncomingTimerExpired(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing timer_expired:', payload);
+  const nextEpoch = payload.next_question_starts_at_epoch_ms || 
+                    payload.nextQuestionStartsAtEpochMs || 
+                    (Date.now() + 15000);
   onTimerExpired({
     correctOption: payload.correct_option || payload.correctOption || payload.correct,
     correctText: payload.correctText,
-    nextQuestionStartsAtEpochMs: payload.next_question_starts_at_epoch_ms,
+    next_question_starts_at_epoch_ms: nextEpoch,
+    nextQuestionStartsAtEpochMs: nextEpoch,
+    game_play_mode: payload.game_play_mode || 'Auto',
   });
 }
 
@@ -1401,7 +1406,12 @@ async function runNextAutomatedStep() {
       durationSeconds,
       timerEndsAtMs: timerEndsAtGlobalMs,
       // Flat properties for TV and standard receivers:
-      question_index: currentQuestionIndex + 1,
+      question_index: questionInRound,
+      cumulative_question_index: currentQuestionIndex + 1,
+      question_number_in_round: questionInRound,
+      total_questions: 10,
+      total_questions_in_round: 10,
+      round_number: currentRound,
       id: question.id,
       question_id: question.id,
       duration_seconds: durationSeconds,
@@ -1460,24 +1470,24 @@ async function runNextAutomatedStep() {
 function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
 
+  const reviewDurationMs = 15000; // Synchronized 15-second review across TV and player screens
+  hostTargetEpochMs = Date.now() + reviewDurationMs;
+
   const expiredPayload = {
     correctOption: question.correct,
     correctText: `${question.correct}) ${question.options[question.correct]}`,
+    next_question_starts_at_epoch_ms: hostTargetEpochMs,
+    nextQuestionStartsAtEpochMs: hostTargetEpochMs,
     questionIndex: currentQuestionIndex,
     roundNumber: currentRound,
-    questionNumberInRound: questionInRound
+    questionNumberInRound: questionInRound,
+    game_play_mode: 'Auto',
   };
 
   currentGameState = 'QUESTION_REVIEW';
   hostEngineState = 'QUESTION_REVIEW';
-  const reviewDurationMs = 6000; // 6-second exciting review
-  hostTargetEpochMs = Date.now() + reviewDurationMs;
 
-  broadcastRealtimeEvent('timer_expired', {
-    correct_option: question.correct,
-    correctText: `${question.correct}) ${question.options[question.correct]}`,
-    next_question_starts_at_epoch_ms: hostTargetEpochMs,
-  });
+  broadcastRealtimeEvent('timer_expired', expiredPayload);
   onTimerExpired(expiredPayload);
 
   clearTimeout(autoEngineTimeout);
@@ -1507,6 +1517,7 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       players: playersLeaderboard,
     });
 
+    const top3 = playersLeaderboard.slice(0, 3);
     const winnerPayload = {
       roundNumber: currentRound,
       winnerName: roundWinner.nickname,
@@ -1515,7 +1526,11 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
     };
 
     broadcastRealtimeEvent('round_completed', {
-      top3_winners: playersLeaderboard.slice(0, 3),
+      round_number: currentRound,
+      roundNumber: currentRound,
+      top3_winners: top3,
+      top_3_winners: top3,
+      top3Winners: top3,
       next_round_starts_at_epoch_ms: hostTargetEpochMs,
     });
     onRoundWinner(winnerPayload);
@@ -1531,8 +1546,41 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
 function handleHostAdvanceAfterRoundSummary() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'ROUND_SUMMARY') return;
   currentRoundQuestions = [];
-  hostEngineState = 'QUESTION_ACTIVE';
-  runNextAutomatedStep();
+
+  const nextRound = Math.floor(currentQuestionIndex / 10) + 1;
+  let nextGenre = 'General Trivia';
+  if (selectedGenreQueue.length > 0) {
+    const qIndex = (nextRound - 1) % selectedGenreQueue.length;
+    nextGenre = selectedGenreQueue[qIndex];
+  } else if (shuffledAutoGenres && shuffledAutoGenres.length > 0) {
+    nextGenre = shuffledAutoGenres[(nextRound - 1) % shuffledAutoGenres.length];
+  }
+
+  // Pre-game countdown for the new round and genre
+  hostEngineState = 'PRE_GAME';
+  const preGameSecs = 10;
+  hostTargetEpochMs = Date.now() + (preGameSecs * 1000);
+
+  broadcastRealtimeEvent('pre_game_countdown', {
+    countdown_seconds: preGameSecs,
+    genre: nextGenre,
+    current_genre: nextGenre,
+    category: nextGenre,
+    round_number: nextRound,
+    starts_at_epoch_ms: hostTargetEpochMs,
+  });
+
+  onPreGameCountdown({
+    countdown_seconds: preGameSecs,
+    genre: nextGenre,
+    round_number: nextRound,
+    starts_at_epoch_ms: hostTargetEpochMs,
+  });
+
+  clearTimeout(autoEngineTimeout);
+  autoEngineTimeout = setTimeout(() => {
+    checkHostEngineTick();
+  }, preGameSecs * 1000);
 }
 
 function checkHostEngineTick() {
@@ -1630,6 +1678,9 @@ function onQuestionStart(payload) {
   const tvNextQBanner = document.getElementById('tv-next-q-banner');
   if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
   clearInterval(tvNextQCountdownInterval);
+  clearInterval(playerReviewInterval);
+  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  if (timerLabel) timerLabel.textContent = 'SEC';
 
   // Update Host Stats
   const statRound = document.getElementById('stat-round');
@@ -1672,7 +1723,13 @@ function onQuestionStart(payload) {
   if (tvGenreIcon) tvGenreIcon.textContent = categoryIcon;
   if (tvRoundTracker) tvRoundTracker.textContent = `ROUND ${roundNumber || 1} • QUESTION ${questionNumberInRound || 1}/10`;
   if (tvCategory) tvCategory.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
-  if (tvQuestionText) tvQuestionText.textContent = questionData.text;
+  const cleanQText = (questionData.text || '')
+      .replace(/\s*\((?:Focus Point|Batch|Formula|Protocol\s*)?#\d+\)/gi, '')
+      .replace(/\s*\(#INDEX\)/gi, '')
+      .replace(/\s*#\d+\b/g, '')
+      .trim();
+
+  if (tvQuestionText) tvQuestionText.textContent = cleanQText;
 
   if (tvOptionsGrid) {
     tvOptionsGrid.classList.remove('hidden');
@@ -1690,8 +1747,9 @@ function onQuestionStart(payload) {
   if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
   startCountdown(totalTimerDuration);
 
-  // Reset player answer choice state for new question
+  // Reset player answer choice state and dismiss previous result modal for new question
   playerChoiceSubmitted = null;
+  hideResultModal();
 
   // Update Player Phone Display & Difficulty Pill
   const playerDispRoom = document.getElementById('player-disp-room');
@@ -1707,7 +1765,7 @@ function onQuestionStart(payload) {
     playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
     playerDiffPill.textContent = `${diffEmojiMap[activeDifficulty] || '🎯'} ${activeDifficulty.toUpperCase()}`;
   }
-  if (playerQuestionText) playerQuestionText.textContent = questionData.text;
+  if (playerQuestionText) playerQuestionText.textContent = cleanQText;
 
   const optA = document.getElementById('p-opt-a');
   if (optA) optA.textContent = questionData.options.A;
@@ -1726,6 +1784,8 @@ function onQuestionStart(payload) {
   answerBtns.forEach(btn => {
     btn.disabled = false;
     btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+    const existingBadge = btn.querySelector('.player-correct-badge');
+    if (existingBadge) existingBadge.remove();
   });
 }
 
@@ -1748,12 +1808,18 @@ function startCountdown(seconds) {
       // reveal answer locally and prepare to sync if host was delayed!
       if (currentGameState === 'QUESTION_ACTIVE') {
         currentGameState = 'QUESTION_REVIEW';
-        onTimerExpired({ correctOption: currentQuestionData?.correct });
+        const targetEpoch = Date.now() + 15000;
+        onTimerExpired({
+          correctOption: currentQuestionData?.correct,
+          next_question_starts_at_epoch_ms: targetEpoch,
+          nextQuestionStartsAtEpochMs: targetEpoch,
+          game_play_mode: 'Auto',
+        });
         setTimeout(() => {
           if (currentGameState === 'QUESTION_REVIEW') {
             broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
           }
-        }, 6000);
+        }, 15000);
       }
     }
   }, 500);
@@ -1786,31 +1852,33 @@ function updateTimerUI() {
 
 let playerReviewInterval = null;
 
-function startPlayerReviewCountdown(seconds) {
+function startPlayerReviewCountdown(seconds, targetEpochMs) {
   clearInterval(playerReviewInterval);
-  let rem = seconds;
+  const targetEpoch = targetEpochMs || (Date.now() + (seconds * 1000));
 
   const updateBadge = () => {
+    const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
     const playerStatusBadge = document.getElementById('player-status-badge');
     if (playerStatusBadge) {
-      playerStatusBadge.className = 'status-badge status-active';
-      playerStatusBadge.innerHTML = `<span id="status-icon">⏳</span> <span id="status-text">NEXT QUESTION IN ${rem}s...</span>`;
-    }
-  };
-
-  updateBadge();
-  playerReviewInterval = setInterval(() => {
-    rem--;
-    if (rem > 0) {
-      updateBadge();
-    } else {
-      clearInterval(playerReviewInterval);
-      const playerStatusBadge = document.getElementById('player-status-badge');
-      if (playerStatusBadge) {
+      if (rem > 0) {
+        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.innerHTML = `<span id="status-icon">⏳</span> <span id="status-text">NEXT QUESTION IN ${rem}s...</span>`;
+      } else {
         playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> <span id="status-text">PREPARING NEXT QUESTION...</span>`;
       }
     }
-  }, 1000);
+    return rem;
+  };
+
+  const initialRem = updateBadge();
+  if (initialRem > 0) {
+    playerReviewInterval = setInterval(() => {
+      const rem = updateBadge();
+      if (rem <= 0) {
+        clearInterval(playerReviewInterval);
+      }
+    }, 500);
+  }
 }
 
 // 6. TIMER EXPIRED -> HIGHLIGHT CORRECT OPTION TILE ON TV & START NEXT QUESTION COUNTDOWN TIMER ON TV
@@ -1824,20 +1892,27 @@ function onTimerExpired(payload) {
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  // Calculate review seconds remaining for next question countdown (default 15s)
-  const nextEpoch = payload?.next_question_starts_at_epoch_ms;
-  const reviewSeconds = nextEpoch
-    ? Math.max(1, Math.ceil((nextEpoch - Date.now()) / 1000))
-    : 15;
+  // Calculate review seconds remaining for next question countdown (synchronized 15s)
+  const nextEpoch = payload?.next_question_starts_at_epoch_ms || 
+                    payload?.nextQuestionStartsAtEpochMs || 
+                    (Date.now() + 15000);
+  const reviewSeconds = Math.max(1, Math.ceil((nextEpoch - Date.now()) / 1000));
 
-  startPlayerReviewCountdown(reviewSeconds);
+  startPlayerReviewCountdown(reviewSeconds, nextEpoch);
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
     const choice = (btn.dataset.choice || '').toUpperCase();
+    const existingBadge = btn.querySelector('.player-correct-badge');
+    if (existingBadge) existingBadge.remove();
+
     if (choice === correctOpt) {
       btn.classList.add('review-correct');
       btn.classList.remove('unselected');
+      const badge = document.createElement('span');
+      badge.className = 'player-correct-badge';
+      badge.innerHTML = '✅ CORRECT';
+      btn.appendChild(badge);
     } else if (btn.classList.contains('selected')) {
       btn.classList.add('review-wrong');
     } else {
@@ -1860,22 +1935,39 @@ function onTimerExpired(payload) {
 
   const tvNextQBanner = document.getElementById('tv-next-q-banner');
   const tvNextQVal = document.getElementById('tv-next-q-timer-val');
+  const tvTimerVal = document.getElementById('tv-timer-val');
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  const timerProgress = document.getElementById('timer-progress');
 
-  if (tvNextQBanner && tvNextQVal) {
-    tvNextQBanner.classList.remove('hidden');
-    let remNextQSecs = 6;
-    tvNextQVal.textContent = remNextQSecs;
-
-    clearInterval(tvNextQCountdownInterval);
-    tvNextQCountdownInterval = setInterval(() => {
-      remNextQSecs--;
-      if (tvNextQVal) tvNextQVal.textContent = Math.max(0, remNextQSecs);
-      if (remNextQSecs <= 0) {
-        clearInterval(tvNextQCountdownInterval);
-        tvNextQBanner.classList.add('hidden');
-      }
-    }, 1000);
+  if (tvTimerContainer) {
+    tvTimerContainer.classList.remove('hidden');
+    if (timerLabel) timerLabel.textContent = 'NEXT Q';
   }
+
+  const updateTvCountdown = () => {
+    const remNextQSecs = Math.max(0, Math.ceil((nextEpoch - Date.now()) / 1000));
+    if (tvNextQVal) tvNextQVal.textContent = remNextQSecs;
+    if (tvTimerVal) tvTimerVal.textContent = remNextQSecs;
+    if (timerProgress) {
+      const ratio = remNextQSecs / 15.0;
+      const offset = 264 - (ratio * 264);
+      timerProgress.style.strokeDashoffset = offset;
+      timerProgress.style.stroke = '#00e5ff';
+    }
+    if (remNextQSecs <= 0) {
+      clearInterval(tvNextQCountdownInterval);
+      if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
+    }
+    return remNextQSecs;
+  };
+
+  if (tvNextQBanner) {
+    tvNextQBanner.classList.remove('hidden');
+  }
+  updateTvCountdown();
+  clearInterval(tvNextQCountdownInterval);
+  tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
@@ -1934,14 +2026,14 @@ function onTimerExpired(payload) {
     } catch (_) {}
 
     const randomQuote = getRandomItem(funnyCorrectQuotes);
-    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, 2.5);
+    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch);
     confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
   } else {
     if (currentPlayer) {
       currentPlayer.streak = 0;
     }
     const randomQuote = getRandomItem(funnyWrongQuotes);
-    showResultModal(false, "0 PTS", correctTextStr, randomQuote, 2.5);
+    showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch);
   }
 }
 
@@ -1949,7 +2041,7 @@ function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 2.5) {
+function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 15, targetEpochMs = null) {
   const overlay = document.getElementById('result-modal-overlay');
   const card = document.getElementById('result-modal-box');
   const icon = document.getElementById('result-modal-icon');
@@ -1976,20 +2068,23 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   if (correctTextEl) correctTextEl.textContent = correctTextStr;
   if (quote) quote.textContent = `"${funnyQuote}"`;
 
-  let remSecs = Math.round(countdownSeconds);
-  if (modalTimerVal) modalTimerVal.textContent = remSecs;
+  const targetEpoch = targetEpochMs || (Date.now() + Math.round(countdownSeconds * 1000));
 
-  overlay.classList.remove('hidden');
-
-  // Dismiss early if player taps or clicks anywhere on the modal
-  overlay.onclick = () => {
-    hideResultModal();
+  const updateModalCountdown = () => {
+    const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
+    if (modalTimerVal) modalTimerVal.textContent = rem;
+    if (rem <= 0) {
+      clearInterval(modalCountdownInterval);
+    }
   };
 
-  clearTimeout(modalCountdownInterval);
-  modalCountdownInterval = setTimeout(() => {
-    hideResultModal();
-  }, Math.round(countdownSeconds * 1000));
+  updateModalCountdown();
+  clearInterval(modalCountdownInterval);
+  modalCountdownInterval = setInterval(updateModalCountdown, 500);
+
+  overlay.classList.remove('hidden');
+  // Stay on screen until the next question is loaded (no tap dismissal, no early timeout)
+  overlay.onclick = null;
 }
 
 function hideResultModal() {
@@ -1998,7 +2093,7 @@ function hideResultModal() {
     overlay.classList.add('hidden');
     overlay.onclick = null;
   }
-  clearTimeout(modalCountdownInterval);
+  clearInterval(modalCountdownInterval);
 }
 
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN

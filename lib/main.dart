@@ -216,6 +216,7 @@ class MainNavigationHub extends StatefulWidget {
 class _MainNavigationHubState extends State<MainNavigationHub> {
   final RealtimeService _realtimeService = RealtimeService();
   String _targetRoomCode = 'TRIV';
+  bool _isExitDialogOpen = false;
 
   @override
   void initState() {
@@ -236,12 +237,14 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
     _realtimeService.joinRoomChannel(
       roomCode: _targetRoomCode,
       onPreGameCountdownBroadcast: (payload) {
+        if (_isExitDialogOpen) return;
         final room = payload['room_code']?.toString() ?? _targetRoomCode;
         if (mounted) {
           context.go('/tv?room=$room&auto_start=true');
         }
       },
       onQuestionBroadcast: (payload) {
+        if (_isExitDialogOpen) return;
         final room = payload['room_code']?.toString() ?? _targetRoomCode;
         if (mounted) {
           context.go('/tv?room=$room&auto_start=true');
@@ -258,50 +261,57 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
   }
 
   void _handleBackPress() {
+    if (_isExitDialogOpen) return;
+    setState(() => _isExitDialogOpen = true);
+
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppTheme.cardSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
-        ),
-        title: const Text(
-          'Bar Rooms Trivia',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Return to the TV game display or exit the application?',
-          style: TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('CANCEL', style: TextStyle(color: Colors.white60)),
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          // Dialog stays displayed until user chooses an option
+        },
+        child: AlertDialog(
+          backgroundColor: AppTheme.cardSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
           ),
-          ElevatedButton.icon(
-            autofocus: true,
-            icon: const Icon(Icons.tv, size: 18),
-            label: const Text('TV DISPLAY'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonCyan,
-              foregroundColor: Colors.black,
+          title: const Text(
+            'Exit Application',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          actionsAlignment: MainAxisAlignment.end,
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 16)),
             ),
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              if (mounted) context.go('/tv?room=$_targetRoomCode');
-            },
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              SystemNavigator.pop();
-            },
-            child: const Text('EXIT APP', style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
+            ElevatedButton(
+              autofocus: true,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+                SystemNavigator.pop();
+              },
+              child: const Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ],
+        ),
       ),
-    );
+    ).then((_) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+    });
   }
 
   @override

@@ -56,6 +56,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   bool _isScoredForThisQuestion = false;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
+  bool _showResultOverlay = false;
 
   @override
   void initState() {
@@ -145,6 +146,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _isGamePaused = false;
             _isPreGameCountdown = false;
             _isInterQuestionPhase = false;
+            _showResultOverlay = false;
             _preGameTimer?.cancel();
             _currentQuestion = question;
             _selectedOption = null;
@@ -163,11 +165,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _lockInputsAndReveal(payload['correct_option'] as String?);
 
         final mode = payload['game_play_mode'] as String? ?? 'Auto';
-        final nextStartsAt = payload['next_question_starts_at_epoch_ms'] as int?;
+        final nextStartsAt = (payload['next_question_starts_at_epoch_ms'] as int?) ??
+            (payload['nextQuestionStartsAtEpochMs'] as int?) ??
+            (DateTime.now().millisecondsSinceEpoch + 15000);
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        final remaining = nextStartsAt != null
-            ? ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 30)
-            : 30;
+        final remaining = ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 15);
 
         setState(() {
           _isInterQuestionPhase = true;
@@ -177,11 +179,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
         _interQuestionTimer?.cancel();
         if (mode == 'Auto') {
-          _interQuestionTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-            if (_interQuestionSecondsRemaining > 1) {
-              if (mounted) {
+          _interQuestionTimer = Timer.periodic(const Duration(milliseconds: 500), (t) {
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final rem = ((nextStartsAt - now) / 1000).ceil();
+            if (rem > 0) {
+              if (mounted && _interQuestionSecondsRemaining != rem) {
                 setState(() {
-                  _interQuestionSecondsRemaining--;
+                  _interQuestionSecondsRemaining = rem;
                 });
               }
             } else {
@@ -189,6 +193,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               if (mounted) {
                 setState(() {
                   _isInterQuestionPhase = false;
+                  _interQuestionSecondsRemaining = 0;
                 });
               }
             }
@@ -204,6 +209,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         setState(() {
           _isGamePaused = false;
           _isPreGameCountdown = true;
+          _showResultOverlay = false;
           _preGameSecondsRemaining = remainingSec;
         });
         _startPreGameTimer();
@@ -216,6 +222,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _isGamePaused = true;
           _isResumeCountdownActive = false;
           _isPreGameCountdown = false;
+          _showResultOverlay = false;
           _inputsLocked = true;
         });
       },
@@ -271,6 +278,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _correctOption = null;
             _inputsLocked = false;
             _isReviewPhase = false;
+            _showResultOverlay = false;
             _isPreGameCountdown = false;
             _isGamePaused = false;
             _isResumeCountdownActive = false;
@@ -297,11 +305,16 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
       },
       onRoundCompletedBroadcast: (payload) {
-        final winners = payload['top_3_winners'] as List?;
+        final winners = payload['top_3_winners'] as List? ??
+            payload['top3_winners'] as List? ??
+            payload['top3Winners'] as List?;
         if (mounted && winners != null) {
+          _interQuestionTimer?.cancel();
           setState(() {
             _top3Winners = List<Map<String, dynamic>>.from(winners);
             _showRoundWinnersOverlay = true;
+            _showResultOverlay = false;
+            _isInterQuestionPhase = false;
           });
           Future.delayed(const Duration(seconds: 12), () {
             if (mounted) {
@@ -388,6 +401,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       setState(() {
         _inputsLocked = true;
         _isReviewPhase = true;
+        _showResultOverlay = true;
         _correctOption = correct;
         if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
@@ -401,31 +415,6 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         }
       });
-
-      if (context.mounted && _selectedOption != null) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
-            duration: const Duration(milliseconds: 2200),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            content: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  wasCorrect ? '🎉 NAILED IT! +100 PTS' : '❌ OOF! MISSED IT! 0 PTS',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
     }
   }
 
@@ -488,6 +477,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 _player == null
                     ? _buildNicknamePrompt()
                     : _buildActivePlayerScreen(),
+
+                if (_showResultOverlay && _currentQuestion != null)
+                  _buildResultOverlay(),
 
                 if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
                   Positioned.fill(
@@ -591,6 +583,140 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultOverlay() {
+    final wasCorrect = _selectedOption != null && _selectedOption == _correctOption;
+    final correctOpt = _correctOption ?? _currentQuestion?.correctOption ?? 'A';
+    String correctText = '';
+    if (correctOpt == 'A') {
+      correctText = _currentQuestion?.optionA ?? '';
+    } else if (correctOpt == 'B') {
+      correctText = _currentQuestion?.optionB ?? '';
+    } else if (correctOpt == 'C') {
+      correctText = _currentQuestion?.optionC ?? '';
+    } else if (correctOpt == 'D') {
+      correctText = _currentQuestion?.optionD ?? '';
+    }
+
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.85),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+              width: 2.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.35),
+                blurRadius: 28,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                wasCorrect ? '🎉' : '❌',
+                style: const TextStyle(fontSize: 54),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                wasCorrect ? 'NAILED IT!' : 'OOF! MISSED IT!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  wasCorrect ? '+100 PTS' : '0 PTS',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'CORRECT ANSWER:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white60,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$correctOpt) $correctText',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.neonGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan),
+                ),
+                child: Text(
+                  _gamePlayMode == 'Manual'
+                      ? '⏳ Next Question, waiting on host...'
+                      : '⏳ Next Question in ${_interQuestionSecondsRemaining}s...',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.neonCyan,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1174,20 +1300,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 ),
               ),
               if (isCorrect) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(6),
+                    color: Colors.black.withOpacity(0.65),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white, width: 1.5),
                   ),
                   child: const Text(
-                    'CORRECT',
+                    '✅ CORRECT',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
-                      letterSpacing: 0.8,
+                      letterSpacing: 1.0,
                     ),
                   ),
                 ),

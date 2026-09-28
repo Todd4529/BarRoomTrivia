@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import '../models/question.dart';
 
 /// Comprehensive Factual Generator for 500+ Unique Questions per Trivia Genre
@@ -9,22 +10,35 @@ class GenreQuestionsEngine {
 
     final questions = <Question>[];
     final Set<String> seenTexts = {};
+    final random = math.Random();
 
     void addQ(String id, String text, String correct, String optB, String optC, String optD, {String diff = 'Standard'}) {
-      final cleanText = text.trim();
+      final cleanText = Question.cleanQuestionText(text);
       if (seenTexts.contains(cleanText.toLowerCase())) return;
       seenTexts.add(cleanText.toLowerCase());
+
+      final optionsList = [
+        {'text': correct, 'isCorrect': true},
+        {'text': optB, 'isCorrect': false},
+        {'text': optC, 'isCorrect': false},
+        {'text': optD, 'isCorrect': false},
+      ];
+      optionsList.shuffle(random);
+
+      final letters = ['A', 'B', 'C', 'D'];
+      final correctIdx = optionsList.indexWhere((o) => o['isCorrect'] == true);
+      final correctLetter = letters[correctIdx];
 
       questions.add(Question(
         id: '${genre.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${questions.length + 1}',
         category: genre,
         difficulty: diff,
         questionText: cleanText,
-        optionA: correct,
-        optionB: optB,
-        optionC: optC,
-        optionD: optD,
-        correctOption: 'A',
+        optionA: optionsList[0]['text'] as String,
+        optionB: optionsList[1]['text'] as String,
+        optionC: optionsList[2]['text'] as String,
+        optionD: optionsList[3]['text'] as String,
+        correctOption: correctLetter,
       ));
     }
 
@@ -944,20 +958,40 @@ class GenreQuestionsEngine {
   // --- 20. HOME REPAIR (500+ unique) ---
   static void _generateHomeRepair(Function addQ) {
     final repairs = [
-      ['GFCI (Ground Fault Circuit Interrupter)', 'Electrical outlet designed to quickly shut off power when an imbalance in electrical current is detected to prevent lethal shock'],
-      ['Actual 2x4 Lumber Dimensions', '1.5 inches by 3.5 inches (due to surfacing and drying shrinkage from nominal rough-cut 2"x4")'],
-      ['P-Trap', 'Curved plumbing pipe beneath sinks that retains a water barrier to block toxic sewer gases from entering living spaces'],
-      ['Standard Wall Stud Spacing', '16 inches on center (from the center of one stud to the center of the next)'],
-      ['Drywall Joint Compound (Mud)', 'Gypsum-based paste used to seal drywall joints, cover tape, and conceal screw indentations before painting'],
-      ['14-Gauge Electrical Wire', 'Standard copper wire gauge rated for 15-Amp household circuits (typically residential lighting and basic outlets)'],
-      ['12-Gauge Electrical Wire', 'Thicker copper wire gauge rated for 20-Amp circuits (kitchens, bathrooms, outdoor outlets)'],
-      ['Teflon (Plumber\'s) Tape', 'PTFE thread seal tape wrapped clockwise around pipe threads to ensure watertight seals on threaded plumbing connections'],
-      ['HVAC Air Filter Replacement Interval', 'Every 30 to 90 days depending on filter type, pets, and household dust levels'],
-      ['Circuit Breaker Panel', 'Main electrical distribution box containing breakers that automatically trip when overloaded to prevent house fires'],
+      ['GFCI (Ground Fault Circuit Interrupter)', 'Electrical outlet designed to quickly shut off power when an imbalance in electrical current is detected to prevent lethal shock', 'A decorative wallpaper glue', 'A tool used only for cutting concrete', 'An outdoor lawn mower blade'],
+      ['Actual 2x4 Lumber Dimensions', '1.5 inches by 3.5 inches (due to surfacing and drying shrinkage from nominal rough-cut 2"x4")', 'Exactly 2.0 inches by 4.0 inches', '1.0 inch by 3.0 inches', '2.5 inches by 4.5 inches'],
+      ['P-Trap', 'Curved plumbing pipe beneath sinks that retains a water barrier to block toxic sewer gases from entering living spaces', 'A tool used for prying floor tiles', 'A type of decorative baseboard molding', 'A roofing bracket for solar panels'],
+      ['Standard Wall Stud Spacing', '16 inches on center (from the center of one stud to the center of the next)', '24 inches from outer edge to edge', '12 inches on center', '32 inches on center'],
+      ['Drywall Joint Compound (Mud)', 'Gypsum-based paste used to seal drywall joints, cover tape, and conceal screw indentations before painting', 'Epoxy adhesive for repairing foundation cracks', 'Concrete sealant for driveways', 'Polyurethane varnish for hardwood floors'],
+      ['14-Gauge Electrical Wire', 'Standard copper wire gauge rated for 15-Amp household circuits (typically residential lighting and basic outlets)', 'Heavy wire rated for 50-Amp electric stoves', 'Low-voltage wire used only for doorbells', 'Substation transmission cable'],
+      ['12-Gauge Electrical Wire', 'Thicker copper wire gauge rated for 20-Amp circuits (kitchens, bathrooms, outdoor outlets)', 'Thinnest wire used for thermostat controls', 'Telephone landline wiring', 'Grounding rod wire only'],
+      ['Teflon (Plumber\'s) Tape', 'PTFE thread seal tape wrapped clockwise around pipe threads to ensure watertight seals on threaded plumbing connections', 'Adhesive duct tape for sealing HVAC air leaks', 'Masking tape used for painting sharp edges', 'Electrical insulating tape for copper junctions'],
+      ['HVAC Air Filter Replacement Interval', 'Every 30 to 90 days depending on filter type, pets, and household dust levels', 'Once every 5 years', 'Every single week', 'Only when the heating unit stops functioning'],
+      ['Circuit Breaker Panel', 'Main electrical distribution box containing breakers that automatically trip when overloaded to prevent house fires', 'A junction box used only for garden lights', 'An outdoor water meter enclosure', 'A solar inverter battery housing'],
+      ['Stud Finder', 'Handheld sensor that locates wood or metal wall framing studs behind drywall using density changes or magnetism', 'A tool for cutting copper pipes cleanly', 'A laser measuring device for room volume', 'A device for testing water hardness'],
+      ['Toilet Wax Ring', 'Molded wax gasket positioned between the toilet bowl base and floor flange to create a watertight and gas-tight seal', 'A decorative trim ring around bathroom faucets', 'A deodorizing tablet placed inside the toilet tank', 'A lubricant for plumbing snake cables'],
+      ['Toggle Bolt (Butterfly Anchor)', 'Heavy-duty drywall fastener with spring-loaded wings that open flat against the inside wall to support heavy shelving and mirrors', 'A masonry nail driven with a powder-actuated gun', 'A small plastic expansion plug for picture hooks', 'A screw designed exclusively for sheet metal'],
+      ['PEX Tubing', 'Flexible cross-linked polyethylene plastic piping widely used in modern plumbing due to corrosion resistance and freeze tolerance', 'Lead piping used in historic cast iron drainage', 'Rigid galvanized steel conduit for exterior wiring', 'Corrugated aluminum exhaust tubing for clothes dryers'],
+      ['Water Heater T&P Relief Valve', 'Safety valve designed to automatically release water if temperature exceeds 210°F or pressure exceeds 150 PSI to prevent tank explosion', 'A shutoff valve controlling cold water inlet only', 'A heating element thermostat adjuster', 'A drain faucet used for flushing sediment annually'],
+      ['Caulking Gun', 'Hand-powered mechanical tool used to apply a smooth, continuous bead of silicone or acrylic caulk to seal gaps around tubs, windows, and sinks', 'A spray tool for applying polyurethane foam insulation', 'A staple gun for attaching carpet padding', 'A heat gun for stripping dried oil paint'],
+      ['Plumber\'s Snake (Drain Auger)', 'Flexible steel cable fed down clogged drain pipes to dislodge hair, grease, and obstructions that plungers cannot clear', 'A rigid rod used to measure water pressure', 'A chemical solvent that dissolves tree roots in sewer mains', 'A clamp used to hold PVC joints during glue curing'],
+      ['Sump Pump', 'Submersible pump installed in a basement pit to automatically pump accumulating groundwater away from foundation footings to prevent flooding', 'A pump that pressurizes hot water return lines', 'A compressor that circulates refrigerant in AC coils', 'A sewage grinder pump for septic tanks'],
+      ['Step Bit (Unibit)', 'Cone-shaped drill bit with graduated steps used to drill clean holes of increasing diameter in sheet metal and thin materials', 'A Forstner bit for drilling flat-bottomed wood holes', 'A masonry bit with a carbide tip for drilling brick', 'An auger bit with a screw tip for drilling thick timbers'],
+      ['R-Value in Home Insulation', 'Measurement of thermal resistance; higher R-values indicate greater insulating power and energy efficiency', 'The fire resistance rating measured in minutes', 'The soundproofing decibel reduction index', 'The moisture vapor permeability rating'],
+      ['Three-Way Light Switch', 'Switch that allows controlling a single light fixture from two different locations (such as the top and bottom of a stairway)', 'A switch with three different brightness dimming levels', 'A switch that controls three independent lighting zones', 'A smart switch that connects to three Wi-Fi networks'],
+      ['Sill Cock (Hose Bibb)', 'Outdoor threaded faucet used to connect garden hoses, typically featuring frost-free stems to prevent pipe bursting in winter', 'An interior shutoff valve under a kitchen sink', 'A showerhead diverter valve inside a tiled wall', 'A check valve that prevents backflow into water heaters'],
+      ['Drywall Screw Thread Types', 'Coarse-thread screws for fastening drywall into wood studs; fine-thread screws for fastening into metal studs', 'Left-handed reverse threads for ceiling drywall only', 'Self-tapping lag threads for concrete masonry', 'Smooth unthreaded shanks for plaster board'],
+      ['Pilot Light', 'Continuous small gas flame kept burning to instantly ignite main burners on gas furnaces, water heaters, and older stoves', 'An LED indicator showing electrical power status', 'An emergency beacon on roof solar arrays', 'A low-voltage backlight on digital thermostats'],
+      ['Chimney Flashing', 'Sheet metal installed at the junction where a chimney meets the roof deck to prevent rainwater from leaking into the attic', 'A decorative brick cap placed atop chimney flues', 'A stainless steel spark arrestor screen', 'A ceramic damper door operated by a lever'],
+      ['Spackle vs Joint Compound', 'Spackle contains binders for quickly filling small nail holes; joint compound is formulated for taping large drywall seams and feathering edges', 'Spackle is waterproof while joint compound dissolves in rain', 'Spackle is used only on wood and joint compound only on brick', 'They are completely identical products with different regional names'],
+      ['Miter Saw', 'Power saw with a circular blade mounted on a swing arm designed to make precise angled crosscuts and bevels in wood trim and moldings', 'A handheld jigsaw with a reciprocating blade for curved cuts', 'A benchtop bandsaw used for resawing thick logs', 'A heavy table saw designed primarily for ripping long plywood sheets'],
+      ['Torpedo Level', 'Compact 9-to-12-inch level with tapered ends, magnet strip, and vial bubbles for plumbing, electrical conduit, and tight-space alignment', 'A 6-foot surveyor level used for grading property slopes', 'A laser rotary level mounted on a tripod', 'A water hose level used for leveling long foundation walls'],
+      ['Grout Float', 'Flat rubber-faced trowel used to press cementitious or epoxy grout into tile joints without scratching tile surfaces', 'A notched metal trowel used for spreading thinset mortar', 'A diamond-blade wet saw used for shaping porcelain tiles', 'A rubber mallet used for tapping pavers into sand beds'],
+      ['Wire Nut (Twist-On Wire Connector)', 'Insulated plastic cap containing a threaded metal spring used to twist together and secure exposed copper conductors inside electrical boxes', 'A crimp-on metal ring terminal for automotive batteries', 'A solder sleeve heated with a butane torch', 'An insulated terminal block with screw clamps'],
     ];
 
     for (var r in repairs) {
-      addQ('rep_diy_${r[0]}', 'In home improvement and residential maintenance, what is "${r[0]}"?', r[1], 'A decorative wallpaper glue', 'A tool used only for cutting concrete', 'An outdoor lawn mower blade');
+      addQ('rep_diy_${r[0]}', 'In home improvement and residential maintenance, what is "${r[0]}"?', r[1], r[2], r[3], r[4]);
     }
   }
 
@@ -1206,57 +1240,156 @@ class GenreQuestionsEngine {
     }
   }
 
-  // --- UNIVERSAL FALLBACK GENERATOR (500+ unique) ---
+  // --- UNIVERSAL FALLBACK GENERATOR ---
   static void _generateUniversalGenre(String genre, Function addQ) {
     final eras = ['Early Historical Era', 'Golden Age', 'Mid-20th Century Transition', 'Modern Digital Renaissance', 'Contemporary Era'];
     final facets = ['Core Theory', 'Masterwork Standard', 'Foundational Breakthrough', 'Critical Landmark Method', 'Pioneering Innovation'];
 
-    for (int i = 1; i <= 25; i++) {
-      for (var era in eras) {
-        for (var facet in facets) {
-          addQ('gen_${genre}_${i}_${era}_$facet', 'In the study of $genre, how did the "$facet" develop during the $era (Focus Point #$i)?', 'Through rigorous empirical refinement and widespread adoption', 'By accidental discovery during an electrical power blackout', 'Through a royal decree issued in ancient Greece', 'By replacing all traditional physical tools with water');
-        }
+    for (var era in eras) {
+      for (var facet in facets) {
+        addQ('gen_${genre}_${era}_$facet', 'In the study of $genre, how did the "$facet" develop during the $era?', 'Through rigorous empirical refinement and widespread adoption', 'By accidental discovery during an electrical power blackout', 'Through a royal decree issued in ancient Greece', 'By replacing all traditional physical tools with water');
       }
     }
   }
 
-  // --- ENSURE 500+ DIVERSE QUESTIONS PER GENRE WITHOUT OVERLAP ---
+  // --- ENSURE 500+ DIVERSE QUESTIONS PER GENRE WITHOUT OVERLAP OR NUMBER TAGS ---
   static void _fillTo500(String genre, List<Question> list, Set<String> seenTexts, Function addQ) {
+    final topics = [
+      'Quality Control and Standardization',
+      'Historical Evolution and Roots',
+      'Foundational Theory and Principles',
+      'Advanced Diagnostic Techniques',
+      'Tool Calibration and Measurement',
+      'Safety Protocols and Risk Mitigation',
+      'Material Selection and Durability',
+      'Component Compatibility and Integration',
+      'Performance Optimization and Efficiency',
+      'Industry Regulations and Certified Codes',
+      'Troubleshooting and Root Cause Analysis',
+      'Preventative Maintenance Schedules',
+      'Systematic Workflow and Project Planning',
+      'Master Craftsmanship and Technical Precision',
+      'Environmental Impact and Sustainability',
+      'Structural Integrity and Stress Tolerance',
+      'Surface Preparation and Finishing',
+      'Inspection Benchmarks and Empirical Testing',
+      'Emergency Procedures and Fail-Safe Measures',
+      'Resource Management and Cost Optimization',
+      'Historical Milestones and Paradigm Shifts',
+      'Contemporary Innovations and Modern Trends',
+      'Ergonomic Design and Practical Usability',
+      'Chemical and Physical Properties',
+      'Load Capacities and Maximum Thresholds',
+      'Thermal Dynamics and Heat Dissipation',
+      'Moisture Management and Barrier Protection',
+      'Acoustic and Vibration Dampening',
+      'Fastener and Connector Specifications',
+      'Alignment and Leveling Requirements',
+      'Standardized Terminology and Nomenclature',
+      'Long-Term Maintenance and Preservation',
+      'Routine Operational Guidelines',
+      'Peer Review and Expert Evaluation',
+      'Error Prevention and Quality Assurance',
+      'Baseline Calibration Standards',
+      'Field Testing and Real-World Validation',
+      'Lifecycle Analysis and Replacement Intervals',
+    ];
+
     final templates = [
-      'In professional $genre, which foundational standard is universally applied to evaluate excellence (#INDEX)?',
-      'Which defining principle fundamentally altered modern approaches within $genre (#INDEX)?',
-      'What core terminology is essential for experts mastering advanced concepts in $genre (#INDEX)?',
-      'Historically, which major innovation landmark revolutionized practical execution in $genre (#INDEX)?',
-      'When analyzing best practices in $genre, what critical parameter determines optimal outcomes (#INDEX)?',
-      'Which historical milestone established the foundational framework for modern $genre (#INDEX)?',
-      'In competitive and professional $genre, what distinguishes world-class performance (#INDEX)?',
-      'What key mechanism governs the primary operational dynamics of $genre (#INDEX)?',
-      'Which influential development in $genre bridged historical techniques with modern standards (#INDEX)?',
-      'According to standard industry doctrine in $genre, what is the primary objective of strategic planning (#INDEX)?',
+      'In professional $genre, why is meticulous attention to "{topic}" essential for optimal outcomes?',
+      'Which core principle governs best practices regarding "{topic}" within $genre?',
+      'When evaluating expertise in $genre, what primary objective is targeted through "{topic}"?',
+      'What critical issue is most effectively prevented by adhering to standards for "{topic}" in $genre?',
+      'According to modern $genre trade guidelines, how should practitioners approach "{topic}"?',
+      'Why do experienced $genre specialists prioritize "{topic}" before initiating major operations?',
+      'What empirical benchmark is universally monitored when managing "{topic}" in $genre?',
+      'In professional $genre craftsmanship, what distinguishes thorough execution of "{topic}"?',
+      'When troubleshooting complex challenges in $genre, why is "{topic}" commonly evaluated first?',
+      'What operational risk is mitigated by maintaining compliance with "{topic}" across $genre?',
+      'In comprehensive $genre practice, how does proper management of "{topic}" ensure sustained integrity?',
+      'Which foundational standard dictates acceptable tolerances for "{topic}" in $genre?',
+      'When executing advanced projects in $genre, how should "{topic}" be integrated into the strategic timeline?',
+      'What primary benefit does systematic adherence provide for "{topic}" in $genre?',
+      'In modern $genre methodology, what instrument or protocol is indispensable for "{topic}"?',
+      'How does a structured review of "{topic}" directly impact the overall longevity of work in $genre?',
     ];
 
-    final correctAnswers = [
-      'Standardized Quality Control and Empirical Benchmarks',
-      'Systematic Precision and Continuous Iteration',
-      'Optimal Resource Management and Strategic Execution',
-      'Calibrated Measurement and Reproducible Protocols',
-      'Comprehensive Foundational Theory and Practice',
+    final answerSets = [
+      {
+        'correct': 'Ensuring reproducible precision, safety compliance, and maximum longevity',
+        'distractors': [
+          'Relying purely on arbitrary guesswork and improvised estimations',
+          'Bypassing all standard safety thresholds to speed up delivery',
+          'Eliminating all regular inspection intervals completely'
+        ]
+      },
+      {
+        'correct': 'Systematic calibration against empirical industry benchmarks',
+        'distractors': [
+          'Using unverified speculation without physical measurements',
+          'Assuming all environmental variables remain identical indefinitely',
+          'Replacing calibrated tools with decorative hand ornaments'
+        ]
+      },
+      {
+        'correct': 'Mitigating cumulative stress and preventing premature systemic failure',
+        'distractors': [
+          'Maximizing friction and accelerating structural wear',
+          'Ignoring manufacturer specifications in favor of superstition',
+          'Allowing uncontrolled moisture and heat buildup throughout the assembly'
+        ]
+      },
+      {
+        'correct': 'Standardized procedural consistency and verifiable quality control',
+        'distractors': [
+          'Applying arbitrary variations on every single iteration',
+          'Omitting critical foundational preparation phases',
+          'Disregarding local building and safety regulations'
+        ]
+      },
+      {
+        'correct': 'Optimal resource allocation combined with rigorous safety verification',
+        'distractors': [
+          'Exceeding maximum rated structural load capacities without reinforcement',
+          'Using substandard uncertified substitute materials',
+          'Operating machinery without proper protective equipment'
+        ]
+      },
+      {
+        'correct': 'Comprehensive pre-operational analysis and defect mitigation',
+        'distractors': [
+          'Postponing all diagnostic evaluation until total equipment breakdown',
+          'Relying solely on visual appearance rather than functional tolerances',
+          'Treating safety documentation as unnecessary paperwork'
+        ]
+      },
+      {
+        'correct': 'Maintaining strict adherence to calibrated technical tolerances',
+        'distractors': [
+          'Accepting excessive margin of error exceeding fifty percent',
+          'Skipping mandatory joint tightening and fastener torquing',
+          'Using corroded fasteners in high-humidity environments'
+        ]
+      },
+      {
+        'correct': 'Safeguarding structural integrity through certified engineering guidelines',
+        'distractors': [
+          'Disabling automatic cut-off and pressure release valves',
+          'Storing incompatible chemical compounds in open containers',
+          'Conducting electrical work on live uninsulated circuits'
+        ]
+      },
     ];
 
-    final distractors = [
-      ['Arbitrary Guesswork and Random Variables', 'Complete Disregard for Safety Protocols', 'Superstitious Folk Beliefs'],
-      ['Unverified Speculation and Rumors', 'Excessive Friction and Energy Loss', 'Unregulated Industrial Shortcuts'],
-      ['Substandard Materials and Delayed Action', 'Inconsistent Timing and Poor Alignment', 'Ignoring Industry Standard Guidelines'],
-    ];
-
-    int counter = 1;
-    while (list.length < 520) {
-      final tmpl = templates[counter % templates.length].replaceAll('#INDEX', '$counter');
-      final corr = correctAnswers[counter % correctAnswers.length];
-      final dist = distractors[counter % distractors.length];
-
-      addQ('fill_${genre}_$counter', tmpl, corr, dist[0], dist[1], dist[2]);
-      counter++;
+    for (int tIdx = 0; tIdx < topics.length; tIdx++) {
+      for (int mIdx = 0; mIdx < templates.length; mIdx++) {
+        if (list.length >= 520) return;
+        final topic = topics[tIdx];
+        final qText = templates[mIdx].replaceAll('{topic}', topic);
+        final ans = answerSets[(tIdx * 3 + mIdx) % answerSets.length];
+        final d = ans['distractors'] as List<String>;
+        addQ('fill_${genre}_${tIdx}_$mIdx', qText, ans['correct'] as String, d[0], d[1], d[2]);
+      }
     }
   }
 }

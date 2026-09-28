@@ -10,6 +10,7 @@ import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
 import '../../shared/data/homebrewing_database.dart';
 import '../../shared/data/genre_questions_engine.dart';
+import '../../shared/data/trivia_genres.dart';
 import '../../shared/services/realtime_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
@@ -38,6 +39,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _totalDuration = 60;
   int _questionIndex = 1;
   int _totalQuestionsInRound = 10;
+  int _currentRound = 1;
   Timer? _timer;
   bool _isGameActive = false;
   bool _isTimerExpired = false;
@@ -51,7 +53,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _preGameTimer;
 
   bool _isInterQuestionPhase = false;
-  int _interQuestionSecondsRemaining = 30;
+  int _interQuestionSecondsRemaining = 15;
+  int _totalInterQuestionDuration = 15;
+  int _interQuestionTargetEpochMs = 0;
   Timer? _interQuestionTimer;
   String _gamePlayMode = 'Auto';
 
@@ -235,7 +239,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             if (qData != null) {
               final q = Question.fromJson(qData);
               final dur = res['duration_seconds'] as int? ?? 20;
-              final qIdx = res['current_question_index'] as int? ?? 1;
+              final rawQ = res['current_question_index'] as int? ?? 1;
+              const totalQ = 10;
+              final qIdx = ((rawQ - 1) % totalQ) + 1;
+              final roundNum = ((rawQ - 1) ~/ totalQ) + 1;
               final cat = qData['category']?.toString() ?? res['category']?.toString();
               _interQuestionTimer?.cancel();
               setState(() {
@@ -244,7 +251,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 _totalDuration = dur;
                 _remainingSeconds = dur;
                 _questionIndex = qIdx;
-                _totalQuestionsInRound = 10;
+                _currentRound = roundNum;
+                _totalQuestionsInRound = totalQ;
                 _isGameActive = true;
                 _isPreGameCountdown = false;
                 _isTimerExpired = false;
@@ -280,6 +288,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final incomingGenre = payload['genre']?.toString() ??
             payload['current_genre']?.toString() ??
             payload['category']?.toString();
+        final rNum = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt();
 
         setState(() {
           _isPreGameCountdown = true;
@@ -289,6 +299,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _isInterQuestionPhase = false;
           _currentQuestion = null; // Stale question flushed
           _questionIndex = 0;
+          if (rNum != null) {
+            _currentRound = rNum;
+          }
           if (incomingGenre != null && incomingGenre.isNotEmpty) {
             _activeGenre = incomingGenre;
           }
@@ -298,8 +311,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       },
       onQuestionBroadcast: (payload) async {
         final duration = (payload['duration_seconds'] as num?)?.toInt() ?? 20;
-        final qIdx = (payload['question_index'] as num?)?.toInt() ?? 1;
-        final totalQ = (payload['total_questions'] as num?)?.toInt() ?? 10;
+        final rawQIdx = (payload['question_number_in_round'] as num?)?.toInt() ??
+            (payload['question_index'] as num?)?.toInt() ?? 1;
+        final totalQ = (payload['total_questions'] as num?)?.toInt() ??
+            (payload['total_questions_in_round'] as num?)?.toInt() ?? 10;
+        final roundNum = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt() ??
+            (((rawQIdx - 1) ~/ totalQ) + 1);
+        final qInRound = ((rawQIdx - 1) % totalQ) + 1;
         final cat = payload['category']?.toString() ?? payload['genre']?.toString();
         if (cat != null && cat.isNotEmpty) {
           _activeGenre = cat;
@@ -321,7 +340,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
         if (question == null) {
           final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-          question = fallbackList[(qIdx - 1) % fallbackList.length];
+          question = fallbackList[(qInRound - 1) % fallbackList.length];
         }
 
         if (mounted) {
@@ -332,12 +351,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _currentQuestion = question;
             _totalDuration = duration;
             _remainingSeconds = duration;
-            _questionIndex = qIdx;
+            _questionIndex = qInRound;
+            _currentRound = roundNum;
             _totalQuestionsInRound = totalQ;
             _isGameActive = true;
             _isPreGameCountdown = false;
             _isTimerExpired = false;
             _isInterQuestionPhase = false;
+            _showRoundWinnersOverlay = false;
           });
           _startTimer();
         }
@@ -419,11 +440,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
       },
       onRoundCompletedBroadcast: (payload) {
-        final winners = payload['top_3_winners'] as List?;
+        final winners = payload['top_3_winners'] as List? ??
+            payload['top3_winners'] as List? ??
+            payload['top3Winners'] as List?;
+        final rNum = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt();
         if (mounted && winners != null) {
+          _timer?.cancel();
+          _interQuestionTimer?.cancel();
           setState(() {
             _top3Winners = List<Map<String, dynamic>>.from(winners);
             _showRoundWinnersOverlay = true;
+            _isInterQuestionPhase = false;
+            _interQuestionSecondsRemaining = 0;
+            _questionIndex = 0;
+            if (rNum != null) {
+              _currentRound = rNum;
+            }
           });
           Future.delayed(const Duration(seconds: 12), () {
             if (mounted) {
@@ -520,11 +553,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _interQuestionTimer?.cancel();
 
     final mode = payload?['game_play_mode'] as String? ?? 'Auto';
-    final nextStartsAt = payload?['next_question_starts_at_epoch_ms'] as int?;
+    final nextStartsAt = (payload?['next_question_starts_at_epoch_ms'] as int?) ??
+        (payload?['nextQuestionStartsAtEpochMs'] as int?) ??
+        (DateTime.now().millisecondsSinceEpoch + 15000);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final remaining = nextStartsAt != null
-        ? ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 30)
-        : 30;
+    final remaining = ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 15);
+
+    // If TV ended timer locally (payload was null), broadcast timer_expired so player screens immediately sync!
+    if (payload == null) {
+      _realtimeService.broadcastTimerExpired(
+        roomCode: _displayRoomCode,
+        correctOption: _currentQuestion?.correctOption,
+        nextQuestionStartsAtEpochMs: nextStartsAt,
+        gamePlayMode: mode,
+      );
+    }
 
     if (mounted) {
       setState(() {
@@ -532,16 +575,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _remainingSeconds = 0;
         _isInterQuestionPhase = true;
         _interQuestionSecondsRemaining = remaining;
+        _totalInterQuestionDuration = remaining;
+        _interQuestionTargetEpochMs = nextStartsAt;
         _gamePlayMode = mode;
       });
     }
 
     if (mode == 'Auto') {
-      _interQuestionTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (_interQuestionSecondsRemaining > 1) {
-          if (mounted) {
+      _interQuestionTimer = Timer.periodic(const Duration(milliseconds: 500), (t) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final rem = ((_interQuestionTargetEpochMs - now) / 1000).ceil();
+        if (rem > 0) {
+          if (mounted && _interQuestionSecondsRemaining != rem) {
             setState(() {
-              _interQuestionSecondsRemaining--;
+              _interQuestionSecondsRemaining = rem;
             });
           }
         } else {
@@ -549,12 +596,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           if (mounted) {
             setState(() {
               _isInterQuestionPhase = false;
+              _interQuestionSecondsRemaining = 0;
             });
             _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
 
             // Autonomous Safety Net: If host engine drops or lags, TV auto-advances question
-            Timer(const Duration(seconds: 3), () {
-              if (mounted && _isGameActive && !_isInterQuestionPhase && _remainingSeconds == 0) {
+            Timer(const Duration(seconds: 2), () {
+              if (mounted && _isGameActive && !_isInterQuestionPhase && _remainingSeconds == 0 && !_showRoundWinnersOverlay) {
                 _advanceNextQuestionAutonomously();
               }
             });
@@ -566,8 +614,67 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     await _loadLeaderboard();
   }
 
+  void _completeRoundAutonomously() async {
+    if (!mounted) return;
+
+    _timer?.cancel();
+    _interQuestionTimer?.cancel();
+
+    // Determine top 3 players
+    final sorted = List<Player>.from(_leaderboard)
+      ..sort((a, b) => b.score.compareTo(a.score));
+    final winners = sorted.take(3).map((p) => {
+      'nickname': p.nickname,
+      'score': p.score,
+    }).toList();
+
+    final allGenres = TriviaGenres.allGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)').toList();
+    final currIdx = allGenres.indexOf(_activeGenre);
+    final nextGenre = allGenres[(currIdx + 1) % allGenres.length];
+    final nextRound = _currentRound + 1;
+    final nextStartsAt = DateTime.now().millisecondsSinceEpoch + 15000;
+
+    setState(() {
+      _isGameActive = false;
+      _isInterQuestionPhase = false;
+      _interQuestionSecondsRemaining = 0;
+      _top3Winners = winners;
+      _showRoundWinnersOverlay = true;
+      _questionIndex = 0;
+      _currentRound = nextRound;
+      _activeGenre = nextGenre;
+    });
+
+    try {
+      await _realtimeService.broadcastRoundCompleted(
+        roomCode: _displayRoomCode,
+        top3Winners: winners,
+        roundNumber: nextRound,
+        nextRoundStartsAtEpochMs: nextStartsAt,
+      );
+    } catch (e) {
+      debugPrint('[TV] Autocomplete round broadcast error: $e');
+    }
+
+    Timer(const Duration(seconds: 12), () {
+      if (mounted) {
+        setState(() {
+          _showRoundWinnersOverlay = false;
+          _isPreGameCountdown = true;
+          _preGameSeconds = 5;
+        });
+        _startPreGameTimer();
+      }
+    });
+  }
+
   void _advanceNextQuestionAutonomously() async {
-    if (!mounted || !_isGameActive) return;
+    if (!mounted || !_isGameActive || _showRoundWinnersOverlay) return;
+
+    if (_questionIndex > 0 && _questionIndex % _totalQuestionsInRound == 0) {
+      _completeRoundAutonomously();
+      return;
+    }
 
     final nextIndex = _questionIndex + 1;
     debugPrint('[TV] Safety Net: Autonomously advancing to Question $nextIndex');
@@ -638,50 +745,57 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             child: Stack(
           children: [
             Container(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
               child: Column(
                 children: [
                   // Top Centered Header Bar with Exit to Hub & QR Settings
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                        tooltip: 'Return to Hub',
-                        onPressed: () => context.go('/hub'),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.asset(
-                              'assets/images/app_logo.png',
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
+                  SizedBox(
+                    height: 42,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
+                          tooltip: 'Return to Hub',
+                          onPressed: () => context.go('/hub'),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.asset(
+                                'assets/images/app_logo.png',
+                                width: 32,
+                                height: 32,
+                                fit: BoxFit.cover,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'BAR ROOMS TRIVIA',
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2.0,
-                              color: Colors.white,
+                            const SizedBox(width: 10),
+                            const Text(
+                              'BAR ROOMS TRIVIA',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2.0,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.settings, color: AppTheme.neonCyan),
-                        tooltip: 'QR & Player URL Settings',
-                        onPressed: _showEditPlayerUrlDialog,
-                      ),
-                    ],
+                          ],
+                        ),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.settings, color: AppTheme.neonCyan, size: 24),
+                          tooltip: 'QR & Player URL Settings',
+                          onPressed: _showEditPlayerUrlDialog,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 10),
 
                   // Main TV Stage Grid: Live Round / Paused / Resuming OR Pre-Game Countdown OR Official 4-Page Advertisement Carousel
                   Expanded(
@@ -1334,7 +1448,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         Expanded(
           flex: 65,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+            padding: const EdgeInsets.only(left: 24, right: 24, top: 10, bottom: 14),
             decoration: BoxDecoration(
               color: AppTheme.cardSurface,
               borderRadius: BorderRadius.circular(24),
@@ -1347,10 +1461,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppTheme.neonPurple.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppTheme.neonPurple),
                       ),
                       child: Text(
@@ -1358,7 +1472,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         style: const TextStyle(
                           color: AppTheme.neonPurple,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ),
@@ -1405,8 +1519,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         ),
                       ),
                     TimerRing(
+                      size: 58,
                       progress: _isInterQuestionPhase
-                          ? (_interQuestionSecondsRemaining / 30.0).clamp(0.0, 1.0)
+                          ? (_interQuestionSecondsRemaining / (_totalInterQuestionDuration > 0 ? _totalInterQuestionDuration : 15.0)).clamp(0.0, 1.0)
                           : progress,
                       remainingSeconds: _isInterQuestionPhase
                           ? _interQuestionSecondsRemaining
@@ -1418,58 +1533,61 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
                 Expanded(
-                  child: Align(
-                    alignment: const Alignment(0, -0.65),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Question $_questionIndex out of $_totalQuestionsInRound',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.neonCyan,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 950),
-                          child: Text(
-                            _currentQuestion?.questionText ??
-                                '🚀 GET READY! QUESTION $_questionIndex IS STARTING...',
-                            textAlign: TextAlign.center,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              height: 1.22,
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 950),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'ROUND $_currentRound • QUESTION ${_questionIndex > 0 ? (((_questionIndex - 1) % _totalQuestionsInRound) + 1) : 1} OUT OF $_totalQuestionsInRound',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.neonCyan,
+                                letterSpacing: 1.2,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _currentQuestion?.questionText ??
+                                  '🚀 GET READY! QUESTION ${_questionIndex > 0 ? (((_questionIndex - 1) % _totalQuestionsInRound) + 1) : 1} IS STARTING...',
+                              textAlign: TextAlign.center,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 if (_currentQuestion != null) ...[
                   Row(
                     children: [
                       Expanded(child: _buildOptionTile('A', _currentQuestion!.optionA, AppTheme.buttonA)),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(child: _buildOptionTile('B', _currentQuestion!.optionB, AppTheme.buttonB)),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(child: _buildOptionTile('C', _currentQuestion!.optionC, AppTheme.buttonC)),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(child: _buildOptionTile('D', _currentQuestion!.optionD, AppTheme.buttonD)),
                     ],
                   ),
@@ -1478,7 +1596,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ),
           ),
         ),
-        const SizedBox(width: 24),
+        const SizedBox(width: 20),
 
         Expanded(
           flex: 35,
@@ -1521,7 +1639,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: tileBg,
         borderRadius: BorderRadius.circular(16),
@@ -1539,7 +1657,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
             decoration: BoxDecoration(
               color: showCorrect ? const Color(0xFF10B981) : color,
               borderRadius: BorderRadius.circular(8),
@@ -1549,16 +1667,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               style: const TextStyle(
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: 16,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: showCorrect ? FontWeight.bold : FontWeight.w600,
                 color: Colors.white,
               ),
@@ -1568,25 +1686,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           if (showCorrect) ...[
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFF10B981),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Removed check icon
-                  Text(
-                    'CORRECT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
+              child: const Text(
+                'CORRECT',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                ),
               ),
             ),
           ],

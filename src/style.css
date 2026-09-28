@@ -689,7 +689,7 @@ body[data-view="player"] .logo-container {
 .tv-stage {
   background-color: var(--surface-card);
   border-radius: 24px;
-  padding: 36px;
+  padding: 14px 28px 22px 28px;
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -699,7 +699,7 @@ body[data-view="player"] .logo-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .tv-pills-row {
@@ -712,10 +712,10 @@ body[data-view="player"] .logo-container {
   background-color: rgba(124, 77, 255, 0.2);
   color: var(--accent-purple);
   border: 1.5px solid var(--accent-purple);
-  padding: 6px 16px;
-  border-radius: 14px;
+  padding: 4px 14px;
+  border-radius: 12px;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 1px;
 }
 
@@ -807,7 +807,7 @@ body[data-view="player"] .logo-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 12px auto;
+  margin: 0 auto 6px auto;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -821,14 +821,14 @@ body[data-view="player"] .logo-container {
 }
 
 .genre-big-icon {
-  font-size: 68px;
-  filter: drop-shadow(0 6px 16px rgba(0, 229, 255, 0.45));
+  font-size: 30px;
+  filter: drop-shadow(0 4px 12px rgba(0, 229, 255, 0.4));
 }
 
 .timer-ring-wrapper {
   position: relative;
-  width: 90px;
-  height: 90px;
+  width: 58px;
+  height: 58px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -843,13 +843,13 @@ body[data-view="player"] .logo-container {
 .timer-bg {
   fill: none;
   stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 8;
+  stroke-width: 7;
 }
 
 .timer-stroke {
   fill: none;
   stroke: var(--accent-cyan);
-  stroke-width: 8;
+  stroke-width: 7;
   stroke-dasharray: 264;
   stroke-dashoffset: 0;
   transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
@@ -865,16 +865,16 @@ body[data-view="player"] .logo-container {
 
 .timer-number {
   font-family: var(--font-heading);
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 900;
   color: var(--accent-cyan);
   line-height: 1;
 }
 
 .timer-label {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: var(--text-muted);
 }
 
@@ -883,22 +883,32 @@ body[data-view="player"] .logo-container {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   text-align: center;
-  margin: 8px 0 16px 0;
+  margin: 2px 0 6px 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .question-headline {
   font-family: var(--font-heading);
-  font-size: 34px;
+  font-size: clamp(20px, 3.6vh, 28px);
   font-weight: 800;
-  line-height: 1.35;
+  line-height: 1.25;
   color: white;
+  max-width: 94%;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 12px;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .option-tile {
@@ -1539,6 +1549,24 @@ body[data-view="player"] .logo-container {
 
 .btn-answer.review-correct .btn-lbl, .btn-answer.review-correct .btn-text {
   color: black !important;
+}
+
+.player-correct-badge {
+  background-color: rgba(0, 0, 0, 0.85);
+  color: var(--accent-green);
+  border: 1.5px solid var(--accent-green);
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.5);
+  animation: pulseCorrectBadge 1s infinite alternate;
 }
 
 .btn-answer.review-wrong {
