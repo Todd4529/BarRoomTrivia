@@ -261,17 +261,36 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
+  void _exitToTvDisplay() {
+    if (mounted) {
+      context.go('/tv?room=$_userCode');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
 
-    return Scaffold(
-      backgroundColor: AppTheme.darkBackground,
-      body: SafeArea(
-        child: _isAuthorized
-            ? _buildAuthorizedCelebration()
-            : (isLandscape ? _buildLandscapeTvLayout() : _buildPortraitLayout()),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _exitToTvDisplay();
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): _exitToTvDisplay,
+          const SingleActivator(LogicalKeyboardKey.goBack): _exitToTvDisplay,
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.darkBackground,
+          body: SafeArea(
+            child: _isAuthorized
+                ? _buildAuthorizedCelebration()
+                : (isLandscape ? _buildLandscapeTvLayout() : _buildPortraitLayout()),
+          ),
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/models/game_session.dart';
 import '../../shared/services/game_engine.dart';
 import '../../shared/services/realtime_service.dart';
@@ -23,6 +24,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   final RealtimeService _realtimeService = RealtimeService();
 
   GameSession? _activeSession;
+  String _targetRoomCode = 'TRIV';
   bool _isCreatingSession = false;
   bool _isEngineRunning = false;
   bool _isGamePaused = false;
@@ -48,6 +50,28 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   final List<int> _availableTimerDurations = [10, 15, 20, 30, 45, 60, 90, 120, 180];
   late final PageController _timerPageController;
 
+  void _exitToTvDisplay() {
+    if (!mounted) return;
+    final room = _activeSession?.roomCode ?? _targetRoomCode;
+    context.go('/tv?room=$room');
+  }
+
+  void _navigateToTvGameMode({String? roomCode}) {
+    if (!mounted) return;
+    final room = roomCode ?? _activeSession?.roomCode ?? _targetRoomCode;
+    context.go('/tv?room=$room&auto_start=true');
+  }
+
+  Future<void> _loadRoomCode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('tv_room_code');
+      if (saved != null && saved.isNotEmpty && mounted) {
+        setState(() => _targetRoomCode = saved);
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,8 +81,23 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       initialPage: initialIndex >= 0 ? initialIndex : 5,
     );
 
+    _loadRoomCode().then((_) {
+      if (!mounted) return;
+      _subscribeToRealtime();
+    });
+
+    // Auto-create room session & seed 15 mock players immediately on load
+    _createNewSession();
+    SupabaseService.seedMockPlayers(roomCode: 'TRIV', count: 15);
+  }
+
+  void _subscribeToRealtime() {
     _realtimeService.joinRoomChannel(
-      roomCode: 'TRIV',
+      roomCode: _targetRoomCode,
+      onPreGameCountdownBroadcast: (payload) {
+        final room = payload['room_code']?.toString() ?? _targetRoomCode;
+        _navigateToTvGameMode(roomCode: room);
+      },
       onQuestionBroadcast: (payload) {
         final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
         final qIndex = payload['question_index'] as int?;
@@ -70,6 +109,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
         if (timerEndsAtEpochMs != null && mounted) {
           _startQuestionCountdown(timerEndsAtEpochMs);
         }
+        final room = payload['room_code']?.toString() ?? _targetRoomCode;
+        _navigateToTvGameMode(roomCode: room);
       },
       onTimerExpiredBroadcast: (_) {
         if (mounted) {
@@ -94,10 +135,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
         }
       },
     );
-
-    // Auto-create room session & seed 15 mock players immediately on load
-    _createNewSession();
-    SupabaseService.seedMockPlayers(roomCode: 'TRIV', count: 15);
   }
 
   @override
@@ -139,8 +176,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       _isCreatingSession = true;
     });
 
+    final roomCode = _targetRoomCode.isNotEmpty ? _targetRoomCode : 'TRIV';
     try {
-      const roomCode = 'TRIV';
       final session = await _supabaseService.createRoomSession(roomCode);
 
       setState(() {
@@ -152,7 +189,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       setState(() {
         _activeSession = GameSession(
           id: 'dev-session-id',
-          roomCode: 'TRIV',
+          roomCode: roomCode,
           status: 'active',
           questionIndex: 0,
           createdAt: DateTime.now(),
@@ -170,10 +207,14 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     final engine = GameEngineManager.instance;
     if (_isGamePaused || engine.isGamePaused) {
       _resumeGameEngine();
+      _navigateToTvGameMode();
       return;
     }
 
-    if (engine.isEngineRunning || engine.isPreGameCountdownActive) return;
+    if (engine.isEngineRunning || engine.isPreGameCountdownActive) {
+      _navigateToTvGameMode();
+      return;
+    }
 
     engine.startPreGame(
       roomCode: _activeSession!.roomCode,
@@ -182,6 +223,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     );
 
     _startPreGameTimer();
+
+    // Automatically transition TV to the game mode view
+    _navigateToTvGameMode();
   }
 
   void _startPreGameTimer() {
@@ -476,18 +520,12 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        if (context.mounted) {
-          context.go('/hub');
-        }
+        _exitToTvDisplay();
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () {
-            if (context.mounted) context.go('/hub');
-          },
-          const SingleActivator(LogicalKeyboardKey.goBack): () {
-            if (context.mounted) context.go('/hub');
-          },
+          const SingleActivator(LogicalKeyboardKey.escape): _exitToTvDisplay,
+          const SingleActivator(LogicalKeyboardKey.goBack): _exitToTvDisplay,
         },
         child: Scaffold(
           backgroundColor: AppTheme.darkBackground,
@@ -497,10 +535,17 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             centerTitle: true,
             toolbarHeight: 68,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
-              tooltip: 'Return to Hub',
-              onPressed: () => context.go('/hub'),
+              icon: const Icon(Icons.tv, color: AppTheme.neonCyan),
+              tooltip: 'Return to TV Display',
+              onPressed: _exitToTvDisplay,
             ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.home_outlined, color: Colors.white70),
+                tooltip: 'Main Hub',
+                onPressed: () => context.go('/hub'),
+              ),
+            ],
             title: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,

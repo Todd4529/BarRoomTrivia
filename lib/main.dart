@@ -15,6 +15,7 @@ import 'auth/auth_page.dart';
 import 'auth/reset_password_page.dart';
 import 'auth/tv_auth_verify_view.dart';
 import 'auth/tv_qr_auth_view.dart';
+import 'shared/services/realtime_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -205,81 +206,189 @@ class _BarRoomTriviaAppState extends State<BarRoomTriviaApp> {
 }
 
 /// Navigation Landing Hub for Target Module Selection
-class MainNavigationHub extends StatelessWidget {
+class MainNavigationHub extends StatefulWidget {
   const MainNavigationHub({super.key});
 
   @override
+  State<MainNavigationHub> createState() => _MainNavigationHubState();
+}
+
+class _MainNavigationHubState extends State<MainNavigationHub> {
+  final RealtimeService _realtimeService = RealtimeService();
+  String _targetRoomCode = 'TRIV';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoomAndSubscribe();
+  }
+
+  Future<void> _loadRoomAndSubscribe() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('tv_room_code');
+      if (saved != null && saved.isNotEmpty && mounted) {
+        setState(() => _targetRoomCode = saved);
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    _realtimeService.joinRoomChannel(
+      roomCode: _targetRoomCode,
+      onPreGameCountdownBroadcast: (payload) {
+        final room = payload['room_code']?.toString() ?? _targetRoomCode;
+        if (mounted) {
+          context.go('/tv?room=$room&auto_start=true');
+        }
+      },
+      onQuestionBroadcast: (payload) {
+        final room = payload['room_code']?.toString() ?? _targetRoomCode;
+        if (mounted) {
+          context.go('/tv?room=$room&auto_start=true');
+        }
+      },
+      onTimerExpiredBroadcast: (_) {},
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeService.leaveChannel();
+    super.dispose();
+  }
+
+  void _handleBackPress() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
+        ),
+        title: const Text(
+          'Bar Rooms Trivia',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Return to the TV game display or exit the application?',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton.icon(
+            autofocus: true,
+            icon: const Icon(Icons.tv, size: 18),
+            label: const Text('TV DISPLAY'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              if (mounted) context.go('/tv?room=$_targetRoomCode');
+            },
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              SystemNavigator.pop();
+            },
+            child: const Text('EXIT APP', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.darkBackground,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonCyan.withOpacity(0.15),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.asset(
-                    'assets/images/app_logo.png',
-                    width: 140,
-                    height: 140,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 3.0,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 48),
-              Wrap(
-                spacing: 24,
-                runSpacing: 24,
-                alignment: WrapAlignment.center,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackPress();
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): _handleBackPress,
+          const SingleActivator(LogicalKeyboardKey.goBack): _handleBackPress,
+        },
+        child: Scaffold(
+          backgroundColor: AppTheme.darkBackground,
+          body: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  FocusableTargetCard(
-                    title: 'BAR TV DISPLAY',
-                    icon: Icons.tv,
-                    color: AppTheme.neonCyan,
-                    autofocus: true,
-                    onTap: () => context.go('/tv?room=TRIV'),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.neonCyan.withOpacity(0.15),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 140,
+                        height: 140,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
-                  FocusableTargetCard(
-                    title: 'HOST CONTROL PANEL',
-                    icon: Icons.dashboard,
-                    color: AppTheme.neonPurple,
-                    autofocus: false,
-                    onTap: () => context.go('/host'),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'BAR ROOMS TRIVIA',
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3.0,
+                      color: Colors.white,
+                    ),
                   ),
-                  FocusableTargetCard(
-                    title: 'PHONE QR PAIRING',
-                    icon: Icons.qr_code_scanner_rounded,
-                    color: AppTheme.neonYellow,
-                    autofocus: false,
-                    onTap: () => context.go('/tv-qr-auth'),
+                  const SizedBox(height: 48),
+                  Wrap(
+                    spacing: 24,
+                    runSpacing: 24,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      FocusableTargetCard(
+                        title: 'BAR TV DISPLAY',
+                        icon: Icons.tv,
+                        color: AppTheme.neonCyan,
+                        autofocus: true,
+                        onTap: () => context.go('/tv?room=$_targetRoomCode'),
+                      ),
+                      FocusableTargetCard(
+                        title: 'HOST CONTROL PANEL',
+                        icon: Icons.dashboard,
+                        color: AppTheme.neonPurple,
+                        autofocus: false,
+                        onTap: () => context.go('/host'),
+                      ),
+                      FocusableTargetCard(
+                        title: 'PHONE QR PAIRING',
+                        icon: Icons.qr_code_scanner_rounded,
+                        color: AppTheme.neonYellow,
+                        autofocus: false,
+                        onTap: () => context.go('/tv-qr-auth'),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
