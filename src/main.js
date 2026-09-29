@@ -4,6 +4,14 @@ import mqtt from 'mqtt';
 import { createClient } from '@supabase/supabase-js';
 import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
 
+// Global error handler — prevents blank screen on mobile by logging errors
+window.addEventListener('error', (e) => {
+  console.error('[App Error]', e.message, e.filename, e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.warn('[Unhandled Promise]', e.reason);
+});
+
 const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -12,7 +20,13 @@ let mqttClient = null;
 
 // State & Broadcast Channel
 const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
-const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+let channel;
+try {
+  channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+} catch (e) {
+  // Fallback for environments where BroadcastChannel is unavailable
+  channel = { postMessage: () => {}, onmessage: null, close: () => {} };
+}
 
 const initialUrlParams = new URLSearchParams(window.location.search);
 const urlRoomCode = initialUrlParams.get('room') || initialUrlParams.get('room_id') || initialUrlParams.get('user_code');
@@ -490,7 +504,8 @@ function switchView(viewName) {
     const isTarget = (panel.id === `view-${viewName}`);
     if (isTarget) {
       panel.classList.add('active');
-      panel.style.display = 'block';
+      // Auth panel uses flex layout; others use block
+      panel.style.display = (panel.id === 'view-auth') ? 'flex' : 'block';
     } else {
       panel.classList.remove('active');
       panel.style.display = 'none';

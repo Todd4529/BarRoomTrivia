@@ -110,84 +110,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     return '$cleanBase/?view=player&room=$_displayRoomCode';
   }
 
-  void _showEditPlayerUrlDialog() {
-    final controller = TextEditingController(text: _playerBaseUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.cardSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppTheme.neonCyan, width: 2),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.qr_code, color: AppTheme.neonCyan),
-            SizedBox(width: 10),
-            Text(
-              'Player Web URL & QR Settings',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter the web link players will open when scanning the TV QR code with their mobile phones:',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Player Base URL',
-                labelStyle: const TextStyle(color: AppTheme.neonCyan),
-                hintText: 'https://todd4529.github.io/BarRoomTrivia',
-                hintStyle: const TextStyle(color: Colors.white30),
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppTheme.neonCyan, width: 2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Sample QR URL: ${controller.text}/?view=player&room=${widget.roomCode}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonCyan,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () async {
-              final newUrl = controller.text.trim();
-              if (newUrl.isNotEmpty) {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('player_base_url', newUrl);
-                if (mounted) setState(() => _playerBaseUrl = newUrl);
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Save & Update QR', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _startAdSlideTimer() {
     _adSlideTimer?.cancel();
@@ -785,13 +707,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             ),
                           ],
                         ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.settings, color: AppTheme.neonCyan, size: 24),
-                          tooltip: 'QR & Player URL Settings',
-                          onPressed: _showEditPlayerUrlDialog,
-                        ),
+                        // Placeholder to keep logo centered with spaceBetween
+                        const SizedBox(width: 24),
                       ],
                     ),
                   ),
