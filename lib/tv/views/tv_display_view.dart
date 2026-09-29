@@ -64,7 +64,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _adSlideTimer;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
-  String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+  static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
   @override
   void initState() {
@@ -93,21 +93,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     if (savedCode != null && savedCode.isNotEmpty) {
       if (mounted) setState(() => _savedRoomCode = savedCode);
     }
-    final savedBaseUrl = prefs.getString('player_base_url');
-    if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
-      if (mounted) setState(() => _playerBaseUrl = savedBaseUrl);
-    } else if (kIsWeb) {
-      final origin = Uri.base.origin;
-      final path = Uri.base.path.replaceAll(RegExp(r'/+$'), '');
-      if (mounted) {
-        setState(() => _playerBaseUrl = path.isNotEmpty ? '$origin$path' : origin);
-      }
-    }
+    // Purge any legacy local URL saved in SharedPreferences so it never overrides the public GitHub site
+    await prefs.remove('player_base_url');
   }
 
   String _getPlayUrl() {
-    final cleanBase = _playerBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    return '$cleanBase/?view=player&room=$_displayRoomCode';
+    return '$_playerBaseUrl/?view=player&room=$_displayRoomCode';
   }
 
 

@@ -653,12 +653,8 @@ document.addEventListener('click', (e) => {
 
 // 2. DYNAMIC QR CODES
 function initQrCodes() {
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  let playBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
-  if (!isLocalhost && window.location.origin && !window.location.origin.startsWith('file://')) {
-    const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
-    playBaseUrl = `${window.location.origin}${basePath}`;
-  }
+  // Always use the public GitHub website for QR code scans so mobile phones can connect
+  const playBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
   const playUrl = `${playBaseUrl}/?view=player&room=${currentRoomCode}`;
 
   const canvasStage = document.getElementById('qr-canvas');
