@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bar Rooms Trivia - Host Controls</title>
+  <script>
+    (function() {
+      var search = window.location.search || '';
+      var hash = window.location.hash || '';
+      var params = new URLSearchParams(search);
+      params.set('view', 'host');
+      var basePath = window.location.pathname.toLowerCase().includes('/barroomtrivia') ? '/BarRoomTrivia/' : '/';
+      var targetUrl = basePath + '?' + params.toString() + hash;
+      window.location.replace(targetUrl);
+    })();
+  </script>
+</head>
+<body style="background:#0f0f14;color:#fff;font-family:sans-serif;text-align:center;padding-top:20vh;">
+  <h2>Loading Host Controls...</h2>
+</body>
+</html>

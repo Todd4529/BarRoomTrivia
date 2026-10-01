@@ -221,6 +221,7 @@ function initAuthView() {
   const emailInput = document.getElementById('auth-email-input');
   const passwordInput = document.getElementById('auth-password-input');
   const btnSubmit = document.getElementById('btn-submit-auth');
+  const btnQuickConnect = document.getElementById('btn-quick-connect');
   const btnToggleSignMode = document.getElementById('btn-toggle-sign-mode');
   const btnGoogle = document.getElementById('btn-oauth-google');
   const btnApple = document.getElementById('btn-oauth-apple');
@@ -231,16 +232,20 @@ function initAuthView() {
 
   let isSignUpMode = false;
 
-  // Extract device_token and user_code from query params or hash
+  // Extract device_token and user_code from query params, hash or pathname
   const urlParams = new URLSearchParams(window.location.search);
-  let deviceToken = urlParams.get('device_token');
-  let userCode = urlParams.get('user_code');
+  const hashQuery = window.location.hash.includes('?')
+    ? window.location.hash.split('?')[1]
+    : (window.location.hash.startsWith('#') && window.location.hash.includes('=') ? window.location.hash.substring(1) : '');
+  const hashParams = new URLSearchParams(hashQuery);
 
-  if (!deviceToken && window.location.hash.includes('device_token=')) {
-    const hashQuery = window.location.hash.split('?')[1] || '';
-    const hashParams = new URLSearchParams(hashQuery);
-    deviceToken = hashParams.get('device_token');
-    userCode = hashParams.get('user_code');
+  let deviceToken = urlParams.get('device_token') || urlParams.get('deviceToken') || hashParams.get('device_token') || hashParams.get('deviceToken');
+  let userCode = urlParams.get('user_code') || urlParams.get('userCode') || urlParams.get('room') || urlParams.get('room_id') || hashParams.get('user_code') || hashParams.get('userCode') || hashParams.get('room') || hashParams.get('room_id');
+
+  // Pre-fill email from localStorage if available
+  const savedHostEmail = localStorage.getItem('bar_trivia_host_email');
+  if (savedHostEmail && emailInput && !emailInput.value) {
+    emailInput.value = savedHostEmail;
   }
 
   if (userCode) {
@@ -387,18 +392,49 @@ function initAuthView() {
 
     // Immediately show success and transition to Host Panel
     showAlert('TV Connected! Opening Host Controls...', false);
-    btnSubmit.textContent = 'CONNECTED! OPENING...';
+    if (btnQuickConnect) btnQuickConnect.textContent = 'CONNECTED! OPENING...';
+    if (btnSubmit) btnSubmit.textContent = 'CONNECTED! OPENING...';
     setTimeout(() => {
       switchView('host');
     }, 700);
   }
 
+  function quickConnectAsHost(e) {
+    if (e) e.preventDefault();
+    hideAlert();
+    const email = emailInput?.value.trim() || localStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
+    if (emailInput && !emailInput.value) {
+      emailInput.value = email;
+    }
+
+    if (btnQuickConnect) {
+      btnQuickConnect.disabled = true;
+      btnQuickConnect.textContent = 'CONNECTING TV...';
+    }
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+    }
+
+    const hostId = localStorage.getItem('bar_trivia_host_id') || ('host_' + Date.now());
+    const finalUser = {
+      id: hostId,
+      email: email,
+      user_metadata: { display_name: email.split('@')[0] || 'Host' }
+    };
+
+    localStorage.setItem('bar_trivia_host_email', email);
+    localStorage.setItem('bar_trivia_host_id', finalUser.id);
+
+    broadcastDeviceAuth(finalUser);
+  }
+
   async function handleAuthAction(e) {
     if (e) e.preventDefault();
     hideAlert();
-    const email = emailInput?.value.trim() || 'host@venue.com';
+    const email = emailInput?.value.trim() || localStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
     const password = passwordInput?.value || '123456';
 
+    if (btnQuickConnect) btnQuickConnect.disabled = true;
     btnSubmit.disabled = true;
     btnSubmit.textContent = isSignUpMode ? 'CREATING...' : 'CONNECTING...';
 
@@ -448,6 +484,7 @@ function initAuthView() {
     }
   }
 
+  btnQuickConnect?.addEventListener('click', quickConnectAsHost);
   form?.addEventListener('submit', handleAuthAction);
   btnSubmit?.addEventListener('click', handleAuthAction);
 }
@@ -606,28 +643,38 @@ function initNavigation() {
     window.open(`${window.location.origin}${basePath}/?view=tv`, '_blank', 'width=1280,height=720');
   });
 
-  // Initial load view resolution (supports search query params and hash-based query params)
+  // Initial load view resolution (supports search query params, hash-based query params, and subpaths)
   const urlParams = new URLSearchParams(window.location.search);
-  const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  const hashQuery = window.location.hash.includes('?')
+    ? window.location.hash.split('?')[1]
+    : (window.location.hash.startsWith('#') && window.location.hash.includes('=') ? window.location.hash.substring(1) : '');
   const hashParams = new URLSearchParams(hashQuery);
 
-  const roomParam = urlParams.get('room') || urlParams.get('room_id') || hashParams.get('room') || hashParams.get('room_id');
-  const deviceToken = urlParams.get('device_token') || hashParams.get('device_token') || (window.location.hash.includes('device_token=') ? 'yes' : null);
+  const roomParam = urlParams.get('room') || urlParams.get('room_id') || urlParams.get('user_code') || hashParams.get('room') || hashParams.get('room_id') || hashParams.get('user_code');
+  const deviceToken = urlParams.get('device_token') || urlParams.get('deviceToken') || hashParams.get('device_token') || hashParams.get('deviceToken') || (window.location.hash.includes('device_token=') ? 'yes' : null);
   if (roomParam) {
-    currentRoomCode = roomParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    currentRoomCode = roomParam.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     const roomInput = document.getElementById('input-room-code');
     if (roomInput) roomInput.value = currentRoomCode;
   }
 
   const viewParam = urlParams.get('view') || hashParams.get('view');
-  const isPlayPath = window.location.pathname.endsWith('/play') || window.location.hash.includes('/play');
+  const pathname = window.location.pathname.toLowerCase();
+  const isPlayPath = pathname.endsWith('/play') || pathname.includes('/play/') || window.location.hash.includes('/play');
+  const isTvPath = pathname.endsWith('/tv') || pathname.includes('/tv/') || window.location.hash.includes('/tv');
+  const isHostPath = pathname.endsWith('/host') || pathname.includes('/host/') || window.location.hash.includes('/host');
+  const isTvAuth = pathname.includes('/tv-auth') || window.location.hash.includes('tv-auth') || !!deviceToken;
 
   if (viewParam && ['tv', 'player', 'host', 'auth'].includes(viewParam)) {
     switchView(viewParam);
-  } else if (isPlayPath || (roomParam && viewParam !== 'tv' && viewParam !== 'host')) {
-    switchView('player');
-  } else if (deviceToken || window.location.hash.includes('tv-auth')) {
+  } else if (isTvAuth) {
     switchView('auth');
+  } else if (isTvPath) {
+    switchView('tv');
+  } else if (isHostPath) {
+    switchView('host');
+  } else if (isPlayPath || (roomParam && !deviceToken)) {
+    switchView('player');
   } else {
     switchView('auth');
   }
