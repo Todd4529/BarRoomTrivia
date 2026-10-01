@@ -174,26 +174,19 @@ export function generate500HomebrewingQuestions() {
   });
 
   // 6. Systematic factual generation to ensure 500+ distinct questions
-  let counter = 1;
-  while (pool.length < 520) {
-    const angle = counter % 5;
-    const h = hopsData[counter % hopsData.length];
-    const m = maltsData[counter % maltsData.length];
-    const s = stylesData[counter % stylesData.length];
-
-    if (angle === 0) {
+  hopsData.forEach(h => {
+    stylesData.forEach(s => {
       pushQ('gen_hop_ipa', `When crafting an authentic ${s.name}, how does dry-hopping with ${h.name} hops impact the final aroma?`, `Infuses vibrant ${h.flavor} without extracting bitter alpha acids`, 'Doubles the alcohol content instantly', 'Causes the beer to turn jet black', 'Eliminates all carbonation');
-    } else if (angle === 1) {
-      pushQ('gen_malt_mash', `In an all-grain recipe for ${s.name}, what sensory contribution is provided by adding ${m.name}?`, `Contributes ${m.role} with ${m.srm} color`, 'Adds artificial lemon flavor', 'Prevents all yeast reproduction', 'Filters out water minerals');
-    } else if (angle === 2) {
-      pushQ('gen_style_recipe', `Which hop and malt combination is classic when brewing an authentic homebrew ${s.name}?`, `${h.name} hops paired with ${m.name}`, 'Table sugar and vinegar', 'Instant coffee and orange juice', 'Corn syrup and bleach');
-    } else if (angle === 3) {
       pushQ('gen_chem_bjcp', `To achieve target BJCP specifications for ${s.name} (Target: ${s.ibu}), how should boiling additions of ${h.name} be scheduled?`, `Add at 60 minutes for clean bitterness and at flameout/whirlpool for aroma`, 'Boil for 24 hours continuously', 'Add only to the mash tun cold', 'Inject into bottle caps dry');
-    } else {
+    });
+  });
+
+  maltsData.forEach(m => {
+    stylesData.forEach(s => {
+      pushQ('gen_malt_mash', `In an all-grain recipe for ${s.name}, what sensory contribution is provided by adding ${m.name}?`, `Contributes ${m.role} with ${m.srm} color`, 'Adds artificial lemon flavor', 'Prevents all yeast reproduction', 'Filters out water minerals');
       pushQ('gen_mash_enzyme', `During the mash rest for ${s.name} using ${m.name}, which enzyme converts grain starches into fermentable maltose?`, 'Beta-Amylase (active at 145°F - 150°F)', 'Protease only', 'Lactase enzyme', 'Zymase');
-    }
-    counter++;
-  }
+    });
+  });
 
   return fisherYatesShuffle(pool);
 }
