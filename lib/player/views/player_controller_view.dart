@@ -147,6 +147,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _isPreGameCountdown = false;
             _isInterQuestionPhase = false;
             _showResultOverlay = false;
+            _showRoundWinnersOverlay = false;
             _preGameTimer?.cancel();
             _currentQuestion = question;
             _selectedOption = null;
@@ -210,6 +211,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _isGamePaused = false;
           _isPreGameCountdown = true;
           _showResultOverlay = false;
+          _showRoundWinnersOverlay = false;
+          _isInterQuestionPhase = false;
           _preGameSecondsRemaining = remainingSec;
         });
         _startPreGameTimer();
@@ -305,25 +308,42 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
       },
       onRoundCompletedBroadcast: (payload) {
-        final winners = payload['top_3_winners'] as List? ??
-            payload['top3_winners'] as List? ??
-            payload['top3Winners'] as List?;
-        if (mounted && winners != null) {
-          _interQuestionTimer?.cancel();
-          setState(() {
-            _top3Winners = List<Map<String, dynamic>>.from(winners);
-            _showRoundWinnersOverlay = true;
-            _showResultOverlay = false;
-            _isInterQuestionPhase = false;
-          });
-          Future.delayed(const Duration(seconds: 12), () {
-            if (mounted) {
-              setState(() {
-                _showRoundWinnersOverlay = false;
-              });
+        if (!mounted) return;
+        _interQuestionTimer?.cancel();
+
+        List<Map<String, dynamic>> parsedWinners = [];
+        try {
+          final rawList = payload['top_3_winners'] as List? ??
+              payload['top3_winners'] as List? ??
+              payload['top3Winners'] as List?;
+          if (rawList != null) {
+            for (var item in rawList) {
+              if (item is Map) {
+                parsedWinners.add(Map<String, dynamic>.from(item));
+              }
             }
-          });
+          }
+        } catch (_) {}
+
+        if (parsedWinners.isEmpty && _player != null) {
+          final top3 = SupabaseService.getTop3RoundWinners(_player!.roomCode);
+          parsedWinners = List<Map<String, dynamic>>.from(top3);
         }
+
+        setState(() {
+          _top3Winners = parsedWinners;
+          _showRoundWinnersOverlay = parsedWinners.isNotEmpty;
+          _showResultOverlay = false;
+          _isInterQuestionPhase = false;
+        });
+
+        Future.delayed(const Duration(seconds: 12), () {
+          if (mounted) {
+            setState(() {
+              _showRoundWinnersOverlay = false;
+            });
+          }
+        });
       },
       onLeaderboardUpdatedBroadcast: (payload) {
         if (_player != null && payload['players'] is List) {

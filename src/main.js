@@ -973,9 +973,8 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'timer_expired') {
     handleIncomingTimerExpired(payload);
   } else if (normEvent === 'round_completed' || normEvent === 'round_winner') {
-    if (payload?.top3_winners || payload?.top3Winners) {
-      onRoundWinner({ top3Winners: payload.top3_winners || payload.top3Winners || [] });
-    }
+    const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
+    onRoundWinner({ top3Winners: list, delaySeconds: 15 });
   } else if (normEvent === 'game_reset') {
     onGameReset();
   } else if (normEvent === 'request_state_sync') {
@@ -1550,7 +1549,22 @@ async function runNextAutomatedStep() {
     let question = currentRoundQuestions?.[questionInRound - 1];
     if (!question || !question.options) {
       const fallback = getLocalQuestions(activeRoundGenre, selectedDifficulty, 1);
-      question = fallback[0];
+      question = fallback?.[0];
+    }
+    if (!question || !question.options) {
+      question = {
+        id: `q_safe_${Date.now()}_${questionInRound}`,
+        category: activeRoundGenre,
+        difficulty: selectedDifficulty,
+        text: `In the study of ${activeRoundGenre}, which approach ensures highest quality outcomes?`,
+        options: {
+          A: 'Rigorous empirical standards and safety compliance',
+          B: 'Random improvised guesswork without verification',
+          C: 'Bypassing all standard inspection procedures',
+          D: 'Discarding equipment manuals immediately'
+        },
+        correct: 'A'
+      };
     }
 
     const durationSeconds = selectedQuestionDuration || 20;
@@ -1684,6 +1698,7 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       roundNumber: currentRound,
       winnerName: roundWinner.nickname,
       winnerScore: roundWinner.score,
+      top3Winners: top3,
       delaySeconds: 15
     };
 
@@ -2236,51 +2251,73 @@ function hideResultModal() {
 
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 function onRoundWinner(payload) {
-  const top3 = payload?.top3Winners || playersLeaderboard.slice(0, 3);
-  if (!top3 || top3.length === 0) return;
+  hideResultModal();
 
-  const winner1 = top3[0] || { nickname: 'Champion', score: 0 };
-  const winner2 = top3[1] || { nickname: 'Runner Up', score: 0 };
-  const winner3 = top3[2] || { nickname: 'Third Place', score: 0 };
+  let top3 = [];
+  if (Array.isArray(payload?.top3Winners) && payload.top3Winners.length > 0) {
+    top3 = payload.top3Winners;
+  } else if (Array.isArray(payload?.top_3_winners) && payload.top_3_winners.length > 0) {
+    top3 = payload.top_3_winners;
+  } else if (Array.isArray(payload?.top3_winners) && payload.top3_winners.length > 0) {
+    top3 = payload.top3_winners;
+  } else {
+    top3 = playersLeaderboard.slice(0, 3);
+  }
 
   const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
   const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
 
-  const tvW1Name = document.getElementById('tv-w1-name');
-  const tvW1Score = document.getElementById('tv-w1-score');
-  const tvW2Name = document.getElementById('tv-w2-name');
-  const tvW2Score = document.getElementById('tv-w2-score');
-  const tvW3Name = document.getElementById('tv-w3-name');
-  const tvW3Score = document.getElementById('tv-w3-score');
+  if (top3.length > 0) {
+    const winner1 = top3[0] || { nickname: 'Champion', score: 0 };
+    const winner2 = top3[1];
+    const winner3 = top3[2];
 
-  if (tvW1Name) tvW1Name.textContent = winner1.nickname;
-  if (tvW1Score) tvW1Score.textContent = `${winner1.score} PTS`;
-  if (tvW2Name) tvW2Name.textContent = winner2.nickname;
-  if (tvW2Score) tvW2Score.textContent = `${winner2.score} PTS`;
-  if (tvW3Name) tvW3Name.textContent = winner3.nickname;
-  if (tvW3Score) tvW3Score.textContent = `${winner3.score} PTS`;
+    const tvW1Name = document.getElementById('tv-w1-name');
+    const tvW1Score = document.getElementById('tv-w1-score');
+    const tvW2Name = document.getElementById('tv-w2-name');
+    const tvW2Score = document.getElementById('tv-w2-score');
+    const tvW3Name = document.getElementById('tv-w3-name');
+    const tvW3Score = document.getElementById('tv-w3-score');
 
-  const pW1Name = document.getElementById('player-w1-name');
-  const pW1Score = document.getElementById('player-w1-score');
-  const pW2Name = document.getElementById('player-w2-name');
-  const pW2Score = document.getElementById('player-w2-score');
-  const pW3Name = document.getElementById('player-w3-name');
-  const pW3Score = document.getElementById('player-w3-score');
+    if (tvW1Name) tvW1Name.textContent = winner1.nickname || 'Champion';
+    if (tvW1Score) tvW1Score.textContent = `${winner1.score ?? winner1.cumulative_score ?? 0} PTS`;
+    if (tvW2Name && winner2) tvW2Name.textContent = winner2.nickname || 'Runner Up';
+    if (tvW2Score && winner2) tvW2Score.textContent = `${winner2.score ?? winner2.cumulative_score ?? 0} PTS`;
+    if (tvW3Name && winner3) tvW3Name.textContent = winner3.nickname || 'Third Place';
+    if (tvW3Score && winner3) tvW3Score.textContent = `${winner3.score ?? winner3.cumulative_score ?? 0} PTS`;
 
-  if (pW1Name) pW1Name.textContent = winner1.nickname;
-  if (pW1Score) pW1Score.textContent = `${winner1.score} PTS`;
-  if (pW2Name) pW2Name.textContent = winner2.nickname;
-  if (pW2Score) pW2Score.textContent = `${winner2.score} PTS`;
-  if (pW3Name) pW3Name.textContent = winner3.nickname;
-  if (pW3Score) pW3Score.textContent = `${winner3.score} PTS`;
+    const tvPodium2 = document.getElementById('tv-podium-2');
+    const tvPodium3 = document.getElementById('tv-podium-3');
+    if (tvPodium2) tvPodium2.style.display = winner2 ? 'flex' : 'none';
+    if (tvPodium3) tvPodium3.style.display = winner3 ? 'flex' : 'none';
+
+    const pW1Name = document.getElementById('player-w1-name');
+    const pW1Score = document.getElementById('player-w1-score');
+    const pW2Name = document.getElementById('player-w2-name');
+    const pW2Score = document.getElementById('player-w2-score');
+    const pW3Name = document.getElementById('player-w3-name');
+    const pW3Score = document.getElementById('player-w3-score');
+
+    if (pW1Name) pW1Name.textContent = winner1.nickname || 'Champion';
+    if (pW1Score) pW1Score.textContent = `${winner1.score ?? winner1.cumulative_score ?? 0} PTS`;
+    if (pW2Name && winner2) pW2Name.textContent = winner2.nickname || 'Runner Up';
+    if (pW2Score && winner2) pW2Score.textContent = `${winner2.score ?? winner2.cumulative_score ?? 0} PTS`;
+    if (pW3Name && winner3) pW3Name.textContent = winner3.nickname || 'Third Place';
+    if (pW3Score && winner3) pW3Score.textContent = `${winner3.score ?? winner3.cumulative_score ?? 0} PTS`;
+
+    const playerPodium2 = document.getElementById('player-podium-2');
+    const playerPodium3 = document.getElementById('player-podium-3');
+    if (playerPodium2) playerPodium2.style.display = winner2 ? 'flex' : 'none';
+    if (playerPodium3) playerPodium3.style.display = winner3 ? 'flex' : 'none';
+  }
 
   const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
-  const playerWinnerTimer = document.getElementById('player-winner-next-round-timer');
+  const playerWinnerTimer = document.getElementById('player-winner-next-round-timer') || document.getElementById('player-winner-next-timer');
 
   if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
 
-  let remWinnerSecs = 60;
+  let remWinnerSecs = payload?.delaySeconds || 15;
   if (tvNextRoundTimer) tvNextRoundTimer.textContent = remWinnerSecs;
   if (playerWinnerTimer) playerWinnerTimer.textContent = remWinnerSecs;
 

@@ -361,8 +361,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         if (mounted && winners != null) {
           _timer?.cancel();
           _interQuestionTimer?.cancel();
+          final parsed = <Map<String, dynamic>>[];
+          for (var item in winners) {
+            if (item is Map) parsed.add(Map<String, dynamic>.from(item));
+          }
           setState(() {
-            _top3Winners = List<Map<String, dynamic>>.from(winners);
+            _top3Winners = parsed;
             _showRoundWinnersOverlay = true;
             _isInterQuestionPhase = false;
             _interQuestionSecondsRemaining = 0;

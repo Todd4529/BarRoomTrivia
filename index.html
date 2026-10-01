@@ -264,13 +264,36 @@
         <div id="tv-winner-modal-overlay" class="tv-modal-backdrop hidden">
           <div class="tv-winner-modal-card">
             <div class="winner-trophy-icon">🏆👑</div>
-            <div class="tv-winner-badge">ROUND WINNER AWARDED</div>
-            <h1 id="tv-winner-name" class="tv-winner-name-text">TriviaMaster99</h1>
-            <div class="tv-winner-bonus-pill">+250 BONUS POINTS!</div>
+            <div class="tv-winner-badge">ROUND COMPLETED</div>
+            <h2 style="font-size: 20px; font-weight: 800; letter-spacing: 2px; color: rgba(255,255,255,0.8); margin-bottom: 20px;">TOP 3 LEADERS OF THE ROUND</h2>
             
+            <div style="width: 100%; display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+              <div id="tv-podium-1" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255, 214, 0, 0.15); border: 2px solid var(--accent-yellow); padding: 14px 24px; border-radius: 16px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 14px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1px;">🥇 1ST PLACE (+250 BONUS)</div>
+                  <strong id="tv-w1-name" style="font-size: 26px; color: #fff;">Champion</strong>
+                </div>
+                <span id="tv-w1-score" style="font-size: 26px; font-weight: 900; color: var(--accent-yellow);">0 PTS</span>
+              </div>
+              <div id="tv-podium-2" style="display: flex; justify-content: space-between; align-items: center; background: rgba(224, 224, 224, 0.12); border: 2px solid #e0e0e0; padding: 14px 24px; border-radius: 16px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 14px; font-weight: 900; color: #e0e0e0; letter-spacing: 1px;">🥈 2ND PLACE</div>
+                  <strong id="tv-w2-name" style="font-size: 26px; color: #fff;">Runner Up</strong>
+                </div>
+                <span id="tv-w2-score" style="font-size: 26px; font-weight: 900; color: #e0e0e0;">0 PTS</span>
+              </div>
+              <div id="tv-podium-3" style="display: flex; justify-content: space-between; align-items: center; background: rgba(205, 127, 50, 0.12); border: 2px solid #cd7f32; padding: 14px 24px; border-radius: 16px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 14px; font-weight: 900; color: #cd7f32; letter-spacing: 1px;">🥉 3RD PLACE</div>
+                  <strong id="tv-w3-name" style="font-size: 26px; color: #fff;">Third Place</strong>
+                </div>
+                <span id="tv-w3-score" style="font-size: 26px; font-weight: 900; color: #cd7f32;">0 PTS</span>
+              </div>
+            </div>
+
             <div class="tv-next-round-timer-box">
               <span>NEXT ROUND STARTS IN</span>
-              <strong id="tv-winner-next-round-timer">60</strong>
+              <strong id="tv-winner-next-round-timer">15</strong>
               <span>SECONDS</span>
             </div>
           </div>
@@ -387,15 +410,37 @@
 
         <!-- PLAYER ROUND WINNER POP-UP MODAL OVERLAY -->
         <div id="player-winner-modal-overlay" class="result-modal-backdrop hidden">
-          <div class="result-modal-card is-correct">
+          <div class="result-modal-card is-correct round-winner-card" style="max-width: 420px; border-color: var(--accent-yellow) !important; box-shadow: 0 0 50px rgba(255, 214, 0, 0.4) !important;">
             <div class="result-icon">👑🏆</div>
-            <h2 class="result-title" style="color: var(--accent-yellow);">ROUND WINNER!</h2>
-            <h3 id="player-winner-name-text" style="font-size: 24px; font-weight: 900; margin-bottom: 8px;">TriviaMaster99</h3>
-            <div class="result-points-pill" style="background: rgba(255,214,0,0.2); color: var(--accent-yellow); border-color: var(--accent-yellow);">
-              +250 BONUS POINTS!
+            <h2 class="result-title" style="color: var(--accent-yellow); margin-bottom: 2px;">ROUND COMPLETED!</h2>
+            <span class="round-subtitle" style="font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.7); letter-spacing: 1px; margin-bottom: 14px;">TOP 3 LEADERS OF THE ROUND</span>
+            
+            <div class="podium-list" id="player-podium-list" style="width: 100%; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+              <div class="podium-row podium-1st" id="player-podium-1" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255, 214, 0, 0.15); border: 1.5px solid var(--accent-yellow); padding: 10px 14px; border-radius: 12px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 11px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 0.5px;">🥇 1ST PLACE (+250 BONUS)</div>
+                  <strong id="player-w1-name" style="font-size: 16px; color: #fff;">Champion</strong>
+                </div>
+                <span id="player-w1-score" style="font-size: 16px; font-weight: 900; color: var(--accent-yellow);">0 PTS</span>
+              </div>
+              <div class="podium-row podium-2nd" id="player-podium-2" style="display: flex; justify-content: space-between; align-items: center; background: rgba(224, 224, 224, 0.12); border: 1.5px solid #e0e0e0; padding: 10px 14px; border-radius: 12px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 11px; font-weight: 900; color: #e0e0e0; letter-spacing: 0.5px;">🥈 2ND PLACE</div>
+                  <strong id="player-w2-name" style="font-size: 16px; color: #fff;">Runner Up</strong>
+                </div>
+                <span id="player-w2-score" style="font-size: 16px; font-weight: 900; color: #e0e0e0;">0 PTS</span>
+              </div>
+              <div class="podium-row podium-3rd" id="player-podium-3" style="display: flex; justify-content: space-between; align-items: center; background: rgba(205, 127, 50, 0.12); border: 1.5px solid #cd7f32; padding: 10px 14px; border-radius: 12px;">
+                <div style="text-align: left;">
+                  <div style="font-size: 11px; font-weight: 900; color: #cd7f32; letter-spacing: 0.5px;">🥉 3RD PLACE</div>
+                  <strong id="player-w3-name" style="font-size: 16px; color: #fff;">Third Place</strong>
+                </div>
+                <span id="player-w3-score" style="font-size: 16px; font-weight: 900; color: #cd7f32;">0 PTS</span>
+              </div>
             </div>
-            <div class="next-q-countdown-pill">
-              ⏳ Next Round in <strong id="player-winner-next-timer">60</strong>s...
+
+            <div class="next-q-countdown-pill" style="margin-top: 4px;">
+              ⏳ Next Round in <strong id="player-winner-next-round-timer">15</strong>s...
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@
  */
 
 import { generate500HomebrewingQuestions } from './homebrewingDatabase.js';
+import { generateGenreQuestions } from './genreQuestionsEngine.js';
 
 // All 30 Specific Genres List
 export const ALL_SPECIFIC_GENRES = [
@@ -167,7 +168,7 @@ async function fetchSingleGenreQuestions(genre, difficulty, count) {
         url += `&token=${openTdbSessionToken}`;
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(3500) });
       const data = await response.json();
 
       if (data.response_code === 4 || data.response_code === 3) {
@@ -292,69 +293,54 @@ const authenticOfflineDatabase = [
   { category: 'Video Games & Gaming', difficulty: 'Standard', text: 'Which iconic tile-matching arcade game was created by Russian software engineer Alexey Pajitnov in 1984?', options: { A: 'Pac-Man', B: 'Tetris', C: 'Breakout', D: 'Space Invaders' }, correct: 'B' }
 ];
 
-// 3. GET LOCAL QUESTIONS WITH ZERO REPEATS
+// 3. GET LOCAL QUESTIONS WITH ZERO REPEATS ACROSS 500+ QUESTIONS PER GENRE
 export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
-  const isHomebrewing = typeof genre === 'string' && (genre.toLowerCase().includes('homebrew') || genre === 'Beer Styles & Brewing');
-
-  let pool;
-  if (isHomebrewing) {
-    pool = [...homebrewing500Dataset];
-  } else {
-    // Strictly isolate non-homebrewing pool so homebrewing questions NEVER leak into other genres
-    pool = authenticOfflineDatabase.filter(q => !q.category.toLowerCase().includes('homebrew'));
+  let targetGenre = genre;
+  if (!targetGenre || targetGenre === 'Random' || targetGenre === 'Auto Select') {
+    const valid = ALL_SPECIFIC_GENRES.filter(g => g !== 'Random' && g !== 'Auto Select');
+    targetGenre = valid[Math.floor(Math.random() * valid.length)];
   }
 
-  // Filter strictly by requested genre if matching items exist
-  if (genre !== 'Random' && genre !== 'Auto Select') {
-    const genreMatch = pool.filter(q => q.category.toLowerCase().includes(genre.toLowerCase()));
-    if (genreMatch.length > 0) {
-      pool = genreMatch;
-    }
+  // Generate or retrieve guaranteed 500+ pool for this genre
+  const pool = generateGenreQuestions(targetGenre);
+
+  // Filter out any questions already seen in this session
+  const unseen = pool.filter(q => !seenQuestionTexts.has(q.text.toLowerCase()));
+
+  let candidatePool = unseen;
+  // If session has consumed almost all questions, reset session tracker
+  if (candidatePool.length < count) {
+    seenQuestionTexts.clear();
+    candidatePool = [...pool];
   }
 
-  // Filter by difficulty if matching items exist
-  const diffMatch = pool.filter(q => q.difficulty === difficulty);
-  if (diffMatch.length >= count) {
-    pool = diffMatch;
-  }
-
-  const result = [];
-  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  // Shuffle candidate pool
+  const shuffled = [...candidatePool].sort(() => 0.5 - Math.random());
+  const selected = [];
 
   for (const q of shuffled) {
-    if (!seenQuestionTexts.has(q.text)) {
-      seenQuestionTexts.add(q.text);
-      result.push({
-        id: `offline_${Date.now()}_${Math.random()}`,
-        category: q.category || genre,
-        difficulty: q.difficulty || difficulty,
-        text: q.text,
-        options: q.options,
-        correct: q.correct,
-        source: isHomebrewing ? '500+ Question Homebrewing Database' : 'Bar Room Trivia Official Bank'
+    if (selected.length >= count) break;
+    seenQuestionTexts.add(q.text.toLowerCase());
+    selected.push({
+      ...q,
+      id: q.id || `offline_${Date.now()}_${Math.random()}`,
+      category: q.category || targetGenre,
+      difficulty: q.difficulty || difficulty
+    });
+  }
+
+  // Absolute guarantee: if somehow selected is empty, fall back to first questions
+  if (selected.length === 0 && pool.length > 0) {
+    for (let i = 0; i < Math.min(count, pool.length); i++) {
+      const q = pool[i];
+      selected.push({
+        ...q,
+        id: q.id || `offline_fallback_${Date.now()}_${i}`,
+        category: q.category || targetGenre,
+        difficulty: q.difficulty || difficulty
       });
     }
   }
 
-  // If session has consumed items, loop cleanly without repeating within the same round
-  if (result.length < count) {
-    const currentRoundTexts = new Set(result.map(r => r.text));
-    for (const q of [...pool].sort(() => 0.5 - Math.random())) {
-      if (result.length >= count) break;
-      if (!currentRoundTexts.has(q.text)) {
-        currentRoundTexts.add(q.text);
-        result.push({
-          id: `offline_fill_${Date.now()}_${Math.random()}`,
-          category: q.category || genre,
-          difficulty: q.difficulty || difficulty,
-          text: q.text,
-          options: q.options,
-          correct: q.correct,
-          source: isHomebrewing ? '500+ Question Homebrewing Database' : 'Bar Room Trivia Official Bank'
-        });
-      }
-    }
-  }
-
-  return result.slice(0, count);
+  return selected;
 }
