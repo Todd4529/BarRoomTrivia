@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
+import '../shared/services/supabase_service.dart';
 import '../shared/services/mqtt_service.dart';
 import '../shared/theme/app_theme.dart';
 
