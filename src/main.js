@@ -28,19 +28,31 @@ try {
   channel = { postMessage: () => {}, onmessage: null, close: () => {} };
 }
 
+const safeStorage = {
+  getItem: (key) => {
+    try { return localStorage.getItem(key); } catch (_) { return null; }
+  },
+  setItem: (key, val) => {
+    try { localStorage.setItem(key, val); } catch (_) {}
+  },
+  removeItem: (key) => {
+    try { localStorage.removeItem(key); } catch (_) {}
+  }
+};
+
 const initialUrlParams = new URLSearchParams(window.location.search);
 const urlRoomCode = initialUrlParams.get('room') || initialUrlParams.get('room_id') || initialUrlParams.get('user_code');
-let currentRoomCode = (urlRoomCode || localStorage.getItem('bar_trivia_current_room') || 'TRIV').toUpperCase();
+let currentRoomCode = (urlRoomCode || safeStorage.getItem('bar_trivia_current_room') || 'TRIV').toUpperCase();
 if (urlRoomCode) {
-  localStorage.setItem('bar_trivia_current_room', currentRoomCode);
+  safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
 }
 let currentPlayer = null;
 let currentQuestionIndex = 0;
 let selectedQuestionDuration = 20; // Default 20 seconds
 let selectedDifficulty = 'Standard'; // Kids, Beginner, Standard, Advanced
 let selectedGenreQueue = []; // Up to 10 genres in order
-let currentVenueName = localStorage.getItem('bar_trivia_venue_name') || "OUR PUB";
-let customBarLogoUrl = localStorage.getItem('bar_trivia_logo_url') || null;
+let currentVenueName = safeStorage.getItem('bar_trivia_venue_name') || "OUR PUB";
+let customBarLogoUrl = safeStorage.getItem('bar_trivia_logo_url') || null;
 let isAutomatedEngineRunning = false;
 let autoEngineTimeout = null;
 let countdownInterval = null;
@@ -236,15 +248,15 @@ function initAuthView() {
   let deviceToken = urlParams.get('device_token') || urlParams.get('deviceToken') || hashParams.get('device_token') || hashParams.get('deviceToken');
   let userCode = urlParams.get('user_code') || urlParams.get('userCode') || urlParams.get('room') || urlParams.get('room_id') || hashParams.get('user_code') || hashParams.get('userCode') || hashParams.get('room') || hashParams.get('room_id');
 
-  // Pre-fill email from localStorage if available
-  const savedHostEmail = localStorage.getItem('bar_trivia_host_email');
+  // Pre-fill email from safeStorage if available
+  const savedHostEmail = safeStorage.getItem('bar_trivia_host_email');
   if (savedHostEmail && emailInput && !emailInput.value) {
     emailInput.value = savedHostEmail;
   }
 
   if (userCode) {
     currentRoomCode = userCode.trim().toUpperCase();
-    localStorage.setItem('bar_trivia_current_room', currentRoomCode);
+    safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
     if (tvCodeLabel && tvCodePill) {
       tvCodeLabel.textContent = userCode;
       tvCodePill.classList.remove('hidden');
@@ -396,7 +408,7 @@ function initAuthView() {
   function quickConnectAsHost(e) {
     if (e) e.preventDefault();
     hideAlert();
-    const email = emailInput?.value.trim() || localStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
+    const email = emailInput?.value.trim() || safeStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
     if (emailInput && !emailInput.value) {
       emailInput.value = email;
     }
@@ -409,15 +421,15 @@ function initAuthView() {
       btnSubmit.disabled = true;
     }
 
-    const hostId = localStorage.getItem('bar_trivia_host_id') || ('host_' + Date.now());
+    const hostId = safeStorage.getItem('bar_trivia_host_id') || ('host_' + Date.now());
     const finalUser = {
       id: hostId,
       email: email,
       user_metadata: { display_name: email.split('@')[0] || 'Host' }
     };
 
-    localStorage.setItem('bar_trivia_host_email', email);
-    localStorage.setItem('bar_trivia_host_id', finalUser.id);
+    safeStorage.setItem('bar_trivia_host_email', email);
+    safeStorage.setItem('bar_trivia_host_id', finalUser.id);
 
     broadcastDeviceAuth(finalUser);
   }
@@ -425,7 +437,7 @@ function initAuthView() {
   async function handleAuthAction(e) {
     if (e) e.preventDefault();
     hideAlert();
-    const email = emailInput?.value.trim() || localStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
+    const email = emailInput?.value.trim() || safeStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
     const password = passwordInput?.value || '123456';
 
     if (btnQuickConnect) btnQuickConnect.disabled = true;
@@ -463,8 +475,8 @@ function initAuthView() {
         user_metadata: { display_name: email.split('@')[0] }
       };
 
-      localStorage.setItem('bar_trivia_host_email', email);
-      localStorage.setItem('bar_trivia_host_id', finalUser.id);
+      safeStorage.setItem('bar_trivia_host_email', email);
+      safeStorage.setItem('bar_trivia_host_id', finalUser.id);
 
       broadcastDeviceAuth(finalUser);
     } catch (err) {
@@ -478,31 +490,21 @@ function initAuthView() {
     }
   }
 
-  // Explicitly ensure email and password inputs can receive focus on tap/click without interference
-  [emailInput, passwordInput].forEach(inp => {
-    if (!inp) return;
-    inp.removeAttribute('disabled');
-    inp.removeAttribute('readonly');
-    inp.addEventListener('click', (e) => {
-      e.stopPropagation();
-      inp.focus();
-    });
-    inp.addEventListener('touchend', (e) => {
-      e.stopPropagation();
-      inp.focus();
-    });
-  });
+  // Expose handlers globally for reliable HTML onclick/onsubmit triggering
+  window.quickConnectAsHost = quickConnectAsHost;
+  window.handleHostAuthSubmit = handleAuthAction;
 
-  // Make labels explicitly focus inputs
-  document.querySelector('label[for="auth-email-input"]')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    emailInput?.focus();
-  });
-  document.querySelector('label[for="auth-password-input"]')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    passwordInput?.focus();
-  });
+  // Ensure inputs are interactive and clean
+  if (emailInput) {
+    emailInput.disabled = false;
+    emailInput.readOnly = false;
+  }
+  if (passwordInput) {
+    passwordInput.disabled = false;
+    passwordInput.readOnly = false;
+  }
 
+  // Attach DOM event listeners
   btnQuickConnect?.addEventListener('click', quickConnectAsHost);
   form?.addEventListener('submit', handleAuthAction);
   btnSubmit?.addEventListener('click', handleAuthAction);
@@ -1106,14 +1108,14 @@ function onStateSyncResponse(payload) {
 
   if (payload.currentVenueName) {
     currentVenueName = payload.currentVenueName;
-    localStorage.setItem('bar_trivia_venue_name', currentVenueName);
+    safeStorage.setItem('bar_trivia_venue_name', currentVenueName);
     onVenueNameUpdated({ venueName: currentVenueName });
   }
 
   if (payload.customBarLogoUrl !== undefined) {
     customBarLogoUrl = payload.customBarLogoUrl;
-    if (customBarLogoUrl) localStorage.setItem('bar_trivia_logo_url', customBarLogoUrl);
-    else localStorage.removeItem('bar_trivia_logo_url');
+    if (customBarLogoUrl) safeStorage.setItem('bar_trivia_logo_url', customBarLogoUrl);
+    else safeStorage.removeItem('bar_trivia_logo_url');
     onLogoUpdated({ logoUrl: customBarLogoUrl });
   }
 
@@ -1162,7 +1164,7 @@ function initHostControls() {
   // Venue Name Input Handler
   hostVenueInput?.addEventListener('input', (e) => {
     currentVenueName = e.target.value.trim() || "OUR PUB";
-    localStorage.setItem('bar_trivia_venue_name', currentVenueName);
+    safeStorage.setItem('bar_trivia_venue_name', currentVenueName);
     onVenueNameUpdated({ venueName: currentVenueName });
     channel.postMessage({ type: 'VENUE_NAME_UPDATED', payload: { venueName: currentVenueName } });
   });
@@ -1174,7 +1176,7 @@ function initHostControls() {
       const reader = new FileReader();
       reader.onload = (evt) => {
         customBarLogoUrl = evt.target.result;
-        localStorage.setItem('bar_trivia_logo_url', customBarLogoUrl);
+        safeStorage.setItem('bar_trivia_logo_url', customBarLogoUrl);
         updateHostLogoPreview(customBarLogoUrl);
         channel.postMessage({ type: 'LOGO_UPDATED', payload: { logoUrl: customBarLogoUrl } });
         onLogoUpdated({ logoUrl: customBarLogoUrl });
@@ -1185,7 +1187,7 @@ function initHostControls() {
 
   btnRemoveLogo?.addEventListener('click', () => {
     customBarLogoUrl = null;
-    localStorage.removeItem('bar_trivia_logo_url');
+    safeStorage.removeItem('bar_trivia_logo_url');
     updateHostLogoPreview(null);
     channel.postMessage({ type: 'LOGO_UPDATED', payload: { logoUrl: null } });
     onLogoUpdated({ logoUrl: null });
@@ -2324,7 +2326,7 @@ function initPlayerControls() {
   const answerBtns = document.querySelectorAll('.btn-answer');
   const nicknameInput = document.getElementById('input-nickname');
 
-  const savedNick = localStorage.getItem('bar_trivia_player_nickname');
+  const savedNick = safeStorage.getItem('bar_trivia_player_nickname');
   if (savedNick && nicknameInput && !nicknameInput.value) {
     nicknameInput.value = savedNick;
   }
@@ -2340,8 +2342,8 @@ function initPlayerControls() {
     const rawNick = (nicknameInput?.value || '').trim();
     const nickname = rawNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
 
-    localStorage.setItem('bar_trivia_player_nickname', nickname);
-    localStorage.setItem('bar_trivia_current_room', currentRoomCode);
+    safeStorage.setItem('bar_trivia_player_nickname', nickname);
+    safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
 
     currentPlayer = { nickname, score: 0, streak: 0 };
     if (playerDispNickname) playerDispNickname.textContent = nickname.toUpperCase();
