@@ -82,12 +82,6 @@ document.addEventListener('visibilitychange', async () => {
     await requestScreenWakeLock();
   }
 });
-document.addEventListener('click', () => {
-  if (!screenWakeLock) requestScreenWakeLock();
-});
-document.addEventListener('touchstart', () => {
-  if (!screenWakeLock) requestScreenWakeLock();
-});
 
 // Robust Host Heartbeat Engine (Epoch Timestamp-Based, Immune to Mobile OS Throttling)
 let hostTargetEpochMs = 0;
@@ -483,6 +477,31 @@ function initAuthView() {
       broadcastDeviceAuth(fallbackUser);
     }
   }
+
+  // Explicitly ensure email and password inputs can receive focus on tap/click without interference
+  [emailInput, passwordInput].forEach(inp => {
+    if (!inp) return;
+    inp.removeAttribute('disabled');
+    inp.removeAttribute('readonly');
+    inp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      inp.focus();
+    });
+    inp.addEventListener('touchend', (e) => {
+      e.stopPropagation();
+      inp.focus();
+    });
+  });
+
+  // Make labels explicitly focus inputs
+  document.querySelector('label[for="auth-email-input"]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    emailInput?.focus();
+  });
+  document.querySelector('label[for="auth-password-input"]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    passwordInput?.focus();
+  });
 
   btnQuickConnect?.addEventListener('click', quickConnectAsHost);
   form?.addEventListener('submit', handleAuthAction);

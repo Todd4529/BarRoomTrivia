@@ -12,10 +12,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-DkJGNPuB.js"></script>
-  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-DHcnFzIk.css">
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-Bmi0ZGVG.js"></script>
+  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-Da9wntfs.css">
 </head>
-<body class="dark-theme">
+<body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
   <header class="app-header" style="justify-content: center;">
     <div class="logo-container">
@@ -40,7 +40,15 @@
 
           <div id="auth-status-alert" class="auth-alert hidden"></div>
 
-          <form id="form-host-auth" class="auth-form-fields">
+          <form id="form-host-auth" class="auth-form-fields" onsubmit="return false;">
+            <button type="button" id="btn-quick-connect" class="btn btn-primary btn-block btn-lg" style="margin-bottom: 6px; font-size: 16px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 0 25px rgba(0, 229, 255, 0.4);">
+              ⚡ QUICK CONNECT AS HOST
+            </button>
+
+            <div class="auth-separator">
+              <span>OR ENTER CREDENTIALS</span>
+            </div>
+
             <div class="form-group">
               <label for="auth-email-input">Email Address</label>
               <input type="email" id="auth-email-input" placeholder="host@venue.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email">
@@ -51,12 +59,8 @@
               <input type="password" id="auth-password-input" placeholder="••••••••" autocomplete="current-password" autocapitalize="none" autocorrect="off">
             </div>
 
-            <button type="submit" id="btn-submit-auth" class="btn btn-primary btn-block">
+            <button type="submit" id="btn-submit-auth" class="btn btn-secondary btn-block">
               SIGN IN & CONNECT TV
-            </button>
-
-            <button type="button" id="btn-quick-connect" class="btn btn-secondary btn-block" style="margin-top: 10px; background: rgba(0, 229, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-weight: 700;">
-              ⚡ QUICK CONNECT AS HOST
             </button>
           </form>
 

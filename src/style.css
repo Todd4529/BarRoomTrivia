@@ -2305,6 +2305,9 @@ body.auth-mode .main-container {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+  z-index: 30;
+  pointer-events: auto;
 }
 
 .form-group {
@@ -2312,14 +2315,21 @@ body.auth-mode .main-container {
   flex-direction: column;
   gap: 4px;
   text-align: left;
+  position: relative;
+  z-index: 40;
+  pointer-events: auto;
 }
 
 .form-group label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
 }
 
+.auth-form-fields input,
 .form-group input {
   background: #0d0d12;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -2330,13 +2340,18 @@ body.auth-mode .main-container {
   font-family: inherit;
   transition: border-color 0.2s, box-shadow 0.2s;
   pointer-events: auto !important;
-  touch-action: manipulation;
-  -webkit-user-select: text;
-  user-select: text;
+  touch-action: auto !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+  cursor: text !important;
+  position: relative !important;
+  z-index: 50 !important;
   width: 100%;
   box-sizing: border-box;
 }
 
+.auth-form-fields input:focus,
 .form-group input:focus {
   outline: none;
   border-color: var(--accent-cyan);
