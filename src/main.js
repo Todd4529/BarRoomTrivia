@@ -174,21 +174,38 @@ const funnyWrongQuotes = [
   "Ouch! The trivia gods demanded a sacrifice. Next one is yours! ⚡"
 ];
 
-// INITIALIZE 10 MOCK PLAYERS PLAYING IN THE BACKGROUND WITH STREAK TRACKING
-const defaultMockPlayers = [
-  { nickname: 'TriviaMaster99', score: 350, streak: 2 },
-  { nickname: 'BeerGuru', score: 280, streak: 1 },
-  { nickname: 'PubQuizPro', score: 220, streak: 0 },
-  { nickname: 'BrewMaster_Joe', score: 190, streak: 1 },
-  { nickname: 'HopsAndBarley', score: 170, streak: 0 },
-  { nickname: 'PintSizedGenius', score: 140, streak: 3 },
-  { nickname: 'WhiskeyWisdom', score: 120, streak: 0 },
-  { nickname: 'BarStoolEinstein', score: 90, streak: 1 },
-  { nickname: 'CiderSeeker', score: 60, streak: 0 },
-  { nickname: 'TavernTactician', score: 30, streak: 0 }
-];
+// INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY (No bogus / mock players)
+let playersLeaderboard = [];
 
-let playersLeaderboard = [...defaultMockPlayers];
+function loadInitialPlayers() {
+  const normRoom = (currentRoomCode || 'TRIV').toUpperCase();
+  try {
+    supabase.from('players')
+      .select('*')
+      .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
+      .order('cumulative_score', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          // Filter out any legacy bogus players if present in DB
+          const realPlayers = data.filter(p => !p.nickname.startsWith('mock-') && !p.nickname.includes('TriviaMaster99') && !p.nickname.includes('BeerWhisperer'));
+          if (realPlayers.length > 0) {
+            playersLeaderboard = realPlayers.map(p => ({
+              id: p.id || p.nickname,
+              player_uid: p.player_uid || p.nickname,
+              room_code: normRoom,
+              nickname: p.nickname,
+              score: p.cumulative_score ?? p.score ?? 0,
+              cumulative_score: p.cumulative_score ?? p.score ?? 0,
+              streak: p.streak || 0,
+              is_connected: p.is_connected !== false
+            }));
+            renderLeaderboard();
+            updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
+          }
+        }
+      }).catch(() => {});
+  } catch (_) {}
+}
 
 // MAIN APP INITIALIZER
 function initApp() {
@@ -212,6 +229,7 @@ function initApp() {
   startPromoCarouselRotation();
   startLeaderboardAutoScroll();
   renderLeaderboard();
+  loadInitialPlayers();
 }
 
 // Execute immediately when DOM is ready or completed
@@ -388,6 +406,17 @@ function initAuthView() {
           updated_at: new Date().toISOString()
         }
       ], { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
+
+    // Automatically register logged in host user as an active player on the room leaderboard
+    const hostDisplayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Host';
+    onPlayerJoined({ nickname: hostDisplayName, score: 0 });
+    try {
+      broadcastRealtimeEvent('player_joined', {
+        nickname: hostDisplayName,
+        score: 0,
+        room_code: targetRoom
+      });
     } catch (_) {}
 
     // Send immediately and retry multiple times
@@ -1742,40 +1771,9 @@ function checkHostEngineTick() {
   }
 }
 
-// SIMULATE 10 BACKGROUND MOCK PLAYERS WITH SPEED & STREAK MULTIPLIER SCORING
+// SIMULATE BACKGROUND PLAYERS (DISABLED - Only real connected players submit answers)
 function triggerMockPlayersSimulation(questionData, durationSeconds) {
   clearMockPlayerTimeouts();
-
-  playersLeaderboard.forEach(player => {
-    if (currentPlayer && player.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase()) return;
-
-    const maxDelaySecs = Math.max(2, durationSeconds - 2);
-    const delaySecs = Math.random() * maxDelaySecs + 1;
-    const delayMs = Math.floor(delaySecs * 1000);
-
-    const t = setTimeout(() => {
-      const isCorrect = Math.random() < 0.75;
-      if (isCorrect) {
-        let speedBonus = 10;
-        if (delaySecs <= 3) speedBonus = 50;
-        else if (delaySecs <= durationSeconds / 2) speedBonus = 25;
-
-        player.streak = (player.streak || 0) + 1;
-        let streakMult = 1.0;
-        if (player.streak >= 3) streakMult = 1.5;
-        else if (player.streak === 2) streakMult = 1.2;
-
-        const pts = Math.round((100 + speedBonus) * streakMult);
-        player.score += pts;
-      } else {
-        player.streak = 0;
-      }
-      renderLeaderboard();
-      channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-    }, delayMs);
-
-    mockPlayerTimeouts.push(t);
-  });
 }
 
 function clearMockPlayerTimeouts() {
@@ -2468,13 +2466,13 @@ function onPlayerJoined(player) {
   const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
   if (!exists) {
     playersLeaderboard.push({
-      id: player.nickname,
-      player_uid: player.nickname,
+      id: player.id || player.nickname,
+      player_uid: player.player_uid || player.nickname,
       room_code: currentRoomCode,
       nickname: player.nickname,
-      score: 0,
-      cumulative_score: 0,
-      streak: 0,
+      score: player.score || 0,
+      cumulative_score: player.score || 0,
+      streak: player.streak || 0,
       is_connected: true
     });
     renderLeaderboard();
@@ -2485,6 +2483,19 @@ function onPlayerJoined(player) {
       room_code: currentRoomCode
     });
   }
+
+  // Persist to Supabase DB players table
+  try {
+    supabase.from('players').upsert({
+      room_code: currentRoomCode.toUpperCase(),
+      nickname: player.nickname,
+      player_uid: player.player_uid || player.nickname,
+      cumulative_score: player.score || 0,
+      is_connected: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code,nickname' }).catch(() => {});
+  } catch (_) {}
+
   updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
 }
 
@@ -2495,7 +2506,7 @@ function onAnswerSubmitted({ player, choice }) {
 
 // RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL
 function onGameReset() {
-  playersLeaderboard = [...defaultMockPlayers];
+  playersLeaderboard = [];
   selectedGenreQueue = [];
   updateGenreQueueUI();
   renderLeaderboard();
@@ -2528,7 +2539,10 @@ function renderLeaderboard() {
   const list = document.getElementById('tv-leaderboard-list');
   if (!list) return;
 
-  playersLeaderboard.sort((a, b) => b.score - a.score);
+  playersLeaderboard.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (a.nickname || '').localeCompare(b.nickname || '');
+  });
 
   if (playersLeaderboard.length === 0) {
     list.innerHTML = `<li class="lb-empty">No players connected yet...</li>`;

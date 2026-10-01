@@ -86,9 +86,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       _subscribeToRealtime();
     });
 
-    // Auto-create room session & seed 15 mock players immediately on load
+    // Auto-create room session on load
     _createNewSession();
-    SupabaseService.seedMockPlayers(roomCode: 'TRIV', count: 15);
   }
 
   void _subscribeToRealtime() {

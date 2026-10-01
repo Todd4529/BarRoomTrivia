@@ -208,53 +208,8 @@ class SupabaseService {
     }
   }
 
-  static const List<String> _mockNicknames = [
-    'BeerWhisperer',
-    'TriviaNinja',
-    'QuizQuark',
-    'HopsAndGlory',
-    'ProfessorPint',
-    'SmartyPints',
-    'BrewMasterFlex',
-    'MindOverMug',
-    'AleChemist',
-    'FactChecker',
-    'StoutScholars',
-    'BrainyBarley',
-    'PubEinstein',
-    'LagerLegend',
-    'QuizCrafter',
-  ];
-
   static void seedMockPlayers({required String roomCode, int count = 15}) {
-    final normRoom = roomCode.toUpperCase();
-    final list = _localPlayersMap.putIfAbsent(normRoom, () => []);
-
-    for (int i = 0; i < count && i < _mockNicknames.length; i++) {
-      final nickname = _mockNicknames[i];
-      final idx = list.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
-      final mockScore = (15 - i) * 100;
-
-      final mockPlayer = Player(
-        id: 'mock-$i-${DateTime.now().millisecondsSinceEpoch}',
-        roomCode: normRoom,
-        playerUid: 'mock-uid-$i',
-        nickname: nickname,
-        cumulativeScore: mockScore,
-        isConnected: true,
-      );
-
-      if (idx >= 0) {
-        list[idx] = mockPlayer;
-      } else {
-        list.add(mockPlayer);
-      }
-    }
-
-    RealtimeService().broadcastLeaderboardUpdated(
-      roomCode: normRoom,
-      players: getLocalPlayersJson(normRoom),
-    );
+    // Disabled: Leaderboard only displays real connected players
   }
 
   static List<Map<String, dynamic>> getLocalPlayersJson(String roomCode) {
@@ -539,6 +494,30 @@ class SupabaseService {
   Future<List<Player>> getLeaderboard(String roomCode) async {
     final normRoom = roomCode.toUpperCase();
 
+    // 1. Query remote Supabase DB for actual real players
+    try {
+      final res = await _client
+          .from('players')
+          .select()
+          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
+          .order('cumulative_score', ascending: false)
+          .timeout(const Duration(milliseconds: 1500));
+      if (res.isNotEmpty) {
+        final dbPlayers = <Player>[];
+        for (final item in res) {
+          final p = Player.fromJson(item);
+          // Filter out any legacy bogus players if stored in db
+          if (!p.nickname.startsWith('mock-') && !p.nickname.contains('BeerWhisperer') && !p.nickname.contains('TriviaMaster99')) {
+            dbPlayers.add(p);
+          }
+        }
+        if (dbPlayers.isNotEmpty) {
+          _localPlayersMap[normRoom] = dbPlayers;
+          return dbPlayers;
+        }
+      }
+    } catch (_) {}
+
     if (_localPlayersMap.containsKey(normRoom) && _localPlayersMap[normRoom]!.isNotEmpty) {
       final localList = List<Player>.from(_localPlayersMap[normRoom]!);
       localList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
@@ -551,10 +530,8 @@ class SupabaseService {
       return trivList;
     }
 
-    seedMockPlayers(roomCode: normRoom, count: 10);
-    final localList = List<Player>.from(_localPlayersMap[normRoom]!);
-    localList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    return localList;
+    // Clean empty state for new / fresh rooms
+    return <Player>[];
   }
 
   /// Host: Create new room session with Dev Fallback

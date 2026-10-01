@@ -387,7 +387,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           for (var item in pList) {
             if (item is Map) {
               try {
-                updated.add(Player.fromJson(item));
+                final map = Map<String, dynamic>.from(item);
+                final nick = map['nickname']?.toString() ?? '';
+                if (!nick.startsWith('mock-') && !nick.contains('BeerWhisperer') && !nick.contains('TriviaMaster99')) {
+                  updated.add(Player.fromJson(map));
+                }
               } catch (_) {}
             }
           }
