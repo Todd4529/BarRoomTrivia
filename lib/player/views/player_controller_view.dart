@@ -90,6 +90,24 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         nickname: nickname,
       );
 
+      // Instantly broadcast player_joined across MQTT and local bus so TV display sees them
+      _realtimeService.broadcastPlayerJoined(
+        roomCode: roomCode,
+        nickname: nickname,
+      );
+      Future.delayed(const Duration(milliseconds: 400), () {
+        _realtimeService.broadcastPlayerJoined(
+          roomCode: roomCode,
+          nickname: nickname,
+        );
+      });
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        _realtimeService.broadcastPlayerJoined(
+          roomCode: roomCode,
+          nickname: nickname,
+        );
+      });
+
       if (mounted) {
         setState(() {
           _gameSession = session ??
@@ -213,6 +231,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _showResultOverlay = false;
           _showRoundWinnersOverlay = false;
           _isInterQuestionPhase = false;
+          _currentQuestion = null;
+          _selectedOption = null;
+          _correctOption = null;
+          _inputsLocked = false;
+          _isReviewPhase = false;
+          _isScoredForThisQuestion = false;
           _preGameSecondsRemaining = remainingSec;
         });
         _startPreGameTimer();
@@ -330,17 +354,35 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           parsedWinners = List<Map<String, dynamic>>.from(top3);
         }
 
+        final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
+            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
+        final delaySec = nextStartsAt != null
+            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
+            : 15;
+
         setState(() {
           _top3Winners = parsedWinners;
           _showRoundWinnersOverlay = parsedWinners.isNotEmpty;
           _showResultOverlay = false;
           _isInterQuestionPhase = false;
+          _currentQuestion = null;
+          _selectedOption = null;
+          _correctOption = null;
+          _inputsLocked = false;
+          _isReviewPhase = false;
+          _isScoredForThisQuestion = false;
         });
 
-        Future.delayed(const Duration(seconds: 12), () {
+        Future.delayed(Duration(seconds: delaySec), () {
           if (mounted) {
             setState(() {
               _showRoundWinnersOverlay = false;
+              _currentQuestion = null;
+              _selectedOption = null;
+              _correctOption = null;
+              _inputsLocked = false;
+              _isReviewPhase = false;
+              _isScoredForThisQuestion = false;
             });
           }
         });
@@ -377,6 +419,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               _nicknameController.clear();
             });
           }
+        }
+      },
+      onRequestStateSyncBroadcast: (payload) {
+        if (_player != null && mounted) {
+          _realtimeService.broadcastPlayerJoined(
+            roomCode: _player!.roomCode,
+            nickname: _player!.nickname,
+            score: _myScore,
+          );
         }
       },
     );

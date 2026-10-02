@@ -174,6 +174,23 @@ const funnyWrongQuotes = [
   "Ouch! The trivia gods demanded a sacrifice. Next one is yours! ⚡"
 ];
 
+// COMPREHENSIVE FICTITIOUS & BOGUS PLAYER PURGE HELPER
+function isFictitiousPlayer(nickname) {
+  if (!nickname) return true;
+  const lower = nickname.toString().trim().toLowerCase();
+  if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
+  const banned = [
+    'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
+    'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',
+    'stoutscholars', 'brainybarley', 'pubeinstein', 'lagerlegend', 'quizcrafter',
+    'triviamaster99', 'beerguru', 'pubquizpro', 'brewmaster_joe', 'hopsandbarley',
+    'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
+    'taverntactician', 'player 1', 'champion', 'runner up', 'third place',
+    'todd4529', 'host', 'host user'
+  ];
+  return banned.some(b => lower === b || lower.includes(b));
+}
+
 // INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY (No bogus / mock players)
 let playersLeaderboard = [];
 
@@ -181,21 +198,29 @@ function loadInitialPlayers() {
   const normRoom = (currentRoomCode || 'TRIV').toUpperCase();
   try {
     supabase.from('players')
+      .delete()
+      .or('nickname.ilike.%todd4529%,nickname.ilike.%host%')
+      .then(() => {})
+      .catch(() => {});
+  } catch (_) {}
+
+  try {
+    supabase.from('players')
       .select('*')
       .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
       .order('cumulative_score', { ascending: false })
       .then(({ data, error }) => {
         if (!error && data && data.length > 0) {
-          // Filter out any legacy bogus players if present in DB
-          const realPlayers = data.filter(p => !p.nickname.startsWith('mock-') && !p.nickname.includes('TriviaMaster99') && !p.nickname.includes('BeerWhisperer'));
+          // Filter out any legacy bogus players if present in DB, while retaining all real players even with score 0
+          const realPlayers = data.filter(p => !isFictitiousPlayer(p.nickname));
           if (realPlayers.length > 0) {
             playersLeaderboard = realPlayers.map(p => ({
               id: p.id || p.nickname,
               player_uid: p.player_uid || p.nickname,
               room_code: normRoom,
               nickname: p.nickname,
-              score: p.cumulative_score ?? p.score ?? 0,
-              cumulative_score: p.cumulative_score ?? p.score ?? 0,
+              score: Number(p.cumulative_score ?? p.score ?? 0),
+              cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
               streak: p.streak || 0,
               is_connected: p.is_connected !== false
             }));
@@ -406,17 +431,6 @@ function initAuthView() {
           updated_at: new Date().toISOString()
         }
       ], { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
-
-    // Automatically register logged in host user as an active player on the room leaderboard
-    const hostDisplayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Host';
-    onPlayerJoined({ nickname: hostDisplayName, score: 0 });
-    try {
-      broadcastRealtimeEvent('player_joined', {
-        nickname: hostDisplayName,
-        score: 0,
-        room_code: targetRoom
-      });
     } catch (_) {}
 
     // Send immediately and retry multiple times
@@ -821,6 +835,8 @@ function initRealtimeSupabaseChannels() {
   }
 }
 
+let pendingMqttMessages = [];
+
 function broadcastRealtimeEvent(event, payload = {}) {
   const fullPayload = {
     ...payload,
@@ -848,6 +864,9 @@ function broadcastRealtimeEvent(event, payload = {}) {
     } catch (e) {
       console.warn('[Realtime MQTT] Failed to publish:', e);
     }
+  } else {
+    pendingMqttMessages.push(fullPayload);
+    if (pendingMqttMessages.length > 50) pendingMqttMessages.shift();
   }
 
   // 3. Internet-Wide Supabase Realtime Gateway
@@ -873,6 +892,8 @@ function handleIncomingPreGameCountdown(rawPayload) {
   console.log('[Realtime] Processing pre_game_countdown:', payload);
   const countdownSecs = payload.countdown_seconds || 10;
   currentGameState = 'COUNTDOWN';
+  currentQuestionData = null;
+  playerChoiceSubmitted = null;
 
   hideResultModal();
   hideWinnerModals();
@@ -913,6 +934,9 @@ function handleIncomingQuestionStart(rawPayload) {
   const payload = rawPayload.payload || rawPayload;
   console.log('[Realtime] Processing question_start:', payload);
 
+  hideWinnerModals();
+  hideResultModal();
+
   const questionData = {
     id: payload.question_id || payload.id || String(Date.now()),
     category: payload.category || 'General Knowledge',
@@ -932,8 +956,8 @@ function handleIncomingQuestionStart(rawPayload) {
 
   const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds) || selectedQuestionDuration || 20;
   const qIndex = Number(payload.question_index) || 1;
-  const roundNum = Math.floor((qIndex - 1) / 10) + 1;
-  const qNumInRound = ((qIndex - 1) % 10) + 1;
+  const roundNum = Number(payload.round_number || payload.roundNumber) || Math.floor((qIndex - 1) / 10) + 1;
+  const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
   timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
   const remainingSecs = Math.max(1, Math.min(durationSeconds, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)));
@@ -1017,13 +1041,30 @@ function handleRealtimeIncomingEvent(event, data) {
         room_code: currentRoomCode
       });
     }
+
+    // Active player announces presence on state sync so fresh TV sessions see them
+    if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+      broadcastRealtimeEvent('player_joined', {
+        nickname: currentPlayer.nickname,
+        score: Number(currentPlayer.score ?? 0),
+        room_code: currentRoomCode,
+      });
+    }
   } else if (normEvent === 'player_joined') {
     onPlayerJoined(payload);
   } else if (normEvent === 'answer_submitted') {
     onAnswerSubmitted(payload);
   } else if (normEvent === 'leaderboard_updated') {
-    if (payload?.players || payload?.leaderboard) {
-      playersLeaderboard = payload.players || payload.leaderboard;
+    const list = payload?.players || payload?.leaderboard;
+    if (Array.isArray(list)) {
+      const valid = list
+        .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
+        .map(p => ({
+          ...p,
+          score: Number(p.score ?? p.cumulative_score ?? 0),
+          cumulative_score: Number(p.score ?? p.cumulative_score ?? 0),
+        }));
+      playersLeaderboard = valid;
       renderLeaderboard();
     }
   }
@@ -1054,6 +1095,29 @@ function initRealtimeEngine() {
         if (!err) {
           console.log(`[Realtime Engine] Subscribed to ${topicsToSub.join(', ')}!`);
           broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+
+          // Flush any queued messages
+          if (pendingMqttMessages.length > 0) {
+            const queued = [...pendingMqttMessages];
+            pendingMqttMessages = [];
+            queued.forEach(p => {
+              try {
+                const jsonStr = JSON.stringify(p);
+                mqttClient.publish(topic, jsonStr);
+                if (topic !== 'barrooms_trivia/room_TRIV') mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
+                mqttClient.publish('tv_pairing', jsonStr);
+              } catch (_) {}
+            });
+          }
+
+          // If active real player joined on this device, guarantee TV receives player_joined
+          if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+            broadcastRealtimeEvent('player_joined', {
+              nickname: currentPlayer.nickname,
+              score: Number(currentPlayer.score ?? 0),
+              room_code: currentRoomCode,
+            });
+          }
         }
       });
     });
@@ -1684,23 +1748,36 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
     hostEngineState = 'ROUND_SUMMARY';
     hostTargetEpochMs = Date.now() + 15000;
     
-    playersLeaderboard.sort((a, b) => b.score - a.score);
-    const roundWinner = playersLeaderboard[0] || { nickname: 'Player 1', score: 0 };
-    
-    roundWinner.score += 250;
-    renderLeaderboard();
-    broadcastRealtimeEvent('leaderboard_updated', {
-      players: playersLeaderboard,
-    });
+    playersLeaderboard.sort((a, b) => (Number(b.score ?? b.cumulative_score ?? 0)) - (Number(a.score ?? a.cumulative_score ?? 0)));
+    const validPlayers = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
 
-    const top3 = playersLeaderboard.slice(0, 3);
-    const winnerPayload = {
+    let top3 = [];
+    let winnerPayload = {
       roundNumber: currentRound,
-      winnerName: roundWinner.nickname,
-      winnerScore: roundWinner.score,
-      top3Winners: top3,
+      winnerName: '',
+      winnerScore: 0,
+      top3Winners: [],
       delaySeconds: 15
     };
+
+    if (validPlayers.length > 0) {
+      const roundWinner = validPlayers[0];
+      roundWinner.score = (Number(roundWinner.score ?? roundWinner.cumulative_score ?? 0)) + 250;
+      roundWinner.cumulative_score = roundWinner.score;
+      renderLeaderboard();
+      broadcastRealtimeEvent('leaderboard_updated', {
+        players: playersLeaderboard,
+      });
+
+      top3 = validPlayers.slice(0, 3);
+      winnerPayload = {
+        roundNumber: currentRound,
+        winnerName: roundWinner.nickname,
+        winnerScore: roundWinner.score,
+        top3Winners: top3,
+        delaySeconds: 15
+      };
+    }
 
     broadcastRealtimeEvent('round_completed', {
       round_number: currentRound,
@@ -1723,6 +1800,8 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
 function handleHostAdvanceAfterRoundSummary() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'ROUND_SUMMARY') return;
   currentRoundQuestions = [];
+  currentQuestionData = null;
+  playerChoiceSubmitted = null;
 
   const nextRound = Math.floor(currentQuestionIndex / 10) + 1;
   let nextGenre = 'General Trivia';
@@ -1747,12 +1826,23 @@ function handleHostAdvanceAfterRoundSummary() {
     starts_at_epoch_ms: hostTargetEpochMs,
   });
 
-  onPreGameCountdown({
+  handleIncomingPreGameCountdown({
     countdown_seconds: preGameSecs,
     genre: nextGenre,
     round_number: nextRound,
     starts_at_epoch_ms: hostTargetEpochMs,
   });
+
+  try {
+    supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'pre_game_countdown',
+      current_question_index: currentQuestionIndex + 1,
+      current_round: nextRound,
+      starts_at: hostTargetEpochMs,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'room_code' }).catch(() => {});
+  } catch (_) {}
 
   clearTimeout(autoEngineTimeout);
   autoEngineTimeout = setTimeout(() => {
@@ -1898,6 +1988,7 @@ function onQuestionStart(payload) {
   // Reset player answer choice state and dismiss previous result modal for new question
   playerChoiceSubmitted = null;
   hideResultModal();
+  hideWinnerModals();
 
   // Update Player Phone Display & Difficulty Pill
   const playerDispRoom = document.getElementById('player-disp-room');
@@ -2264,11 +2355,22 @@ function onRoundWinner(payload) {
     top3 = playersLeaderboard.slice(0, 3);
   }
 
+  // Filter out any fictitious players, strictly preserving all real players even with score 0
+  top3 = top3.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+
   const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
   const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
 
+  const tvPodium1 = document.getElementById('tv-podium-1');
+  const tvPodium2 = document.getElementById('tv-podium-2');
+  const tvPodium3 = document.getElementById('tv-podium-3');
+
+  const playerPodium1 = document.getElementById('player-podium-1');
+  const playerPodium2 = document.getElementById('player-podium-2');
+  const playerPodium3 = document.getElementById('player-podium-3');
+
   if (top3.length > 0) {
-    const winner1 = top3[0] || { nickname: 'Champion', score: 0 };
+    const winner1 = top3[0];
     const winner2 = top3[1];
     const winner3 = top3[2];
 
@@ -2279,17 +2381,29 @@ function onRoundWinner(payload) {
     const tvW3Name = document.getElementById('tv-w3-name');
     const tvW3Score = document.getElementById('tv-w3-score');
 
-    if (tvW1Name) tvW1Name.textContent = winner1.nickname || 'Champion';
-    if (tvW1Score) tvW1Score.textContent = `${winner1.score ?? winner1.cumulative_score ?? 0} PTS`;
-    if (tvW2Name && winner2) tvW2Name.textContent = winner2.nickname || 'Runner Up';
-    if (tvW2Score && winner2) tvW2Score.textContent = `${winner2.score ?? winner2.cumulative_score ?? 0} PTS`;
-    if (tvW3Name && winner3) tvW3Name.textContent = winner3.nickname || 'Third Place';
-    if (tvW3Score && winner3) tvW3Score.textContent = `${winner3.score ?? winner3.cumulative_score ?? 0} PTS`;
+    if (tvPodium1) tvPodium1.style.display = 'flex';
+    if (tvW1Name) tvW1Name.textContent = (winner1.nickname || '').toUpperCase();
+    if (tvW1Score) tvW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
 
-    const tvPodium2 = document.getElementById('tv-podium-2');
-    const tvPodium3 = document.getElementById('tv-podium-3');
-    if (tvPodium2) tvPodium2.style.display = winner2 ? 'flex' : 'none';
-    if (tvPodium3) tvPodium3.style.display = winner3 ? 'flex' : 'none';
+    if (tvPodium2) {
+      if (winner2) {
+        tvPodium2.style.display = 'flex';
+        if (tvW2Name) tvW2Name.textContent = (winner2.nickname || '').toUpperCase();
+        if (tvW2Score) tvW2Score.textContent = `${Number(winner2.score ?? winner2.cumulative_score ?? 0)} PTS`;
+      } else {
+        tvPodium2.style.display = 'none';
+      }
+    }
+
+    if (tvPodium3) {
+      if (winner3) {
+        tvPodium3.style.display = 'flex';
+        if (tvW3Name) tvW3Name.textContent = (winner3.nickname || '').toUpperCase();
+        if (tvW3Score) tvW3Score.textContent = `${Number(winner3.score ?? winner3.cumulative_score ?? 0)} PTS`;
+      } else {
+        tvPodium3.style.display = 'none';
+      }
+    }
 
     const pW1Name = document.getElementById('player-w1-name');
     const pW1Score = document.getElementById('player-w1-score');
@@ -2298,17 +2412,37 @@ function onRoundWinner(payload) {
     const pW3Name = document.getElementById('player-w3-name');
     const pW3Score = document.getElementById('player-w3-score');
 
-    if (pW1Name) pW1Name.textContent = winner1.nickname || 'Champion';
-    if (pW1Score) pW1Score.textContent = `${winner1.score ?? winner1.cumulative_score ?? 0} PTS`;
-    if (pW2Name && winner2) pW2Name.textContent = winner2.nickname || 'Runner Up';
-    if (pW2Score && winner2) pW2Score.textContent = `${winner2.score ?? winner2.cumulative_score ?? 0} PTS`;
-    if (pW3Name && winner3) pW3Name.textContent = winner3.nickname || 'Third Place';
-    if (pW3Score && winner3) pW3Score.textContent = `${winner3.score ?? winner3.cumulative_score ?? 0} PTS`;
+    if (playerPodium1) playerPodium1.style.display = 'flex';
+    if (pW1Name) pW1Name.textContent = (winner1.nickname || '').toUpperCase();
+    if (pW1Score) pW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
 
-    const playerPodium2 = document.getElementById('player-podium-2');
-    const playerPodium3 = document.getElementById('player-podium-3');
-    if (playerPodium2) playerPodium2.style.display = winner2 ? 'flex' : 'none';
-    if (playerPodium3) playerPodium3.style.display = winner3 ? 'flex' : 'none';
+    if (playerPodium2) {
+      if (winner2) {
+        playerPodium2.style.display = 'flex';
+        if (pW2Name) pW2Name.textContent = (winner2.nickname || '').toUpperCase();
+        if (pW2Score) pW2Score.textContent = `${Number(winner2.score ?? winner2.cumulative_score ?? 0)} PTS`;
+      } else {
+        playerPodium2.style.display = 'none';
+      }
+    }
+
+    if (playerPodium3) {
+      if (winner3) {
+        playerPodium3.style.display = 'flex';
+        if (pW3Name) pW3Name.textContent = (winner3.nickname || '').toUpperCase();
+        if (pW3Score) pW3Score.textContent = `${Number(winner3.score ?? winner3.cumulative_score ?? 0)} PTS`;
+      } else {
+        playerPodium3.style.display = 'none';
+      }
+    }
+  } else {
+    // If no players are registered yet, hide podium rows rather than showing fictitious names
+    if (tvPodium1) tvPodium1.style.display = 'none';
+    if (tvPodium2) tvPodium2.style.display = 'none';
+    if (tvPodium3) tvPodium3.style.display = 'none';
+    if (playerPodium1) playerPodium1.style.display = 'none';
+    if (playerPodium2) playerPodium2.style.display = 'none';
+    if (playerPodium3) playerPodium3.style.display = 'none';
   }
 
   const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
@@ -2399,11 +2533,42 @@ function initPlayerControls() {
     // Acquire screen wake lock so player's phone screen doesn't turn off
     requestScreenWakeLock();
 
-    // Broadcast join and request state sync immediately
-    broadcastRealtimeEvent('player_joined', {
-      nickname: currentPlayer.nickname,
-      score: currentPlayer.score,
-    });
+    // Broadcast join immediately and retry with intervals to ensure MQTT delivery
+    const sendJoinBroadcast = () => {
+      if (!currentPlayer || !currentPlayer.nickname || isFictitiousPlayer(currentPlayer.nickname)) return;
+      broadcastRealtimeEvent('player_joined', {
+        nickname: currentPlayer.nickname,
+        score: Number(currentPlayer.score ?? 0),
+        room_code: currentRoomCode,
+      });
+      // Also write directly to Supabase players table
+      try {
+        supabase.from('players').upsert({
+          room_code: currentRoomCode.toUpperCase(),
+          nickname: currentPlayer.nickname,
+          player_uid: currentPlayer.nickname,
+          cumulative_score: Number(currentPlayer.score ?? 0),
+          is_connected: true,
+          updated_at: new Date().toISOString()
+        }).catch(() => {});
+        if (currentRoomCode.toUpperCase() !== 'TRIV') {
+          supabase.from('players').upsert({
+            room_code: 'TRIV',
+            nickname: currentPlayer.nickname,
+            player_uid: currentPlayer.nickname,
+            cumulative_score: Number(currentPlayer.score ?? 0),
+            is_connected: true,
+            updated_at: new Date().toISOString()
+          }).catch(() => {});
+        }
+      } catch (_) {}
+    };
+    sendJoinBroadcast();
+    setTimeout(sendJoinBroadcast, 300);
+    setTimeout(sendJoinBroadcast, 800);
+    setTimeout(sendJoinBroadcast, 1800);
+    setTimeout(sendJoinBroadcast, 3000);
+
     broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
     onPlayerJoined(currentPlayer);
 
@@ -2421,6 +2586,11 @@ function initPlayerControls() {
     }
 
     function checkActiveGameSession() {
+      // Periodic player heartbeat ensures TV display maintains sync
+      if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+        sendJoinBroadcast();
+      }
+
       supabase.from('game_sessions')
         .select('*')
         .or(`room_code.eq.${currentRoomCode},room_code.eq.TRIV`)
@@ -2432,19 +2602,23 @@ function initPlayerControls() {
               handleIncomingPreGameCountdown({ countdown_seconds: rem });
             } else if (data.status === 'question_active' && data.question_data) {
               const qData = data.question_data;
-              if (!currentQuestionData || currentQuestionData.id !== qData.id) {
-                handleIncomingQuestionStart({
-                  ...qData,
-                  question_index: data.current_question_index || 1,
-                  duration_seconds: data.duration_seconds || 20,
-                  timer_ends_at_epoch_ms: data.timer_ends_at
-                });
+              const now = Date.now();
+              const endsAt = data.timer_ends_at || (now + 20000);
+              if ((endsAt - now) > -15000) {
+                if (!currentQuestionData || currentQuestionData.id !== qData.id || currentGameState !== 'QUESTION_ACTIVE') {
+                  handleIncomingQuestionStart({
+                    ...qData,
+                    question_index: data.current_question_index || 1,
+                    round_number: data.current_round,
+                    duration_seconds: data.duration_seconds || 20,
+                    timer_ends_at_epoch_ms: data.timer_ends_at
+                  });
+                }
               }
             }
           }
         }).catch(() => {});
     }
-
     checkActiveGameSession();
     setInterval(checkActiveGameSession, 2000);
   }
@@ -2492,14 +2666,15 @@ function initPlayerControls() {
       broadcastRealtimeEvent('answer_submitted', {
         nickname: currentPlayer.nickname,
         selected_option: choice,
-        score: currentPlayer.score,
+        score: Number(currentPlayer.score ?? 0),
       });
     };
   });
 }
 
 function onPlayerJoined(player) {
-  if (!player || !player.nickname) return;
+  if (!player || !player.nickname || isFictitiousPlayer(player.nickname)) return;
+  const initialScore = Number(player.score ?? player.cumulative_score ?? 0);
   const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
   if (!exists) {
     playersLeaderboard.push({
@@ -2507,19 +2682,29 @@ function onPlayerJoined(player) {
       player_uid: player.player_uid || player.nickname,
       room_code: currentRoomCode,
       nickname: player.nickname,
-      score: player.score || 0,
-      cumulative_score: player.score || 0,
+      score: initialScore,
+      cumulative_score: initialScore,
       streak: player.streak || 0,
       is_connected: true
     });
-    renderLeaderboard();
-    channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-    broadcastRealtimeEvent('leaderboard_updated', {
-      players: playersLeaderboard,
-      leaderboard: playersLeaderboard,
-      room_code: currentRoomCode
-    });
+  } else {
+    const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
+    if (idx >= 0) {
+      playersLeaderboard[idx].is_connected = true;
+      if (player.score !== undefined || player.cumulative_score !== undefined) {
+        playersLeaderboard[idx].score = initialScore;
+        playersLeaderboard[idx].cumulative_score = initialScore;
+      }
+    }
   }
+
+  renderLeaderboard();
+  channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
+  broadcastRealtimeEvent('leaderboard_updated', {
+    players: playersLeaderboard,
+    leaderboard: playersLeaderboard,
+    room_code: currentRoomCode
+  });
 
   // Persist to Supabase DB players table
   try {
@@ -2527,7 +2712,7 @@ function onPlayerJoined(player) {
       room_code: currentRoomCode.toUpperCase(),
       nickname: player.nickname,
       player_uid: player.player_uid || player.nickname,
-      cumulative_score: player.score || 0,
+      cumulative_score: initialScore,
       is_connected: true,
       updated_at: new Date().toISOString()
     }, { onConflict: 'room_code,nickname' }).catch(() => {});
@@ -2576,8 +2761,13 @@ function renderLeaderboard() {
   const list = document.getElementById('tv-leaderboard-list');
   if (!list) return;
 
+  // Filter out any fictitious players, ensuring all real players (even with 0 pts) remain visible
+  playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+
   playersLeaderboard.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
+    const scoreA = Number(a.score ?? a.cumulative_score ?? 0);
+    const scoreB = Number(b.score ?? b.cumulative_score ?? 0);
+    if (scoreB !== scoreA) return scoreB - scoreA;
     return (a.nickname || '').localeCompare(b.nickname || '');
   });
 
@@ -2588,13 +2778,14 @@ function renderLeaderboard() {
 
   list.innerHTML = playersLeaderboard.map((p, index) => {
     const topClass = index < 3 ? `top-${index + 1}` : '';
+    const displayScore = Number(p.score ?? p.cumulative_score ?? 0);
     return `
       <li class="lb-item ${topClass}">
         <div style="display:flex; align-items:center;">
           <span class="lb-rank">#${index + 1}</span>
           <span>${escapeHtml(p.nickname)}</span>
         </div>
-        <span class="lb-score">${p.score} pts</span>
+        <span class="lb-score">${displayScore} pts</span>
       </li>
     `;
   }).join('');

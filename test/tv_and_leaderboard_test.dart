@@ -184,11 +184,28 @@ void main() {
       expect(leaderboard.first.cumulativeScore, 600);
     });
 
-    test('returns default pub players if room is empty', () async {
+    test('shows players even if their scores are zero and filters fictitious names', () async {
+      SupabaseService.syncPlayersFromBroadcast('ZERO_SCORE_ROOM', [
+        {'nickname': 'TriviaMaster99', 'score': 1000},
+        {'nickname': 'BeerWhisperer', 'score': 500},
+        {'nickname': 'Player 1', 'score': 250},
+        {'nickname': 'RealZeroPlayer', 'score': 0},
+        {'nickname': 'RealActivePlayer', 'score': 150},
+      ]);
+
+      final service = SupabaseService();
+      final leaderboard = await service.getLeaderboard('ZERO_SCORE_ROOM');
+      expect(leaderboard.length, 2);
+      expect(leaderboard[0].nickname, 'RealActivePlayer');
+      expect(leaderboard[0].cumulativeScore, 150);
+      expect(leaderboard[1].nickname, 'RealZeroPlayer');
+      expect(leaderboard[1].cumulativeScore, 0);
+    });
+
+    test('returns empty list if room has no real players and ignores fictitious players', () async {
       final service = SupabaseService();
       final leaderboard = await service.getLeaderboard('EMPTY_ROOM_XYZ');
-      expect(leaderboard.length, 10);
-      expect(leaderboard.first.nickname.isNotEmpty, true);
+      expect(leaderboard.isEmpty, true);
     });
   });
 
@@ -455,5 +472,19 @@ void main() {
       expect(ring.size, 58);
       expect(ring.remainingSeconds, 10);
     });
+
+    test('Leaderboard filtering bans todd4529 and host, retains Troy with zero points', () {
+      expect(SupabaseService.isMockNickname('todd4529'), isTrue);
+      expect(SupabaseService.isMockNickname('Host'), isTrue);
+      expect(SupabaseService.isMockNickname('host user'), isTrue);
+      expect(SupabaseService.isMockNickname('Troy'), isFalse);
+
+      SupabaseService.registerIncomingPlayer('TRIV', 'Troy', 0);
+      final players = SupabaseService.getLocalPlayersJson('TRIV');
+      expect(players.length, 1);
+      expect(players.first['nickname'], 'Troy');
+      expect(players.first['cumulative_score'], 0);
+    });
   });
 }
+

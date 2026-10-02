@@ -183,8 +183,11 @@ class RealtimeService {
               final nick = payload['nickname']?.toString();
               final rawScore = payload['cumulative_score'] ?? payload['score'] ?? payload['points'];
               int score = 0;
-              if (rawScore is num) score = rawScore.toInt();
-              else if (rawScore != null) score = int.tryParse(rawScore.toString()) ?? 0;
+              if (rawScore is num) {
+                score = rawScore.toInt();
+              } else if (rawScore != null) {
+                score = int.tryParse(rawScore.toString()) ?? 0;
+              }
               if (nick != null && nick.isNotEmpty) {
                 SupabaseService.updatePlayerScoreDirectly(
                   roomCode: roomCode,
@@ -257,6 +260,36 @@ class RealtimeService {
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'pre_game_countdown',
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  /// Broadcast player joined event so TV immediately registers the incoming player
+  Future<void> broadcastPlayerJoined({
+    required String roomCode,
+    required String nickname,
+    int score = 0,
+  }) async {
+    final normRoom = roomCode.toUpperCase().trim();
+    final payload = {
+      'event': 'player_joined',
+      'room_code': normRoom,
+      'nickname': nickname,
+      'score': score,
+      'cumulative_score': score,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(normRoom, payload);
+
+    try {
+      final ch = _channel ?? SupabaseConfig.client.channel('room_$normRoom');
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'player_joined',
         payload: payload,
       );
     } catch (_) {}

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -176,10 +175,24 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           }
         }
       } catch (_) {}
+
+      // Keep TV leaderboard updated with newly joined players
+      if (mounted) {
+        await _loadLeaderboard();
+      }
     });
   }
 
   void _initTvSession() {
+    try {
+      SupabaseConfig.client
+          .from('players')
+          .delete()
+          .or('nickname.ilike.%todd4529%,nickname.ilike.%host%')
+          .then((_) {})
+          .catchError((_) {});
+    } catch (_) {}
+
     _loadLeaderboard();
     _startTvSessionPolling();
 
@@ -187,7 +200,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
 
     _realtimeService.joinRoomChannel(
-      roomCode: widget.roomCode,
+      roomCode: _displayRoomCode,
       onPreGameCountdownBroadcast: (payload) {
         _adSlideTimer?.cancel();
         _interQuestionTimer?.cancel();
@@ -358,6 +371,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             payload['top3Winners'] as List?;
         final rNum = (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt();
+        final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
+            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
+        final delaySec = nextStartsAt != null
+            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
+            : 15;
+
         if (mounted && winners != null) {
           _timer?.cancel();
           _interQuestionTimer?.cancel();
@@ -366,25 +385,39 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             if (item is Map) parsed.add(Map<String, dynamic>.from(item));
           }
           setState(() {
+            _currentQuestion = null;
+            _isTimerExpired = false;
+            _isInterQuestionPhase = false;
             _top3Winners = parsed;
             _showRoundWinnersOverlay = true;
-            _isInterQuestionPhase = false;
             _interQuestionSecondsRemaining = 0;
             _questionIndex = 0;
             if (rNum != null) {
               _currentRound = rNum;
             }
           });
-          Future.delayed(const Duration(seconds: 12), () {
-            if (mounted) {
+          Future.delayed(Duration(seconds: delaySec), () {
+            if (mounted && _showRoundWinnersOverlay) {
               setState(() {
                 _showRoundWinnersOverlay = false;
+                _isTimerExpired = false;
+                _isInterQuestionPhase = false;
+                _isPreGameCountdown = true;
+                _preGameSeconds = 5;
               });
+              _startPreGameTimer();
             }
           });
         }
       },
       onLeaderboardUpdatedBroadcast: (payload) {
+        final singleNick = payload['nickname']?.toString();
+        if (singleNick != null && singleNick.isNotEmpty && !SupabaseService.isMockNickname(singleNick)) {
+          final rawScore = payload['score'] ?? payload['cumulative_score'] ?? 0;
+          final score = (rawScore is num) ? rawScore.toInt() : (int.tryParse(rawScore.toString()) ?? 0);
+          SupabaseService.registerIncomingPlayer(_displayRoomCode, singleNick, score);
+        }
+
         final pList = payload['players'] ?? payload['leaderboard'];
         if (pList is List && pList.isNotEmpty) {
           final updated = <Player>[];
@@ -393,7 +426,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               try {
                 final map = Map<String, dynamic>.from(item);
                 final nick = map['nickname']?.toString() ?? '';
-                if (!nick.startsWith('mock-') && !nick.contains('BeerWhisperer') && !nick.contains('TriviaMaster99')) {
+                if (!SupabaseService.isMockNickname(nick)) {
                   updated.add(Player.fromJson(map));
                 }
               } catch (_) {}
@@ -406,11 +439,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 _leaderboard = updated;
               });
             }
-            SupabaseService.setLocalPlayers(widget.roomCode, updated);
+            SupabaseService.setLocalPlayers(_displayRoomCode, updated);
             return;
           }
         }
         _loadLeaderboard();
+      },
+      onRequestStateSyncBroadcast: (payload) {
+        if (mounted && _isGameActive && _currentQuestion != null && !_isTimerExpired) {
+          _realtimeService.broadcastQuestion(
+            roomCode: _displayRoomCode,
+            questionIndex: _questionIndex > 0 ? _questionIndex : 1,
+            question: _currentQuestion!,
+            durationSeconds: _remainingSeconds > 0 ? _remainingSeconds : 20,
+            timerEndsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000),
+          );
+        }
       },
     );
   }
@@ -427,19 +471,51 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         setState(() {
           _isPreGameCountdown = false;
           _isGameActive = true; // Crucial: never revert to waiting carousel!
+          _isTimerExpired = false;
+          _isInterQuestionPhase = false;
         });
         _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
-        // Fallback: if no question arrived after 2.5s, generate question 1 locally using active genre
-        Timer(const Duration(milliseconds: 2500), () {
+        // Fallback: if no question arrived after 5s, generate question 1 locally using active genre
+        Timer(const Duration(seconds: 5), () async {
           if (mounted && _isGameActive && _currentQuestion == null) {
             final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
             final fallback = fallbackList.isNotEmpty ? fallbackList.first : HomebrewingDatabase.generate500Questions().first;
+            final duration = _totalDuration > 0 ? _totalDuration : 20;
+            final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
+
             setState(() {
               _currentQuestion = fallback;
               _questionIndex = 1;
-              _remainingSeconds = _totalDuration > 0 ? _totalDuration : 20;
+              _totalDuration = duration;
+              _remainingSeconds = duration;
+              _isTimerExpired = false;
+              _isInterQuestionPhase = false;
             });
             _startTimer();
+
+            try {
+              await _realtimeService.broadcastQuestion(
+                roomCode: _displayRoomCode,
+                questionIndex: 1,
+                question: fallback,
+                durationSeconds: duration,
+                timerEndsAtEpochMs: timerEndsAtEpochMs,
+              );
+            } catch (e) {
+              debugPrint('[TV] Start round fallback question 1 broadcast error: $e');
+            }
+
+            try {
+              await SupabaseConfig.client.from('game_sessions').upsert({
+                'room_code': _displayRoomCode,
+                'status': 'question_active',
+                'current_question_index': 1,
+                'duration_seconds': duration,
+                'timer_ends_at': timerEndsAtEpochMs,
+                'question_data': fallback.toJson(),
+                'updated_at': DateTime.now().toIso8601String(),
+              }, onConflict: 'room_code');
+            } catch (_) {}
           }
         });
       }
@@ -447,7 +523,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   Future<void> _loadLeaderboard() async {
-    final players = await _supabaseService.getLeaderboard(widget.roomCode);
+    final players = await _supabaseService.getLeaderboard(_displayRoomCode);
     if (mounted) {
       setState(() {
         _leaderboard = players;
@@ -556,8 +632,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final nextStartsAt = DateTime.now().millisecondsSinceEpoch + 15000;
 
     setState(() {
-      _isGameActive = false;
+      _currentQuestion = null;
+      _isTimerExpired = false;
       _isInterQuestionPhase = false;
+      _isGameActive = false;
       _interQuestionSecondsRemaining = 0;
       _top3Winners = winners;
       _showRoundWinnersOverlay = true;
@@ -577,10 +655,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       debugPrint('[TV] Autocomplete round broadcast error: $e');
     }
 
-    Timer(const Duration(seconds: 12), () {
-      if (mounted) {
+    try {
+      await SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': _displayRoomCode,
+        'status': 'round_summary',
+        'current_round': nextRound,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code');
+    } catch (_) {}
+
+    Timer(const Duration(seconds: 15), () {
+      if (mounted && _showRoundWinnersOverlay) {
         setState(() {
           _showRoundWinnersOverlay = false;
+          _isTimerExpired = false;
+          _isInterQuestionPhase = false;
           _isPreGameCountdown = true;
           _preGameSeconds = 5;
         });
@@ -629,6 +718,18 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     } catch (e) {
       debugPrint('[TV] Safety Net broadcast error: $e');
     }
+
+    try {
+      await SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': _displayRoomCode,
+        'status': 'question_active',
+        'current_question_index': nextIndex,
+        'duration_seconds': duration,
+        'timer_ends_at': timerEndsAtEpochMs,
+        'question_data': question.toJson(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code');
+    } catch (_) {}
   }
 
   @override
@@ -1519,7 +1620,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           child: Column(
             children: [
               QrDisplayWidget(
-                roomCode: widget.roomCode,
+                roomCode: _displayRoomCode,
                 showRoomCode: false,
                 compact: true,
               ),
