@@ -485,6 +485,50 @@ void main() {
       expect(players.first['nickname'], 'Troy');
       expect(players.first['cumulative_score'], 0);
     });
+
+    test('GenreQuestionsEngine consecutive questions do not repeat 3 identical wrong answers', () {
+      GenreQuestionsEngine.clearCache();
+      final questions = GenreQuestionsEngine.generateGenreQuestions('General Trivia');
+      expect(questions.length, greaterThanOrEqualTo(500));
+
+      for (int i = 0; i < 20; i++) {
+        final q1 = questions[i];
+        final q2 = questions[i + 1];
+
+        final q1Wrongs = q1.wrongOptions.map((w) => w.trim().toLowerCase()).toSet();
+        final q2Wrongs = q2.wrongOptions.map((w) => w.trim().toLowerCase()).toSet();
+
+        // Must never share all 3 wrong answers with the previous question
+        final shared = q1Wrongs.intersection(q2Wrongs);
+        expect(
+          shared.length,
+          lessThan(3),
+          reason: 'Questions $i and ${i + 1} shared all 3 wrong answers: $shared (Q1: ${q1.questionText}, Q2: ${q2.questionText})',
+        );
+      }
+    });
+
+    test('Homebrewing Beer consecutive questions do not repeat 3 identical wrong answers', () {
+      GenreQuestionsEngine.clearCache();
+      final questions = GenreQuestionsEngine.generateGenreQuestions('Homebrewing Beer');
+      expect(questions.length, greaterThanOrEqualTo(500));
+
+      for (int i = 0; i < 20; i++) {
+        final q1 = questions[i];
+        final q2 = questions[i + 1];
+
+        final q1Wrongs = q1.wrongOptions.map((w) => w.trim().toLowerCase()).toSet();
+        final q2Wrongs = q2.wrongOptions.map((w) => w.trim().toLowerCase()).toSet();
+
+        final shared = q1Wrongs.intersection(q2Wrongs);
+        expect(
+          shared.length,
+          lessThan(3),
+          reason: 'Questions $i and ${i + 1} shared all 3 wrong answers: $shared',
+        );
+      }
+    });
   });
 }
+
 

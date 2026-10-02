@@ -48,6 +48,40 @@ class Question {
     );
   }
 
+  List<String> get wrongOptions {
+    final map = {'A': optionA, 'B': optionB, 'C': optionC, 'D': optionD};
+    return map.entries
+        .where((e) => e.key != correctOption.toUpperCase().trim())
+        .map((e) => e.value)
+        .toList();
+  }
+
+  Question copyWith({
+    String? id,
+    String? category,
+    String? difficulty,
+    String? questionText,
+    String? optionA,
+    String? optionB,
+    String? optionC,
+    String? optionD,
+    String? correctOption,
+    int? timeLimitSeconds,
+  }) {
+    return Question(
+      id: id ?? this.id,
+      category: category ?? this.category,
+      difficulty: difficulty ?? this.difficulty,
+      questionText: questionText ?? this.questionText,
+      optionA: optionA ?? this.optionA,
+      optionB: optionB ?? this.optionB,
+      optionC: optionC ?? this.optionC,
+      optionD: optionD ?? this.optionD,
+      correctOption: correctOption ?? this.correctOption,
+      timeLimitSeconds: timeLimitSeconds ?? this.timeLimitSeconds,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

@@ -100,6 +100,70 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     return '$_playerBaseUrl/?view=player&room=$_displayRoomCode';
   }
 
+  Set<String> _previousWrongOptions = {};
+
+  Question? _sanitizeQuestionDistractors(Question? q) {
+    if (q == null) return null;
+    final currentWrongs = q.wrongOptions;
+    final hasOverlap = currentWrongs.any((w) => _previousWrongOptions.contains(w.toLowerCase()));
+    if (!hasOverlap || _previousWrongOptions.isEmpty) {
+      _previousWrongOptions = currentWrongs.map((w) => w.toLowerCase()).toSet();
+      return q;
+    }
+
+    final correctText = q.correctOption == 'A' ? q.optionA
+        : q.correctOption == 'B' ? q.optionB
+        : q.correctOption == 'C' ? q.optionC
+        : q.optionD;
+
+    final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
+    final altPool = <String>[];
+    for (var fq in fallbackList) {
+      altPool.addAll(fq.wrongOptions);
+      if (altPool.length > 50) break;
+    }
+
+    final newWrongs = List<String>.from(currentWrongs);
+    final currentLower = currentWrongs.map((w) => w.toLowerCase()).toSet();
+    currentLower.add(correctText.toLowerCase());
+
+    int altIdx = 0;
+    for (int i = 0; i < newWrongs.length; i++) {
+      if (_previousWrongOptions.contains(newWrongs[i].toLowerCase())) {
+        while (altIdx < altPool.length &&
+            (altPool[altIdx].toLowerCase() == correctText.toLowerCase() ||
+             currentLower.contains(altPool[altIdx].toLowerCase()) ||
+             _previousWrongOptions.contains(altPool[altIdx].toLowerCase()))) {
+          altIdx++;
+        }
+        if (altIdx < altPool.length) {
+          final chosen = altPool[altIdx++];
+          newWrongs[i] = chosen;
+          currentLower.add(chosen.toLowerCase());
+        }
+      }
+    }
+    _previousWrongOptions = newWrongs.map((w) => w.toLowerCase()).toSet();
+
+    final newOpts = [
+      {'text': correctText, 'isCorrect': true},
+      {'text': newWrongs[0], 'isCorrect': false},
+      {'text': newWrongs[1], 'isCorrect': false},
+      {'text': newWrongs[2], 'isCorrect': false},
+    ];
+    newOpts.shuffle();
+    final letters = ['A', 'B', 'C', 'D'];
+    final correctIdx = newOpts.indexWhere((o) => o['isCorrect'] == true);
+
+    return q.copyWith(
+      optionA: newOpts[0]['text'] as String,
+      optionB: newOpts[1]['text'] as String,
+      optionC: newOpts[2]['text'] as String,
+      optionD: newOpts[3]['text'] as String,
+      correctOption: letters[correctIdx],
+    );
+  }
+
 
   void _startAdSlideTimer() {
     _adSlideTimer?.cancel();
@@ -158,7 +222,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               final cat = qData['category']?.toString() ?? res['category']?.toString();
               _interQuestionTimer?.cancel();
               setState(() {
-                _currentQuestion = q;
+                _currentQuestion = _sanitizeQuestionDistractors(q);
                 if (cat != null && cat.isNotEmpty) _activeGenre = cat;
                 _totalDuration = dur;
                 _remainingSeconds = dur;
@@ -274,7 +338,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
           setState(() {
-            _currentQuestion = question;
+            _currentQuestion = _sanitizeQuestionDistractors(question);
             _totalDuration = duration;
             _remainingSeconds = duration;
             _questionIndex = qInRound;
@@ -356,6 +420,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isResumeCountdownActive = false;
             _isInterQuestionPhase = false;
             _currentQuestion = null;
+            _previousWrongOptions.clear();
             if (mode == 'clear_all') {
               _leaderboard = [];
             }
@@ -366,6 +431,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
       },
       onRoundCompletedBroadcast: (payload) {
+        _previousWrongOptions.clear();
         final winners = payload['top_3_winners'] as List? ??
             payload['top3_winners'] as List? ??
             payload['top3Winners'] as List?;
@@ -386,6 +452,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           }
           setState(() {
             _currentQuestion = null;
+            _previousWrongOptions.clear();
             _isTimerExpired = false;
             _isInterQuestionPhase = false;
             _top3Winners = parsed;
@@ -484,7 +551,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
             setState(() {
-              _currentQuestion = fallback;
+              _currentQuestion = _sanitizeQuestionDistractors(fallback);
               _questionIndex = 1;
               _totalDuration = duration;
               _remainingSeconds = duration;
@@ -690,9 +757,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     debugPrint('[TV] Safety Net: Autonomously advancing to Question $nextIndex');
 
     final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-    final question = fallbackList.isNotEmpty
+    final rawQuestion = fallbackList.isNotEmpty
         ? fallbackList[(nextIndex - 1) % fallbackList.length]
         : HomebrewingDatabase.generate500Questions()[(nextIndex - 1) % 500];
+    final question = _sanitizeQuestionDistractors(rawQuestion) ?? rawQuestion;
     final duration = _totalDuration > 0 ? _totalDuration : 20;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 

@@ -3,25 +3,82 @@ import '../models/question.dart';
 
 /// Comprehensive Factual Generator for 500+ Unique Questions per Trivia Genre
 class GenreQuestionsEngine {
+  static final Map<String, List<Question>> _genreCache = {};
+
+  /// Selects 3 distinct random distractors from candidate pool, avoiding the correct answer
+  static List<String> pickDistractors(
+    List<String> pool,
+    String correct,
+    math.Random random, {
+    List<String>? fallback,
+  }) {
+    final cleanCorrect = correct.trim().toLowerCase();
+    final candidates = pool
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty && s.toLowerCase() != cleanCorrect)
+        .toSet()
+        .toList();
+    candidates.shuffle(random);
+
+    final selected = candidates.take(3).toList();
+    if (selected.length < 3 && fallback != null) {
+      final fbCandidates = fallback
+          .map((s) => s.trim())
+          .where((s) =>
+              s.isNotEmpty &&
+              s.toLowerCase() != cleanCorrect &&
+              !selected.any((sel) => sel.toLowerCase() == s.toLowerCase()))
+          .toSet()
+          .toList();
+      fbCandidates.shuffle(random);
+      for (var fb in fbCandidates) {
+        if (selected.length >= 3) break;
+        selected.add(fb);
+      }
+    }
+    int fillIdx = 1;
+    while (selected.length < 3) {
+      selected.add('Alternative $fillIdx');
+      fillIdx++;
+    }
+    return selected;
+  }
+
+  /// Clears question cache (for game reset)
+  static void clearCache([String? genre]) {
+    if (genre != null) {
+      _genreCache.remove(genre);
+    } else {
+      _genreCache.clear();
+    }
+  }
+
   /// Generates a guaranteed 500+ unique, non-repeating questions for any specific genre
   static List<Question> generateGenreQuestions(String genre) {
-    final Map<String, List<Question>> cache = {};
-    if (cache.containsKey(genre)) return cache[genre]!;
+    final cleanGenre = genre.isEmpty ? 'General Trivia' : genre;
+    if (_genreCache.containsKey(cleanGenre)) return _genreCache[cleanGenre]!;
 
     final questions = <Question>[];
     final Set<String> seenTexts = {};
     final random = math.Random();
 
-    void addQ(String id, String text, String correct, String optB, String optC, String optD, {String diff = 'Standard'}) {
+    void addQ(String id, String text, String correct, String optB, String optC, String optD, {String diff = 'Standard', List<String>? distractorPool}) {
       final cleanText = Question.cleanQuestionText(text);
       if (seenTexts.contains(cleanText.toLowerCase())) return;
       seenTexts.add(cleanText.toLowerCase());
 
+      List<String> wrongs;
+      if (distractorPool != null && distractorPool.length >= 4) {
+        wrongs = pickDistractors(distractorPool, correct, random, fallback: [optB, optC, optD]);
+      } else {
+        wrongs = [optB, optC, optD];
+      }
+
       final optionsList = [
         {'text': correct, 'isCorrect': true},
-        {'text': optB, 'isCorrect': false},
-        {'text': optC, 'isCorrect': false},
-        {'text': optD, 'isCorrect': false},
+        {'text': wrongs[0], 'isCorrect': false},
+        {'text': wrongs[1], 'isCorrect': false},
+        {'text': wrongs[2], 'isCorrect': false},
       ];
       optionsList.shuffle(random);
 
@@ -30,8 +87,8 @@ class GenreQuestionsEngine {
       final correctLetter = letters[correctIdx];
 
       questions.add(Question(
-        id: '${genre.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${questions.length + 1}',
-        category: genre,
+        id: '${cleanGenre.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}_${questions.length + 1}',
+        category: cleanGenre,
         difficulty: diff,
         questionText: cleanText,
         optionA: optionsList[0]['text'] as String,
@@ -42,7 +99,7 @@ class GenreQuestionsEngine {
       ));
     }
 
-    final gLower = genre.toLowerCase();
+    final gLower = cleanGenre.toLowerCase();
 
     // 1. HOMEBREWING BEER
     if (gLower.contains('homebrew') || gLower == 'homebrewing beer') {
@@ -179,9 +236,73 @@ class GenreQuestionsEngine {
 
     // Guarantee minimum 500 unique questions
     if (questions.length < 500) {
-      _fillTo500(genre, questions, seenTexts, addQ);
+      _fillTo500(cleanGenre, questions, seenTexts, addQ);
     }
 
+    // 1. Shuffle questions so sub-topics and question formats are well-interleaved
+    questions.shuffle(random);
+
+    // 2. Comprehensive Anti-Repetition Sanitization Pass:
+    // Ensures that no two consecutive questions ever share identical wrong answers!
+    final allWrongPool = <String>{};
+    for (final q in questions) {
+      allWrongPool.addAll(q.wrongOptions);
+    }
+    final allWrongList = allWrongPool.toList();
+
+    Set<String> prevWrongs = {};
+    for (int i = 0; i < questions.length; i++) {
+      final q = questions[i];
+      final currentWrongs = q.wrongOptions;
+      final overlap = currentWrongs.where((w) => prevWrongs.contains(w.toLowerCase())).toList();
+
+      if (overlap.isNotEmpty && allWrongList.length >= 6) {
+        final correctText = q.correctOption == 'A' ? q.optionA
+            : q.correctOption == 'B' ? q.optionB
+            : q.correctOption == 'C' ? q.optionC
+            : q.optionD;
+
+        final newWrongs = List<String>.from(currentWrongs);
+        final currentLower = currentWrongs.map((w) => w.toLowerCase()).toSet();
+        currentLower.add(correctText.toLowerCase());
+
+        final candidates = allWrongList.where((c) {
+          final cLow = c.toLowerCase();
+          return !currentLower.contains(cLow) && !prevWrongs.contains(cLow);
+        }).toList();
+        candidates.shuffle(random);
+
+        int candIdx = 0;
+        for (int wIdx = 0; wIdx < newWrongs.length; wIdx++) {
+          if (prevWrongs.contains(newWrongs[wIdx].toLowerCase()) && candIdx < candidates.length) {
+            newWrongs[wIdx] = candidates[candIdx++];
+          }
+        }
+
+        final newOpts = [
+          {'text': correctText, 'isCorrect': true},
+          {'text': newWrongs[0], 'isCorrect': false},
+          {'text': newWrongs[1], 'isCorrect': false},
+          {'text': newWrongs[2], 'isCorrect': false},
+        ];
+        newOpts.shuffle(random);
+        final letters = ['A', 'B', 'C', 'D'];
+        final correctIdx = newOpts.indexWhere((o) => o['isCorrect'] == true);
+
+        questions[i] = q.copyWith(
+          optionA: newOpts[0]['text'] as String,
+          optionB: newOpts[1]['text'] as String,
+          optionC: newOpts[2]['text'] as String,
+          optionD: newOpts[3]['text'] as String,
+          correctOption: letters[correctIdx],
+        );
+        prevWrongs = newWrongs.map((w) => w.toLowerCase()).toSet();
+      } else {
+        prevWrongs = currentWrongs.map((w) => w.toLowerCase()).toSet();
+      }
+    }
+
+    _genreCache[cleanGenre] = questions;
     return questions;
   }
 
@@ -1242,12 +1363,37 @@ class GenreQuestionsEngine {
 
   // --- UNIVERSAL FALLBACK GENERATOR ---
   static void _generateUniversalGenre(String genre, Function addQ) {
+    final gLow = genre.toLowerCase();
+    if (gLow.contains('general') || gLow == 'universal' || gLow.isEmpty) {
+      _generateScience(addQ);
+      _generateHistory(addQ);
+      _generateGeography(addQ);
+      _generateSports(addQ);
+      _generateMovies(addQ);
+      _generatePopCulture(addQ);
+      _generateRockClassics(addQ);
+      _generateAstronomy(addQ);
+      return;
+    }
+
     final eras = ['Early Historical Era', 'Golden Age', 'Mid-20th Century Transition', 'Modern Digital Renaissance', 'Contemporary Era'];
     final facets = ['Core Theory', 'Masterwork Standard', 'Foundational Breakthrough', 'Critical Landmark Method', 'Pioneering Innovation'];
+    final rand = math.Random();
+    final universalDistractors = [
+      'By accidental discovery during an electrical power blackout',
+      'Through a royal decree issued in ancient Greece',
+      'By replacing all traditional physical tools with water',
+      'Through arbitrary speculation without testing',
+      'By abandoning previous engineering principles',
+      'Via an anonymous manuscript found in a cave',
+      'By restricting all practices to nighttime hours',
+      'Through improvised consumer polls'
+    ];
 
     for (var era in eras) {
       for (var facet in facets) {
-        addQ('gen_${genre}_${era}_$facet', 'In the study of $genre, how did the "$facet" develop during the $era?', 'Through rigorous empirical refinement and widespread adoption', 'By accidental discovery during an electrical power blackout', 'Through a royal decree issued in ancient Greece', 'By replacing all traditional physical tools with water');
+        final d = pickDistractors(universalDistractors, 'Through rigorous empirical refinement and widespread adoption', rand);
+        addQ('gen_${genre}_${era}_$facet', 'In the study of $genre, how did the "$facet" develop during the $era?', 'Through rigorous empirical refinement and widespread adoption', d[0], d[1], d[2]);
       }
     }
   }
@@ -1381,13 +1527,19 @@ class GenreQuestionsEngine {
       },
     ];
 
+    final allFillDistractors = <String>[];
+    for (var a in answerSets) {
+      allFillDistractors.addAll(a['distractors'] as List<String>);
+    }
+    final rand = math.Random();
+
     for (int tIdx = 0; tIdx < topics.length; tIdx++) {
       for (int mIdx = 0; mIdx < templates.length; mIdx++) {
         if (list.length >= 520) return;
         final topic = topics[tIdx];
         final qText = templates[mIdx].replaceAll('{topic}', topic);
         final ans = answerSets[(tIdx * 3 + mIdx) % answerSets.length];
-        final d = ans['distractors'] as List<String>;
+        final d = pickDistractors(allFillDistractors, ans['correct'] as String, rand, fallback: ans['distractors'] as List<String>);
         addQ('fill_${genre}_${tIdx}_$mIdx', qText, ans['correct'] as String, d[0], d[1], d[2]);
       }
     }

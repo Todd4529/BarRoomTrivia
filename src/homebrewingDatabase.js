@@ -96,6 +96,32 @@ const equipmentAndTechniques = [
   { term: 'Mash Out (168°F - 170°F)', def: 'Heating mash grain bed to 170°F to halt enzymatic conversion and reduce wort viscosity for sparging' },
 ];
 
+function pickRandomDistractors(pool, correctAnswer, count = 3, fallback = []) {
+  const cleanCorrect = (correctAnswer || '').trim().toLowerCase();
+  const candidates = pool
+    .map(s => (s || '').trim())
+    .filter(s => s.length > 0 && s.toLowerCase() !== cleanCorrect);
+  const unique = [...new Set(candidates)];
+  for (let i = unique.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [unique[i], unique[j]] = [unique[j], unique[i]];
+  }
+  const selected = unique.slice(0, count);
+  if (selected.length < count && fallback.length > 0) {
+    for (const fb of fallback) {
+      if (selected.length >= count) break;
+      if (fb.toLowerCase() !== cleanCorrect && !selected.includes(fb)) {
+        selected.push(fb);
+      }
+    }
+  }
+  let fill = 1;
+  while (selected.length < count) {
+    selected.push(`Alternative ${fill++}`);
+  }
+  return selected;
+}
+
 // 2. GENERATE 500+ DISTINCT, UNIQUE QUESTIONS
 export function generate500HomebrewingQuestions() {
   const pool = [];
@@ -139,38 +165,73 @@ export function generate500HomebrewingQuestions() {
     });
   }
 
+  const allHopNames = hopsData.map(h => h.name);
+  const allHopOrigins = [...new Set(hopsData.map(h => h.origin))];
+  const allHopFlavors = hopsData.map(h => h.flavor);
+  const allHopTypes = [...new Set(hopsData.map(h => h.type))];
+  const allHopAlphas = [...new Set(hopsData.map(h => h.alpha))];
+
+  const allMaltNames = maltsData.map(m => m.name);
+  const allMaltRoles = maltsData.map(m => m.role);
+  const allMaltSrms = [...new Set(maltsData.map(m => m.srm))];
+  const allMaltOrigins = [...new Set(maltsData.map(m => m.origin))];
+
+  const allYeastNames = yeastData.map(y => y.name);
+  const allYeastProfiles = yeastData.map(y => y.profile);
+  const allYeastTemps = [...new Set(yeastData.map(y => y.temp))];
+
+  const allStyleNames = stylesData.map(s => s.name);
+  const allStyleIbus = [...new Set(stylesData.map(s => s.ibu))];
+  const allStyleAbvs = [...new Set(stylesData.map(s => s.abv))];
+  const allStyleFeatures = stylesData.map(s => s.feature);
+
+  const allEquipmentDefs = equipmentAndTechniques.map(e => e.def);
+
   // 1. Hop questions
   hopsData.forEach(h => {
-    pushQ('h_orig', `In homebrewing recipes, where does the popular "${h.name}" hop variety originate from?`, h.origin, 'Germany', 'USA', 'United Kingdom');
-    pushQ('h_flav', `What distinct aroma profile is the "${h.name}" hop celebrated for imparting in craft beer?`, h.flavor, 'Burnt Marshmallow', 'Heavy Peat Smoke', 'Sour Apple Cider');
-    pushQ('h_type', `What is the primary brewing category designation for "${h.name}" hops?`, h.type, 'Grain Adjunct', 'Water Mineral', 'Sanitizing Fining');
-    pushQ('h_alpha', `What is the approximate alpha acid bittering potential of "${h.name}" hops?`, h.alpha, '1-2% Alpha Acids', '30-40% Alpha Acids', 'Zero Alpha Acids');
+    const dOrig = pickRandomDistractors(allHopOrigins, h.origin, 3, ['Germany', 'USA', 'United Kingdom', 'New Zealand', 'Australia', 'Czech Republic']);
+    const dFlav = pickRandomDistractors(allHopFlavors, h.flavor, 3);
+    const dType = pickRandomDistractors(allHopTypes, h.type, 3, ['Aroma', 'Bittering', 'Dual-Purpose', 'Late Hop']);
+    const dAlpha = pickRandomDistractors(allHopAlphas, h.alpha, 3, ['1-2% Alpha Acids', '30-40% Alpha Acids', '8-10% Alpha Acids']);
+    pushQ('h_orig', `In homebrewing recipes, where does the popular "${h.name}" hop variety originate from?`, h.origin, dOrig[0], dOrig[1], dOrig[2]);
+    pushQ('h_flav', `What distinct aroma profile is the "${h.name}" hop celebrated for imparting in craft beer?`, h.flavor, dFlav[0], dFlav[1], dFlav[2]);
+    pushQ('h_type', `What is the primary brewing category designation for "${h.name}" hops?`, h.type, dType[0], dType[1], dType[2]);
+    pushQ('h_alpha', `What is the approximate alpha acid bittering potential of "${h.name}" hops?`, h.alpha, dAlpha[0], dAlpha[1], dAlpha[2]);
   });
 
   // 2. Malt questions
   maltsData.forEach(m => {
-    pushQ('m_role', `What primary functional role does "${m.name}" provide in a homebrew grain bill?`, m.role, 'Water Softening', 'Kettle Sterilization', 'Yeast Inhibition');
-    pushQ('m_srm', `What approximate SRM color contribution does "${m.name}" add to brewing wort?`, m.srm, '1000 SRM', '0 SRM', '250 SRM');
-    pushQ('m_orig', `What world region is historically famous for producing "${m.name}"?`, m.origin, 'South Africa', 'Antarctica', 'Iceland');
+    const dRole = pickRandomDistractors(allMaltRoles, m.role, 3);
+    const dSrm = pickRandomDistractors(allMaltSrms, m.srm, 3, ['10-20 SRM', '50 SRM', '150 SRM']);
+    const dOrig = pickRandomDistractors(allMaltOrigins, m.origin, 3, ['Germany', 'UK', 'USA', 'Belgium']);
+    pushQ('m_role', `What primary functional role does "${m.name}" provide in a homebrew grain bill?`, m.role, dRole[0], dRole[1], dRole[2]);
+    pushQ('m_srm', `What approximate SRM color contribution does "${m.name}" add to brewing wort?`, m.srm, dSrm[0], dSrm[1], dSrm[2]);
+    pushQ('m_orig', `What world region is historically famous for producing "${m.name}"?`, m.origin, dOrig[0], dOrig[1], dOrig[2]);
   });
 
   // 3. Yeast questions
   yeastData.forEach(y => {
-    pushQ('y_prof', `Which fermentation profile and ester character identifies "${y.name}"?`, y.profile, 'Heavy sulfur rotten egg smell', 'Pure vinegar acidity', 'Zero fermentation activity');
-    pushQ('y_temp', `What is the recommended fermentation temperature range for "${y.name}"?`, y.temp, '32°F - 40°F', '120°F - 150°F', '212°F Boiling');
+    const dProf = pickRandomDistractors(allYeastProfiles, y.profile, 3);
+    const dTemp = pickRandomDistractors(allYeastTemps, y.temp, 3, ['55°F - 65°F', '68°F - 72°F', '75°F - 82°F']);
+    pushQ('y_prof', `Which fermentation profile and ester character identifies "${y.name}"?`, y.profile, dProf[0], dProf[1], dProf[2]);
+    pushQ('y_temp', `What is the recommended fermentation temperature range for "${y.name}"?`, y.temp, dTemp[0], dTemp[1], dTemp[2]);
   });
 
   // 4. Style questions
   stylesData.forEach(s => {
-    pushQ('s_ibu', `According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s.name}"?`, s.ibu, '0-5 IBU', '150-250 IBU', '500 IBU');
-    pushQ('s_abv', `What is the typical alcohol by volume (ABV) range for a classic "${s.name}"?`, s.abv, '0.5-1.0% ABV', '15.0-20.0% ABV', '25.0% ABV');
-    pushQ('s_feat', `Which sensory characteristic accurately identifies a homebrewed "${s.name}"?`, s.feature, 'Syrupy artificially colored blue appearance', 'Zero head retention with heavy garlic', 'Saltwater ocean taste');
+    const dIbu = pickRandomDistractors(allStyleIbus, s.ibu, 3, ['15-25 IBU', '35-50 IBU', '60-80 IBU']);
+    const dAbv = pickRandomDistractors(allStyleAbvs, s.abv, 3, ['4.5-5.5% ABV', '6.0-7.0% ABV', '8.0-9.5% ABV']);
+    const dFeat = pickRandomDistractors(allStyleFeatures, s.feature, 3);
+    pushQ('s_ibu', `According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s.name}"?`, s.ibu, dIbu[0], dIbu[1], dIbu[2]);
+    pushQ('s_abv', `What is the typical alcohol by volume (ABV) range for a classic "${s.name}"?`, s.abv, dAbv[0], dAbv[1], dAbv[2]);
+    pushQ('s_feat', `Which sensory characteristic accurately identifies a homebrewed "${s.name}"?`, s.feature, dFeat[0], dFeat[1], dFeat[2]);
   });
 
   // 5. Equipment & Technique questions
   equipmentAndTechniques.forEach(e => {
-    pushQ('eq_def', `In all-grain homebrewing, what is the definition and purpose of "${e.term}"?`, e.def, 'Discarding the brew kettle', 'Freezing dry grain overnight', 'Burning malt in the oven');
-    pushQ('eq_goal', `Why would a homebrewer utilize "${e.term}" during a brew session?`, e.def, 'To increase water chlorine levels', 'To ruin yeast cell viability', 'To turn beer cloudy intentionally');
+    const dDef = pickRandomDistractors(allEquipmentDefs, e.def, 3);
+    pushQ('eq_def', `In all-grain homebrewing, what is the definition and purpose of "${e.term}"?`, e.def, dDef[0], dDef[1], dDef[2]);
+    pushQ('eq_goal', `Why would a homebrewer utilize "${e.term}" during a brew session?`, e.def, dDef[0], dDef[1], dDef[2]);
   });
 
   // 6. Systematic factual generation to ensure 500+ distinct questions
@@ -188,5 +249,67 @@ export function generate500HomebrewingQuestions() {
     });
   });
 
-  return fisherYatesShuffle(pool);
+  const shuffled = fisherYatesShuffle(pool);
+
+  // Anti-Repetition Sanitization:
+  // Ensure that no two consecutive questions ever share identical wrong answers!
+  const allWrongs = [];
+  shuffled.forEach(q => {
+    const correctLetter = q.correct;
+    const correctVal = q.options[correctLetter];
+    Object.values(q.options).forEach(v => {
+      if (v !== correctVal) allWrongs.push(v);
+    });
+  });
+
+  let prevWrongs = new Set();
+  shuffled.forEach(q => {
+    const correctLetter = q.correct;
+    const correctVal = q.options[correctLetter];
+    const currentWrongs = Object.entries(q.options)
+      .filter(([k]) => k !== correctLetter)
+      .map(([_, v]) => v);
+
+    const hasOverlap = currentWrongs.some(w => prevWrongs.has(w.toLowerCase()));
+    if (hasOverlap && allWrongs.length >= 6) {
+      const candidates = allWrongs.filter(c => 
+        c.toLowerCase() !== correctVal.toLowerCase() &&
+        !currentWrongs.map(w => w.toLowerCase()).includes(c.toLowerCase()) &&
+        !prevWrongs.has(c.toLowerCase())
+      );
+      // Replace overlapping options
+      const newWrongs = [...currentWrongs];
+      currentWrongs.forEach((w, idx) => {
+        if (prevWrongs.has(w.toLowerCase()) && candidates.length > 0) {
+          const randIdx = Math.floor(Math.random() * candidates.length);
+          newWrongs[idx] = candidates.splice(randIdx, 1)[0];
+        }
+      });
+      // Rebuild options
+      const optList = [
+        { text: correctVal, isCorrect: true },
+        { text: newWrongs[0], isCorrect: false },
+        { text: newWrongs[1], isCorrect: false },
+        { text: newWrongs[2], isCorrect: false },
+      ];
+      for (let i = optList.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [optList[i], optList[j]] = [optList[j], optList[i]];
+      }
+      const letters = ['A', 'B', 'C', 'D'];
+      const newCorrectIdx = optList.findIndex(o => o.isCorrect);
+      q.correct = letters[newCorrectIdx];
+      q.options = {
+        A: optList[0].text,
+        B: optList[1].text,
+        C: optList[2].text,
+        D: optList[3].text,
+      };
+      prevWrongs = new Set(newWrongs.map(w => w.toLowerCase()));
+    } else {
+      prevWrongs = new Set(currentWrongs.map(w => w.toLowerCase()));
+    }
+  });
+
+  return shuffled;
 }

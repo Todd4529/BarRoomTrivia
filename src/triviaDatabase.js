@@ -4,7 +4,7 @@
  */
 
 import { generate500HomebrewingQuestions } from './homebrewingDatabase.js';
-import { generateGenreQuestions } from './genreQuestionsEngine.js';
+import { generateGenreQuestions, sanitizeQuestionsDistractors } from './genreQuestionsEngine.js';
 
 // All 30 Specific Genres List
 export const ALL_SPECIFIC_GENRES = [
@@ -142,13 +142,16 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
     return mixedBatch;
   }
 
+  let result;
   // FOR CUSTOM BAR GENRES LIKE HOMEBREWING BEER, USE DEDICATED AUTHENTIC LOCAL DATASET DIRECTLY
   if (customLocalGenres.has(genre)) {
-    return getLocalQuestions(genre, difficulty, count);
+    result = getLocalQuestions(genre, difficulty, count);
+  } else {
+    // FOR 'Auto Select' OR SPECIFIC API GENRES
+    result = await fetchSingleGenreQuestions(genre, difficulty, count);
   }
 
-  // FOR 'Auto Select' OR SPECIFIC API GENRES
-  return fetchSingleGenreQuestions(genre, difficulty, count);
+  return sanitizeQuestionsDistractors(result);
 }
 
 // Helper to fetch for a single specific genre
@@ -342,5 +345,5 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
     }
   }
 
-  return selected;
+  return sanitizeQuestionsDistractors(selected);
 }
