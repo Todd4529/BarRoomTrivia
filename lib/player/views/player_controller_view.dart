@@ -371,11 +371,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final delaySec = nextStartsAt != null
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
             : 15;
-        final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
-            (payload['roundNumber'] as num?)?.toInt();
-        if (rFromPayload != null && rFromPayload > 0) {
-          _currentRound = max(_currentRound, rFromPayload);
-        }
+        final completedR = (payload['completed_round'] as num?)?.toInt() ??
+            (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt() ??
+            _currentRound;
+        final nextR = (payload['next_round'] as num?)?.toInt() ??
+            (payload['nextRound'] as num?)?.toInt() ??
+            (completedR + 1);
+        _currentRound = max(_currentRound, nextR);
 
         if (parsedWinners.isNotEmpty && _player != null) {
           final winnerName = parsedWinners.first['nickname']?.toString().toLowerCase();

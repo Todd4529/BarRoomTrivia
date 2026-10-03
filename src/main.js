@@ -583,7 +583,7 @@ function initTvModeToggle() {
 
       onQuestionStart({
         questionData: currentQuestionData,
-        roundNumber: Math.floor(currentQuestionIndex / 10) + 1,
+        roundNumber: currentRound,
         questionNumberInRound: (currentQuestionIndex % 10) + 1,
         durationSeconds: remainingSecs,
         difficulty: selectedDifficulty
@@ -643,7 +643,7 @@ function switchView(viewName) {
 
       onQuestionStart({
         questionData: currentQuestionData,
-        roundNumber: Math.floor(currentQuestionIndex / 10) + 1,
+        roundNumber: currentRound,
         questionNumberInRound: (currentQuestionIndex % 10) + 1,
         durationSeconds: remainingSecs,
         difficulty: selectedDifficulty
@@ -1007,8 +1007,10 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'timer_expired') {
     handleIncomingTimerExpired(payload);
   } else if (normEvent === 'round_completed' || normEvent === 'round_winner') {
+    const nextR = Number(payload?.next_round || payload?.nextRound || ((payload?.round_number || currentRound) + 1));
+    currentRound = Math.max(currentRound, nextR);
     const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
-    onRoundWinner({ top3Winners: list, delaySeconds: 15 });
+    onRoundWinner({ top3Winners: list, delaySeconds: 15, roundNumber: currentRound });
   } else if (normEvent === 'game_reset') {
     onGameReset();
   } else if (normEvent === 'request_state_sync') {
@@ -1018,12 +1020,20 @@ function handleRealtimeIncomingEvent(event, data) {
         broadcastRealtimeEvent('pre_game_countdown', {
           countdown_seconds: rem,
           starts_at_epoch_ms: hostTargetEpochMs,
+          round_number: currentRound,
+          roundNumber: currentRound,
           room_code: currentRoomCode
         });
       } else if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
         const rem = Math.max(1, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
         broadcastRealtimeEvent('question_start', {
-          question_index: currentQuestionIndex + 1,
+          question_index: (currentQuestionIndex % 10) + 1,
+          cumulative_question_index: currentQuestionIndex + 1,
+          question_number_in_round: (currentQuestionIndex % 10) + 1,
+          round_number: currentRound,
+          roundNumber: currentRound,
+          total_questions: 10,
+          total_questions_in_round: 10,
           id: currentQuestionData.id,
           question_id: currentQuestionData.id,
           duration_seconds: rem,
@@ -1273,9 +1283,12 @@ function onStateSyncResponse(payload) {
       ? Math.max(0, Math.ceil((payload.timerEndsAtGlobalMs - Date.now()) / 1000))
       : payload.totalTimerDuration;
 
+    const syncRound = Number(payload.round_number || payload.roundNumber || Math.floor((payload.currentQuestionIndex || 0) / 10) + 1);
+    currentRound = Math.max(currentRound, syncRound);
+
     onQuestionStart({
       questionData: payload.currentQuestionData,
-      roundNumber: Math.floor(payload.currentQuestionIndex / 10) + 1,
+      roundNumber: currentRound,
       questionNumberInRound: (payload.currentQuestionIndex % 10) + 1,
       durationSeconds: remainingSecs,
       difficulty: payload.selectedDifficulty
@@ -1636,7 +1649,11 @@ async function runNextAutomatedStep() {
   if (!isAutomatedEngineRunning) return;
 
   try {
-    const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+    const calculatedRound = Math.floor(currentQuestionIndex / 10) + 1;
+    currentRound = Math.max(currentRound, calculatedRound);
+    if (Math.floor(currentQuestionIndex / 10) + 1 < currentRound) {
+      currentQuestionIndex = (currentRound - 1) * 10;
+    }
     const questionInRound = (currentQuestionIndex % 10) + 1;
 
     let activeRoundGenre = 'Auto Select';
@@ -1728,18 +1745,25 @@ async function runNextAutomatedStep() {
         room_code: currentRoomCode,
         status: 'question_active',
         current_question_index: currentQuestionIndex + 1,
+        current_round: currentRound,
+        round_number: currentRound,
         duration_seconds: durationSeconds,
         timer_ends_at: timerEndsAtGlobalMs,
+        genre: activeRoundGenre,
         question_data: {
           id: question.id,
           question_id: question.id,
-          category: question.category,
+          category: question.category || activeRoundGenre,
+          genre: question.category || activeRoundGenre,
           difficulty: selectedDifficulty,
           text: question.text,
           question_text: question.text,
           options: question.options,
           correct: question.correct,
           correct_option: question.correct,
+          round_number: currentRound,
+          roundNumber: currentRound,
+          question_number_in_round: questionInRound,
         },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'room_code' }).catch(() => {});
@@ -1838,9 +1862,13 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       };
     }
 
+    const nextRound = currentRound + 1;
     broadcastRealtimeEvent('round_completed', {
       round_number: currentRound,
       roundNumber: currentRound,
+      completed_round: currentRound,
+      next_round: nextRound,
+      nextRound: nextRound,
       top3_winners: top3,
       top_3_winners: top3,
       top3Winners: top3,
@@ -1919,7 +1947,7 @@ function checkHostEngineTick() {
       hostEngineState = 'QUESTION_ACTIVE';
       runNextAutomatedStep();
     } else if (hostEngineState === 'QUESTION_ACTIVE') {
-      const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+      currentRound = Math.max(currentRound, Math.floor(currentQuestionIndex / 10) + 1);
       const questionInRound = (currentQuestionIndex % 10) + 1;
       let question = currentRoundQuestions?.[questionInRound - 1];
       if (!question || !question.options) {
@@ -1927,7 +1955,7 @@ function checkHostEngineTick() {
       }
       handleHostQuestionTimeout(question, currentRound, questionInRound);
     } else if (hostEngineState === 'QUESTION_REVIEW') {
-      const currentRound = Math.floor(currentQuestionIndex / 10) + 1;
+      currentRound = Math.max(currentRound, Math.floor(currentQuestionIndex / 10) + 1);
       const questionInRound = (currentQuestionIndex % 10) + 1;
       handleHostAdvanceAfterReview(questionInRound, currentRound);
     } else if (hostEngineState === 'ROUND_SUMMARY') {
@@ -2630,7 +2658,7 @@ function initPlayerControls() {
         : (remainingTimerSeconds || 20);
       onQuestionStart({
         questionData: currentQuestionData,
-        roundNumber: Math.floor(currentQuestionIndex / 10) + 1,
+        roundNumber: currentRound,
         questionNumberInRound: (currentQuestionIndex % 10) + 1,
         durationSeconds: remSecs,
         difficulty: selectedDifficulty,
@@ -2651,17 +2679,20 @@ function initPlayerControls() {
           if (data) {
             if (data.status === 'pre_game_countdown') {
               const rem = Math.max(1, Math.ceil((data.starts_at - Date.now()) / 1000));
-              handleIncomingPreGameCountdown({ countdown_seconds: rem });
+              const rNum = data.current_round || data.round_number || currentRound;
+              handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum, genre: data.genre });
             } else if (data.status === 'question_active' && data.question_data) {
               const qData = data.question_data;
               const now = Date.now();
               const endsAt = data.timer_ends_at || (now + 20000);
               if ((endsAt - now) > -15000) {
                 if (!currentQuestionData || currentQuestionData.id !== qData.id || currentGameState !== 'QUESTION_ACTIVE') {
+                  const rNum = data.current_round || data.round_number || qData.round_number || qData.roundNumber || currentRound;
                   handleIncomingQuestionStart({
                     ...qData,
                     question_index: data.current_question_index || 1,
-                    round_number: data.current_round,
+                    round_number: rNum,
+                    roundNumber: rNum,
                     duration_seconds: data.duration_seconds || 20,
                     timer_ends_at_epoch_ms: data.timer_ends_at
                   });

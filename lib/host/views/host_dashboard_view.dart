@@ -308,13 +308,18 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     final question = TriviaRepository.getQuestionForGenres(_selectedGenreQueue, _currentQuestionIndex);
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (_selectedTimerSeconds * 1000);
 
+    final currentRound = GameEngineManager.instance.currentRound;
+    final cumulativeIndex = ((currentRound - 1) * 10) + _currentQuestionIndex + 1;
+
     try {
       await _realtimeService.broadcastQuestion(
         roomCode: _activeSession!.roomCode,
-        questionIndex: _currentQuestionIndex + 1,
+        questionIndex: cumulativeIndex,
         question: question,
         durationSeconds: _selectedTimerSeconds,
         timerEndsAtEpochMs: timerEndsAtEpochMs,
+        roundNumber: currentRound,
+        totalQuestions: 10,
       );
     } catch (_) {
       // Dev mode fallback

@@ -85,13 +85,16 @@ class GameEngineManager {
     activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
     remainingQuestionSeconds = selectedTimerSeconds;
 
+    final cumulativeIndex = ((currentRound - 1) * 10) + currentQuestionIndex + 1;
+
     _realtimeService.broadcastQuestion(
       roomCode: roomCode,
-      questionIndex: currentQuestionIndex + 1,
+      questionIndex: cumulativeIndex,
       question: question,
       durationSeconds: selectedTimerSeconds,
       timerEndsAtEpochMs: timerEndsAtEpochMs,
       roundNumber: currentRound,
+      totalQuestions: 10,
     );
 
     // Simulate active gameplay for mock players during this question
@@ -119,11 +122,13 @@ class GameEngineManager {
         currentQuestionIndex = 0;
         final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
         final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
+        final nextRound = currentRound + 1;
 
         _realtimeService.broadcastRoundCompleted(
           roomCode: roomCode,
           top3Winners: top3,
           roundNumber: currentRound,
+          nextRound: nextRound,
           nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
         );
 
@@ -132,7 +137,7 @@ class GameEngineManager {
           players: SupabaseService.getLocalPlayersJson(roomCode),
         );
 
-        currentRound++;
+        currentRound = nextRound;
 
         // Rotate to the next genre for the upcoming round
         if (selectedGenres.length > 1) {
@@ -229,12 +234,15 @@ class GameEngineManager {
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (durationSec * 1000);
     activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
 
+    final cumulativeIndex = ((currentRound - 1) * 10) + (currentQuestionIndex > 0 ? currentQuestionIndex : 1);
     _realtimeService.broadcastQuestion(
       roomCode: roomCode,
-      questionIndex: currentQuestionIndex > 0 ? currentQuestionIndex : 1,
+      questionIndex: cumulativeIndex,
       question: question,
       durationSeconds: durationSec,
       timerEndsAtEpochMs: timerEndsAtEpochMs,
+      roundNumber: currentRound,
+      totalQuestions: 10,
     );
 
     _questionTimer?.cancel();

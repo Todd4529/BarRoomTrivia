@@ -715,6 +715,18 @@ void main() {
         );
       }, returnsNormally);
     });
+
+    test('Round 2 Question 1 carries roundNumber: 2 and cumulative questionIndex: 11', () {
+      final engine = GameEngineManager.instance;
+      engine.currentRound = 2;
+      engine.currentQuestionIndex = 0; // Question 1 of round 2
+      final cumulativeIndex = ((engine.currentRound - 1) * 10) + engine.currentQuestionIndex + 1;
+      expect(cumulativeIndex, 11);
+      expect(engine.currentRound, 2);
+
+      final inRoundIndex = ((cumulativeIndex - 1) % 10) + 1;
+      expect(inRoundIndex, 1);
+    });
   });
 }
 

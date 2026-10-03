@@ -270,6 +270,19 @@ class RealtimeService {
         payload: payload,
       );
     } catch (_) {}
+
+    try {
+      final norm = roomCode.toUpperCase().trim();
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'status': 'pre_game_countdown',
+        'starts_at': startsAtEpochMs,
+        if (roundNumber != null) 'current_round': roundNumber,
+        if (roundNumber != null) 'round_number': roundNumber,
+        if (genre != null) 'genre': genre,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
   }
 
   /// Broadcast player joined event so TV immediately registers the incoming player
@@ -387,6 +400,8 @@ class RealtimeService {
         'room_code': norm,
         'status': 'question_active',
         'current_question_index': questionIndex,
+        'current_round': roundNumber,
+        'round_number': roundNumber,
         'current_question_data': payload,
         'question_data': payload,
         'duration_seconds': durationSeconds,
@@ -535,14 +550,21 @@ class RealtimeService {
     required List<Map<String, dynamic>> top3Winners,
     required int nextRoundStartsAtEpochMs,
     int? roundNumber,
+    int? nextRound,
   }) async {
+    final curR = roundNumber ?? 1;
+    final upR = nextRound ?? (curR + 1);
     final payload = {
       'event': 'round_completed',
       'room_code': roomCode,
       'top_3_winners': top3Winners,
       'top3_winners': top3Winners,
       'top3Winners': top3Winners,
-      'round_number': roundNumber,
+      'round_number': curR,
+      'roundNumber': curR,
+      'completed_round': curR,
+      'next_round': upR,
+      'nextRound': upR,
       'next_round_starts_at_epoch_ms': nextRoundStartsAtEpochMs,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
@@ -558,6 +580,18 @@ class RealtimeService {
         event: 'round_completed',
         payload: payload,
       );
+    } catch (_) {}
+
+    try {
+      final norm = roomCode.toUpperCase().trim();
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'status': 'round_summary',
+        'current_round': upR,
+        'round_number': upR,
+        'starts_at': nextRoundStartsAtEpochMs,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
   }
 

@@ -464,10 +464,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _top3Winners = parsed;
             _showRoundWinnersOverlay = true;
             _interQuestionSecondsRemaining = 0;
-            _questionIndex = 0;
-            if (rNum != null) {
-              _currentRound = rNum;
-            }
+            final completedR = (payload['completed_round'] as num?)?.toInt() ??
+                (payload['round_number'] as num?)?.toInt() ??
+                (payload['roundNumber'] as num?)?.toInt() ??
+                _currentRound;
+            final nextR = (payload['next_round'] as num?)?.toInt() ??
+                (payload['nextRound'] as num?)?.toInt() ??
+                (completedR + 1);
+            _currentRound = max(_currentRound, nextR);
           });
           Future.delayed(Duration(seconds: delaySec), () {
             if (mounted && _showRoundWinnersOverlay) {
