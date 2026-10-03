@@ -94,7 +94,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       // 1. Broadcast to Supabase Realtime channel for instant TV pickup
       final channelName = 'device_auth_$token';
       final channel = SupabaseConfig.client.channel(channelName);
-      await channel.subscribe();
+      channel.subscribe();
       await channel.sendBroadcastMessage(
         event: 'device_authorized',
         payload: payload,
@@ -102,7 +102,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
 
       // 2. Also broadcast to global room_TRIV channel as redundancy
       final roomChannel = SupabaseConfig.client.channel('room_TRIV');
-      await roomChannel.subscribe();
+      roomChannel.subscribe();
       await roomChannel.sendBroadcastMessage(
         event: 'device_authorized',
         payload: payload,

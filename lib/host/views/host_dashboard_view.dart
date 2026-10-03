@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +8,6 @@ import '../../shared/services/game_engine.dart';
 import '../../shared/services/realtime_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
-import '../../shared/data/trivia_repository.dart';
 import '../../shared/data/trivia_genres.dart';
 
 class HostDashboardView extends StatefulWidget {
@@ -35,7 +33,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   String _selectedGameMode = 'Auto'; // 'Auto' (default) or 'Manual'
   int _selectedTimerSeconds = 60;
   int _currentQuestionIndex = 0;
-  List<String> _selectedGenreQueue = [];
+  final List<String> _selectedGenreQueue = [];
 
   // 30-Second Pre-Game Countdown & Active Question State
   bool _isPreGameCountdownActive = false;
@@ -291,42 +289,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       if (!engine.isResumeCountdownActive && !engine.isGamePaused) {
         timer.cancel();
       }
-    });
-  }
-
-  Future<void> _broadcastNextQuestion() async {
-    if (_activeSession == null) {
-      _activeSession = GameSession(
-        id: 'dev-session-id',
-        roomCode: 'TRIV',
-        status: 'active',
-        questionIndex: 0,
-        createdAt: DateTime.now(),
-      );
-    }
-
-    final question = TriviaRepository.getQuestionForGenres(_selectedGenreQueue, _currentQuestionIndex);
-    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (_selectedTimerSeconds * 1000);
-
-    final currentRound = GameEngineManager.instance.currentRound;
-    final cumulativeIndex = ((currentRound - 1) * 10) + _currentQuestionIndex + 1;
-
-    try {
-      await _realtimeService.broadcastQuestion(
-        roomCode: _activeSession!.roomCode,
-        questionIndex: cumulativeIndex,
-        question: question,
-        durationSeconds: _selectedTimerSeconds,
-        timerEndsAtEpochMs: timerEndsAtEpochMs,
-        roundNumber: currentRound,
-        totalQuestions: 10,
-      );
-    } catch (_) {
-      // Dev mode fallback
-    }
-
-    setState(() {
-      _currentQuestionIndex++;
     });
   }
 
@@ -776,7 +738,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                           ),
                         ),
                         Text(
-                          '${displaySeconds} / ${maxSeconds}s',
+                          '$displaySeconds / ${maxSeconds}s',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -1039,7 +1001,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   border: Border.all(color: AppTheme.neonCyan.withOpacity(0.4)),
                 ),
                 child: Text(
-                  '${_selectedTimerSeconds} SECONDS',
+                  '$_selectedTimerSeconds SECONDS',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -1433,8 +1395,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppTheme.neonCyan, width: 1.5),
         ),
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.neonYellow, size: 28),
             SizedBox(width: 10),
             Text(

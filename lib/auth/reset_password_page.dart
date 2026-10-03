@@ -5,7 +5,7 @@ import '../shared/services/supabase_service.dart';
 class ResetPasswordPage extends StatefulWidget {
   final String? accessToken;
 
-  const ResetPasswordPage({Key? key, this.accessToken}) : super(key: key);
+  const ResetPasswordPage({super.key, this.accessToken});
 
   @override
   State<ResetPasswordPage> createState() => _ResetPasswordPageState();

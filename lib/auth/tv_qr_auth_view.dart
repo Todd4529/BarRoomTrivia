@@ -234,10 +234,6 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     }
   }
 
-  void _handleEnterTvStage() {
-    _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}});
-  }
-
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {

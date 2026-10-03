@@ -934,6 +934,40 @@ function handleIncomingPreGameCountdown(rawPayload) {
     btn.disabled = true;
     btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
   });
+
+  // Update Host Mobile Stage Card for Countdown
+  const hostStageBadge = document.getElementById('host-stage-badge');
+  const hostStageQCounter = document.getElementById('host-stage-q-counter');
+  const hostLiveGenrePill = document.getElementById('host-live-genre-pill');
+  const hostLiveQText = document.getElementById('host-live-q-text');
+  const hostTimerSecs = document.getElementById('host-live-timer-secs');
+  const hostTimerFill = document.getElementById('host-timer-progress-fill');
+  const btnSkip = document.getElementById('btn-skip-question');
+
+  if (hostStageBadge) {
+    hostStageBadge.className = 'stage-status-indicator stage-pregame';
+    hostStageBadge.textContent = `🟡 STARTING ROUND ${currentRound}`;
+  }
+  if (hostStageQCounter) {
+    hostStageQCounter.textContent = `Round Launch Countdown (${countdownSecs}s)`;
+  }
+  const preGenre = payload.genre || payload.current_genre || payload.category || 'Auto Select';
+  if (hostLiveGenrePill) {
+    hostLiveGenrePill.textContent = `${genreIconMap[preGenre] || '⚡'} ${preGenre.toUpperCase()}`;
+  }
+  if (hostLiveQText) {
+    hostLiveQText.textContent = `Get ready! Round ${currentRound} is launching on TV and player devices...`;
+  }
+  if (hostTimerSecs) hostTimerSecs.textContent = `${countdownSecs}s`;
+  if (hostTimerFill) hostTimerFill.style.width = '100%';
+  if (btnSkip) btnSkip.classList.add('hidden');
+
+  ['A', 'B', 'C', 'D'].forEach(letter => {
+    const card = document.getElementById(`host-ans-${letter}`);
+    const txt = document.getElementById(`host-ans-text-${letter}`);
+    if (txt) txt.textContent = `Option ${letter}`;
+    if (card) card.classList.remove('correct-key');
+  });
 }
 
 function handleIncomingQuestionStart(rawPayload) {
@@ -1302,6 +1336,7 @@ function initHostControls() {
   const btnStartAuto = document.getElementById('btn-start-auto');
   const btnPauseAuto = document.getElementById('btn-pause-auto');
   const btnResetGame = document.getElementById('btn-reset-game');
+  const btnSkipQuestion = document.getElementById('btn-skip-question');
   const btnClearQueue = document.getElementById('btn-clear-queue');
   const diffChips = document.querySelectorAll('.diff-chip');
   const timerChips = document.querySelectorAll('.timer-chip');
@@ -1312,6 +1347,95 @@ function initHostControls() {
 
   // Initialize input value from stored state
   if (hostVenueInput) hostVenueInput.value = currentVenueName;
+
+  // TAB SWITCHING (Live Stage, Playlist, Connected Players, Settings)
+  const hostTabBtns = document.querySelectorAll('.host-tab-btn');
+  const hostTabPanes = document.querySelectorAll('.host-tab-pane');
+  const btnGotoPlaylist = document.getElementById('btn-host-goto-playlist');
+
+  function switchHostTab(tabName) {
+    if (!tabName) return;
+    hostTabBtns.forEach(btn => {
+      const isTarget = btn.getAttribute('data-tab') === tabName;
+      btn.classList.toggle('active', isTarget);
+      btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+    });
+
+    hostTabPanes.forEach(pane => {
+      const isTarget = pane.id === `host-pane-${tabName}`;
+      pane.classList.toggle('active', isTarget);
+    });
+
+    if (tabName === 'players') {
+      renderHostPlayersRoster();
+    }
+  }
+
+  hostTabBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tab = btn.getAttribute('data-tab');
+      switchHostTab(tab);
+    });
+  });
+
+  btnGotoPlaylist?.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchHostTab('playlist');
+  });
+
+  // GENRE SEARCH & CATEGORY FILTERING
+  const genreSearchInput = document.getElementById('host-genre-search-input');
+  const btnClearSearch = document.getElementById('btn-clear-genre-search');
+  const catPills = document.querySelectorAll('.genre-cat-pill');
+  let activeCategoryFilter = 'all';
+
+  function filterGenreChips() {
+    const query = (genreSearchInput?.value || '').toLowerCase().trim();
+    if (btnClearSearch) {
+      btnClearSearch.classList.toggle('hidden', !query);
+    }
+
+    genreChips.forEach(chip => {
+      const gName = (chip.dataset.genre || chip.textContent || '').toLowerCase();
+      const gCat = chip.dataset.cat || 'all';
+
+      const matchesCat = (activeCategoryFilter === 'all') || (gCat === activeCategoryFilter) || (chip.dataset.genre === 'Auto Select' || chip.dataset.genre === 'Random');
+      const matchesQuery = !query || gName.includes(query);
+
+      chip.style.display = (matchesCat && matchesQuery) ? '' : 'none';
+    });
+  }
+
+  genreSearchInput?.addEventListener('input', filterGenreChips);
+  btnClearSearch?.addEventListener('click', () => {
+    if (genreSearchInput) genreSearchInput.value = '';
+    filterGenreChips();
+  });
+
+  catPills.forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.preventDefault();
+      catPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeCategoryFilter = pill.dataset.cat || 'all';
+      filterGenreChips();
+    });
+  });
+
+  // SKIP QUESTION ACTION
+  btnSkipQuestion?.addEventListener('click', () => {
+    if (!isAutomatedEngineRunning) return;
+    if (hostEngineState === 'QUESTION_ACTIVE' && currentQuestionData) {
+      clearTimeout(autoEngineTimeout);
+      const qInRound = (currentQuestionIndex % 10) + 1;
+      handleHostQuestionTimeout(currentQuestionData, currentRound, qInRound);
+    } else if (hostEngineState === 'QUESTION_REVIEW') {
+      clearTimeout(autoEngineTimeout);
+      const qInRound = (currentQuestionIndex % 10) + 1;
+      handleHostAdvanceAfterReview(qInRound, currentRound);
+    }
+  });
 
   // Venue Name Input Handler
   hostVenueInput?.addEventListener('input', (e) => {
@@ -1451,6 +1575,17 @@ function initHostControls() {
       roundNumber: currentRound,
     });
 
+    handleIncomingPreGameCountdown({
+      countdown_seconds: countdownSecs,
+      starts_at_epoch_ms: startsAtMs,
+      room_code: currentRoomCode,
+      genre: initialGenre,
+      current_genre: initialGenre,
+      category: initialGenre,
+      round_number: currentRound,
+      roundNumber: currentRound,
+    });
+
     broadcastRealtimeEvent('leaderboard_updated', {
       players: playersLeaderboard,
       leaderboard: playersLeaderboard,
@@ -1510,6 +1645,11 @@ function initHostControls() {
     channel.postMessage({ type: 'GAME_RESET', payload: { roomCode: currentRoomCode } });
     onGameReset({ roomCode: currentRoomCode });
   });
+
+  // Initial UI Render
+  updateGenreQueueUI();
+  updateHostEngineUI('NOT STARTED');
+  renderHostPlayersRoster();
 }
 
 function updateGenreQueueUI() {
@@ -1537,6 +1677,17 @@ function updateGenreQueueUI() {
     queueDisplay.innerHTML = selectedGenreQueue.map((g, i) => `
       <span class="queue-tag">#${i + 1} ${escapeHtml(g)}</span>
     `).join('');
+  }
+
+  const stageQueuePreview = document.getElementById('host-stage-queue-preview');
+  if (stageQueuePreview) {
+    if (selectedGenreQueue.length === 0) {
+      stageQueuePreview.innerHTML = `<span class="queue-empty-msg">All 30 Specific Genres in Auto-Select Rotation</span>`;
+    } else {
+      stageQueuePreview.innerHTML = selectedGenreQueue.map((g, i) => `
+        <span class="queue-tag">#${i + 1} ${escapeHtml(g)}</span>
+      `).join('');
+    }
   }
 }
 
@@ -1618,16 +1769,97 @@ function updateCarouselSlide(slideNumber) {
   });
 }
 
+function renderHostPlayersRoster() {
+  const rosterList = document.getElementById('host-connected-players-list');
+  const countBadge = document.getElementById('host-live-player-badge');
+  const tabBadge = document.getElementById('host-tab-player-count');
+  const statPlayers = document.getElementById('stat-players-count');
+
+  const validPlayers = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+  const count = validPlayers.length;
+
+  if (countBadge) countBadge.textContent = `${count} Active`;
+  if (tabBadge) tabBadge.textContent = count;
+  if (statPlayers) statPlayers.textContent = count;
+
+  if (!rosterList) return;
+
+  if (count === 0) {
+    rosterList.innerHTML = `
+      <div class="host-empty-roster">
+        <span class="empty-icon">📱</span>
+        <p class="empty-headline">No players joined yet</p>
+        <small>Players can scan the TV QR code or join with room code <strong>${escapeHtml(currentRoomCode)}</strong>.</small>
+      </div>
+    `;
+    return;
+  }
+
+  // Sorted by cumulative score descending
+  const sorted = [...validPlayers].sort((a, b) => {
+    const sA = Number(a.score ?? a.cumulative_score ?? 0);
+    const sB = Number(b.score ?? b.cumulative_score ?? 0);
+    if (sB !== sA) return sB - sA;
+    return (a.nickname || '').localeCompare(b.nickname || '');
+  });
+
+  rosterList.innerHTML = sorted.map((p, idx) => {
+    const score = Number(p.score ?? p.cumulative_score ?? 0);
+    const rankClass = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
+    const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
+    const streakHtml = (p.streak && p.streak > 1) ? `<span class="player-streak-tag">🔥 ${p.streak} streak</span>` : '';
+    
+    return `
+      <div class="host-player-item ${rankClass}">
+        <div class="player-item-left">
+          <span class="player-rank-badge ${rankClass}">${medal}</span>
+          <div class="player-info-col">
+            <span class="player-name">${escapeHtml(p.nickname)}</span>
+            ${streakHtml}
+          </div>
+        </div>
+        <div class="player-item-right">
+          <span class="player-score-tag">${score} pts</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function updateHostEngineUI(statusText) {
   const btnStartAuto = document.getElementById('btn-start-auto');
   const btnPauseAuto = document.getElementById('btn-pause-auto');
+  const btnSkip = document.getElementById('btn-skip-question');
   const engineStatus = document.getElementById('host-engine-status');
   const statPlayers = document.getElementById('stat-players-count');
+  const statRound = document.getElementById('stat-round');
+  const statDiff = document.getElementById('stat-difficulty');
+  const statTimer = document.getElementById('stat-active-timer');
+  const hostRoomDisplay = document.getElementById('host-room-code-display');
+  const hostPlayersRoom = document.getElementById('host-players-room-code');
 
   const isRunning = (statusText === 'IN PROGRESS');
 
   if (btnStartAuto) btnStartAuto.disabled = isRunning;
   if (btnPauseAuto) btnPauseAuto.disabled = !isRunning;
+  if (btnSkip && !isRunning) {
+    btnSkip.classList.add('hidden');
+  }
+
+  if (statRound) statRound.textContent = currentRound;
+  if (statDiff) statDiff.textContent = selectedDifficulty;
+  if (statTimer) {
+    if (selectedQuestionDuration >= 60) {
+      const mins = Math.floor(selectedQuestionDuration / 60);
+      const secs = selectedQuestionDuration % 60;
+      statTimer.textContent = secs > 0 ? `${mins}m ${secs}s` : `${mins} Min`;
+    } else {
+      statTimer.textContent = `${selectedQuestionDuration}s`;
+    }
+  }
+
+  if (hostRoomDisplay) hostRoomDisplay.textContent = currentRoomCode;
+  if (hostPlayersRoom) hostPlayersRoom.textContent = currentRoomCode;
 
   if (engineStatus) {
     if (statusText === 'IN PROGRESS') {
@@ -1642,7 +1874,7 @@ function updateHostEngineUI(statusText) {
     }
   }
 
-  if (statPlayers) statPlayers.textContent = playersLeaderboard.length;
+  renderHostPlayersRoster();
 }
 
 // AUTOMATED GAME LOOP LOGIC
@@ -2058,6 +2290,42 @@ function onQuestionStart(payload) {
 
   if (tvQuestionText) tvQuestionText.textContent = cleanQText;
 
+  // Update Host Mobile Stage Card & Live Answer Key Grid
+  const hostStageBadge = document.getElementById('host-stage-badge');
+  const hostStageQCounter = document.getElementById('host-stage-q-counter');
+  const hostLiveGenrePill = document.getElementById('host-live-genre-pill');
+  const hostLiveQText = document.getElementById('host-live-q-text');
+  const btnSkip = document.getElementById('btn-skip-question');
+
+  if (hostStageBadge) {
+    hostStageBadge.className = 'stage-status-indicator stage-live';
+    hostStageBadge.textContent = '🟢 QUESTION LIVE';
+  }
+  if (hostStageQCounter) {
+    hostStageQCounter.textContent = `Question ${questionNumberInRound || 1} of 10 (Round ${roundNumber || 1})`;
+  }
+  if (hostLiveGenrePill) {
+    hostLiveGenrePill.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
+  }
+  if (hostLiveQText) {
+    hostLiveQText.textContent = cleanQText;
+  }
+  if (btnSkip) {
+    btnSkip.classList.remove('hidden');
+    btnSkip.disabled = false;
+  }
+
+  // Populate Host Answer Key Grid & Highlight Correct Option
+  const correctOptLetter = (questionData.correct || 'A').toUpperCase().trim();
+  ['A', 'B', 'C', 'D'].forEach(letter => {
+    const card = document.getElementById(`host-ans-${letter}`);
+    const txt = document.getElementById(`host-ans-text-${letter}`);
+    if (txt) txt.textContent = questionData.options?.[letter] || `Option ${letter}`;
+    if (card) {
+      card.classList.toggle('correct-key', letter === correctOptLetter);
+    }
+  });
+
   if (tvOptionsGrid) {
     tvOptionsGrid.classList.remove('hidden');
     document.querySelectorAll('.option-tile').forEach(t => {
@@ -2163,6 +2431,23 @@ function updateTimerUI() {
   const playerTimerVal = document.getElementById('player-timer-val');
   if (playerTimerVal) playerTimerVal.textContent = currentSecs;
 
+  // Update Host Live Stage Progress Bar & Timer Number
+  const hostTimerFill = document.getElementById('host-timer-progress-fill');
+  const hostTimerSecs = document.getElementById('host-live-timer-secs');
+  if (hostTimerSecs) hostTimerSecs.textContent = `${currentSecs}s`;
+  if (hostTimerFill) {
+    const maxDur = totalTimerDuration > 0 ? totalTimerDuration : 20;
+    const pct = Math.max(0, Math.min(100, (currentSecs / maxDur) * 100));
+    hostTimerFill.style.width = `${pct}%`;
+    if (currentSecs <= 5) {
+      hostTimerFill.style.background = '#ff007a';
+    } else if (currentSecs <= 10) {
+      hostTimerFill.style.background = '#ffd600';
+    } else {
+      hostTimerFill.style.background = 'linear-gradient(90deg, #00e5ff, #00ff87)';
+    }
+  }
+
   if (timerProgress) {
     const ratio = currentSecs / totalTimerDuration;
     const offset = 264 - (ratio * 264);
@@ -2225,6 +2510,27 @@ function onTimerExpired(payload) {
                     payload?.nextQuestionStartsAtEpochMs || 
                     (Date.now() + 15000);
   const reviewSeconds = Math.max(1, Math.ceil((nextEpoch - Date.now()) / 1000));
+
+  // Update Host Mobile Stage Card for Review Phase
+  const hostStageBadge = document.getElementById('host-stage-badge');
+  const hostStageQCounter = document.getElementById('host-stage-q-counter');
+  const hostTimerSecs = document.getElementById('host-live-timer-secs');
+  const btnSkip = document.getElementById('btn-skip-question');
+
+  if (hostStageBadge) {
+    hostStageBadge.className = 'stage-status-indicator stage-review';
+    hostStageBadge.textContent = '🔵 QUESTION REVIEW';
+  }
+  if (hostStageQCounter) {
+    hostStageQCounter.textContent = `Reviewing Answer (Next Question in ${reviewSeconds}s)`;
+  }
+  if (hostTimerSecs) {
+    hostTimerSecs.textContent = `${reviewSeconds}s`;
+  }
+  if (btnSkip) {
+    btnSkip.textContent = '⏩ Next Q';
+    btnSkip.classList.remove('hidden');
+  }
 
   startPlayerReviewCountdown(reviewSeconds, nextEpoch);
 
@@ -2424,6 +2730,19 @@ function hideResultModal() {
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 function onRoundWinner(payload) {
   hideResultModal();
+
+  // Update Host Mobile Stage Card
+  const hostStageBadge = document.getElementById('host-stage-badge');
+  const hostStageQCounter = document.getElementById('host-stage-q-counter');
+  const btnSkip = document.getElementById('btn-skip-question');
+  if (hostStageBadge) {
+    hostStageBadge.className = 'stage-status-indicator stage-summary';
+    hostStageBadge.textContent = '🏆 ROUND COMPLETED';
+  }
+  if (hostStageQCounter) {
+    hostStageQCounter.textContent = `Round ${currentRound} Complete! Next round loading...`;
+  }
+  if (btnSkip) btnSkip.classList.add('hidden');
 
   let top3 = [];
   if (Array.isArray(payload?.top3Winners) && payload.top3Winners.length > 0) {
@@ -2822,6 +3141,41 @@ function onGameReset() {
   hideResultModal();
   hideWinnerModals();
 
+  // Reset Host Mobile Stage Card
+  const hostStageBadge = document.getElementById('host-stage-badge');
+  const hostStageQCounter = document.getElementById('host-stage-q-counter');
+  const hostLiveGenrePill = document.getElementById('host-live-genre-pill');
+  const hostLiveQText = document.getElementById('host-live-q-text');
+  const hostTimerFill = document.getElementById('host-timer-progress-fill');
+  const hostTimerSecs = document.getElementById('host-live-timer-secs');
+  const btnSkip = document.getElementById('btn-skip-question');
+
+  if (hostStageBadge) {
+    hostStageBadge.className = 'stage-status-indicator';
+    hostStageBadge.textContent = '🔴 LOBBY STAGE';
+  }
+  if (hostStageQCounter) {
+    hostStageQCounter.textContent = 'Ready to Launch Round 1';
+  }
+  if (hostLiveGenrePill) {
+    hostLiveGenrePill.textContent = '⚡ Auto Select / General Trivia';
+  }
+  if (hostLiveQText) {
+    hostLiveQText.textContent = 'Game is waiting in lobby. Tap "▶️ Start Game" below to launch Round 1 on TV and player phones!';
+  }
+  if (hostTimerFill) hostTimerFill.style.width = '100%';
+  if (hostTimerSecs) hostTimerSecs.textContent = `${selectedQuestionDuration}s`;
+  if (btnSkip) btnSkip.classList.add('hidden');
+
+  ['A', 'B', 'C', 'D'].forEach(letter => {
+    const card = document.getElementById(`host-ans-${letter}`);
+    const txt = document.getElementById(`host-ans-text-${letter}`);
+    if (txt) txt.textContent = `Option ${letter}`;
+    if (card) card.classList.remove('correct-key');
+  });
+
+  renderHostPlayersRoster();
+
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
   if (btnPromo) btnPromo.classList.add('active');
@@ -2844,6 +3198,7 @@ function onGameReset() {
 
 // 9. CLEAN LEADERBOARD RENDER WITHOUT CLUTTERED TEXT BADGES
 function renderLeaderboard() {
+  renderHostPlayersRoster();
   const list = document.getElementById('tv-leaderboard-list');
   if (!list) return;
 
