@@ -12,6 +12,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Mozilla PDF.js for in-browser client-side rendering of PDF ad flyers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body class="dark-theme" data-view="auth">
@@ -173,6 +175,34 @@
             <!-- CLEAN BOTTOM CARD WITH FLUCTUATING TEXT -->
             <div class="promo-cta-box-centered">
               <span class="fluctuating-text">WAITING FOR HOST TO START GAME</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- FULLSCREEN VENUE AD / SPONSOR SIGNAGE SCREEN (DISPLAY MODE) -->
+        <div id="tv-ad-signage-screen" class="tv-ad-signage-screen hidden">
+          <div class="tv-ad-slide-wrapper">
+            <img id="tv-ad-slide-img" class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+          </div>
+
+          <!-- Slide Countdown Progress Bar -->
+          <div class="tv-ad-progress-track">
+            <div id="tv-ad-progress-fill" class="tv-ad-progress-fill"></div>
+          </div>
+
+          <!-- Slide Counter Pill -->
+          <div class="tv-ad-slide-counter">
+            <span id="tv-ad-slide-counter-text">Ad 1 of 1</span>
+          </div>
+
+          <!-- Corner Floating QR Code Badge to Join Game -->
+          <div id="tv-ad-corner-qr" class="tv-ad-corner-qr">
+            <div class="tv-ad-qr-box">
+              <canvas id="tv-ad-qr-canvas"></canvas>
+            </div>
+            <div class="tv-ad-qr-info">
+              <span class="tv-ad-qr-label">JOIN TRIVIA</span>
+              <strong class="tv-ad-qr-code" id="tv-ad-qr-room-code">TRIV</strong>
             </div>
           </div>
         </div>
@@ -736,6 +766,72 @@
                     <div id="host-logo-preview-wrapper" class="logo-preview-wrapper hidden">
                       <img id="host-logo-preview" src="" alt="Logo Preview" class="logo-preview-img">
                       <button type="button" id="btn-remove-logo" class="btn-icon-remove" title="Remove Logo">✕</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AD DISPLAY SIGNAGE MODE -->
+              <div class="settings-subgroup ad-signage-subgroup">
+                <div class="config-label-with-toggle">
+                  <div class="config-label">
+                    <span class="icon">📺</span>
+                    <div>
+                      <span class="lbl-title">AD DISPLAY SIGNAGE MODE</span>
+                      <span class="lbl-desc">Show custom ad flyers & promotions on TV screen when game is idle</span>
+                    </div>
+                  </div>
+                  <label class="toggle-switch" for="host-toggle-ad-mode" aria-label="Toggle Ad Display Mode">
+                    <input type="checkbox" id="host-toggle-ad-mode">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div id="host-ad-settings-content" class="ad-settings-content">
+                  <!-- File Upload Dropzone (PDF or Images) -->
+                  <div class="ad-upload-section">
+                    <label for="host-ad-files-input" class="ad-dropzone" id="host-ad-dropzone">
+                      <span class="dropzone-icon">📄</span>
+                      <div class="dropzone-text">
+                        <strong>Upload Ad Files (PDF or Images)</strong>
+                        <small>Upload multi-page PDF flyers, PNG, JPG, or WEBP ads.</small>
+                      </div>
+                      <span class="btn btn-secondary btn-sm">Browse Files</span>
+                    </label>
+                    <input type="file" id="host-ad-files-input" accept="application/pdf,image/png,image/jpeg,image/webp" multiple class="hidden">
+                    <div id="host-ad-upload-status" class="ad-upload-status hidden"></div>
+                  </div>
+
+                  <!-- Ad Rotation Duration -->
+                  <div class="ad-config-row">
+                    <label class="ad-field-label">Slide Display Duration:</label>
+                    <div class="ad-duration-chips" id="ad-duration-chips">
+                      <button type="button" class="ad-dur-chip" data-dur="8">8s</button>
+                      <button type="button" class="ad-dur-chip active" data-dur="10">10s (Default)</button>
+                      <button type="button" class="ad-dur-chip" data-dur="15">15s</button>
+                      <button type="button" class="ad-dur-chip" data-dur="20">20s</button>
+                      <button type="button" class="ad-dur-chip" data-dur="30">30s</button>
+                    </div>
+                  </div>
+
+                  <!-- Corner QR Badge Toggle -->
+                  <div class="ad-config-row-checkbox">
+                    <label class="checkbox-label" for="host-toggle-ad-qr">
+                      <input type="checkbox" id="host-toggle-ad-qr" checked>
+                      <span>Display "Join Trivia" QR badge in corner of TV ads</span>
+                    </label>
+                  </div>
+
+                  <!-- Ad Slides Gallery / Manager -->
+                  <div class="ad-gallery-section">
+                    <div class="gallery-header">
+                      <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">0</span>)</span>
+                      <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear All Ads</button>
+                    </div>
+                    <div id="host-ad-gallery" class="ad-gallery-strip">
+                      <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
+                        <span>No ads uploaded yet. Upload PDF drink specials, food menus, or event flyers above!</span>
+                      </div>
                     </div>
                   </div>
                 </div>

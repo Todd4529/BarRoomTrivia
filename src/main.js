@@ -73,6 +73,15 @@ let timerEndsAtGlobalMs = 0;
 let currentQuestionData = null;
 let currentGameState = 'LOBBY';
 
+// Ad Display Signage Mode State
+let isAdModeActive = safeStorage.getItem('bar_trivia_ad_mode_active') === 'true';
+let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '10', 10);
+let showAdCornerQr = safeStorage.getItem('bar_trivia_ad_show_qr') !== 'false';
+let customAdSlides = [];
+let currentAdSlideIndex = 0;
+let adRotationTimeout = null;
+let adProgressBarInterval = null;
+
 // Screen WakeLock to prevent mobile browsers (Safari / Chrome) from sleeping during game
 let screenWakeLock = null;
 async function requestScreenWakeLock() {
@@ -241,6 +250,7 @@ function initApp() {
   initAuthView();
   initQrCodes();
   initHostControls();
+  initHostAdSettings();
   initPlayerControls();
   initTvModeToggle();
   initBroadcastChannelListeners();
@@ -253,6 +263,7 @@ function initApp() {
     updateHostLogoPreview(customBarLogoUrl);
   }
 
+  loadAdSlidesAndInit();
   startPromoCarouselRotation();
   startLeaderboardAutoScroll();
   renderLeaderboard();
@@ -566,8 +577,18 @@ function initTvModeToggle() {
     e.preventDefault();
     btnPromo.classList.add('active');
     btnLive?.classList.remove('active');
-    tvPromoScreen?.classList.remove('hidden');
     tvLiveGrid?.classList.add('hidden');
+
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    if (isAdModeActive && customAdSlides.length > 0) {
+      if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+      if (tvAdScreen) tvAdScreen.classList.remove('hidden');
+      startTvAdSignageRotation();
+    } else {
+      if (tvAdScreen) tvAdScreen.classList.add('hidden');
+      stopTvAdSignageRotation();
+      tvPromoScreen?.classList.remove('hidden');
+    }
   });
 
   btnLive?.addEventListener('click', (e) => {
@@ -575,6 +596,9 @@ function initTvModeToggle() {
     btnLive?.classList.add('active');
     btnPromo?.classList.remove('active');
     tvPromoScreen?.classList.add('hidden');
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
     tvLiveGrid?.classList.remove('hidden');
 
     if (currentQuestionData) {
@@ -625,19 +649,22 @@ function switchView(viewName) {
   // 3. Scroll to top
   window.scrollTo(0, 0);
 
-  // 4. TV View specific behavior: Show Live Stage when switching to TV
+  // 4. TV View specific behavior: Show Live Stage or Ad Signage when switching to TV
   if (viewName === 'tv') {
     const tvPromoScreen = document.getElementById('tv-promo-screen');
     const tvLiveGrid = document.getElementById('tv-live-grid');
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
     const btnPromo = document.getElementById('btn-tv-toggle-promo');
     const btnLive = document.getElementById('btn-tv-toggle-live');
 
-    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
-    if (btnLive) btnLive.classList.add('active');
-    if (btnPromo) btnPromo.classList.remove('active');
+    if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+      if (tvAdScreen) tvAdScreen.classList.add('hidden');
+      if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+      if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+      if (btnLive) btnLive.classList.add('active');
+      if (btnPromo) btnPromo.classList.remove('active');
+      stopTvAdSignageRotation();
 
-    if (currentQuestionData) {
       const remainingSecs = timerEndsAtGlobalMs 
         ? Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000))
         : remainingTimerSeconds;
@@ -649,6 +676,22 @@ function switchView(viewName) {
         durationSeconds: remainingSecs,
         difficulty: selectedDifficulty
       });
+    } else {
+      // Idle / Lobby state:
+      if (isAdModeActive && customAdSlides.length > 0) {
+        if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+        if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
+        if (tvAdScreen) tvAdScreen.classList.remove('hidden');
+        if (btnPromo) btnPromo.classList.add('active');
+        if (btnLive) btnLive.classList.remove('active');
+        startTvAdSignageRotation();
+      } else {
+        if (tvAdScreen) tvAdScreen.classList.add('hidden');
+        stopTvAdSignageRotation();
+        if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+        if (btnLive) btnLive.classList.add('active');
+        if (btnPromo) btnPromo.classList.remove('active');
+      }
     }
   }
 
@@ -784,6 +827,16 @@ function initQrCodes() {
     });
   }
 
+  const canvasAd = document.getElementById('tv-ad-qr-canvas');
+  if (canvasAd) {
+    QRCode.toCanvas(canvasAd, playUrl, { width: 90, margin: 1 }, (err) => {
+      if (err) console.error('Ad QR Code error:', err);
+    });
+  }
+
+  const adRoomCode = document.getElementById('tv-ad-qr-room-code');
+  if (adRoomCode) adRoomCode.textContent = currentRoomCode;
+
   const roomLabels = document.querySelectorAll('.qr-room-code');
   roomLabels.forEach(el => {
     el.textContent = currentRoomCode;
@@ -905,12 +958,15 @@ function handleIncomingPreGameCountdown(rawPayload) {
   hideResultModal();
   hideWinnerModals();
 
-  // If in TV view, automatically transition from rotating promo ads to live stage
+  // If in TV view, automatically transition from rotating promo/ads to live stage
   const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
   if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+  if (tvAdScreen) tvAdScreen.classList.add('hidden');
+  stopTvAdSignageRotation();
   if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
   if (btnPromo) btnPromo.classList.remove('active');
   if (btnLive) btnLive.classList.add('active');
@@ -1151,6 +1207,10 @@ function handleRealtimeIncomingEvent(event, data) {
       playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
       renderLeaderboard();
     }
+  } else if (normEvent === 'ad_mode_toggled') {
+    onAdModeToggled(payload);
+  } else if (normEvent === 'ad_slides_updated') {
+    onAdSlidesUpdated(payload);
   }
 }
 
@@ -1256,7 +1316,10 @@ function initBroadcastChannelListeners() {
           customBarLogoUrl,
           playersLeaderboard,
           timerEndsAtGlobalMs,
-          totalTimerDuration
+          totalTimerDuration,
+          isAdModeActive,
+          adSlideDurationSeconds,
+          showAdCornerQr
         }
       });
     } else if (type === 'STATE_SYNC_RESPONSE') {
@@ -1282,6 +1345,10 @@ function initBroadcastChannelListeners() {
       onLogoUpdated(payload);
     } else if (type === 'VENUE_NAME_UPDATED') {
       onVenueNameUpdated(payload);
+    } else if (type === 'AD_MODE_TOGGLED') {
+      onAdModeToggled(payload);
+    } else if (type === 'AD_SLIDES_UPDATED') {
+      onAdSlidesUpdated(payload);
     }
   };
 }
@@ -1306,6 +1373,31 @@ function onStateSyncResponse(payload) {
     playersLeaderboard = payload.playersLeaderboard;
     renderLeaderboard();
   }
+
+  if (payload.isAdModeActive !== undefined) {
+    isAdModeActive = Boolean(payload.isAdModeActive);
+    safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
+    const toggle = document.getElementById('host-toggle-ad-mode');
+    if (toggle) toggle.checked = isAdModeActive;
+  }
+
+  if (payload.adSlideDurationSeconds !== undefined) {
+    adSlideDurationSeconds = parseInt(payload.adSlideDurationSeconds, 10);
+    safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+    const durChips = document.querySelectorAll('.ad-dur-chip');
+    durChips.forEach(chip => {
+      chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
+    });
+  }
+
+  if (payload.showAdCornerQr !== undefined) {
+    showAdCornerQr = Boolean(payload.showAdCornerQr);
+    safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
+    const toggleQr = document.getElementById('host-toggle-ad-qr');
+    if (toggleQr) toggleQr.checked = showAdCornerQr;
+  }
+
+  syncTvSignageDisplay();
 
   if (payload.currentGameState === 'QUESTION_ACTIVE' && payload.currentQuestionData) {
     currentGameState = payload.currentGameState;
@@ -1769,6 +1861,601 @@ function updateCarouselSlide(slideNumber) {
   });
 }
 
+// ============================================================================
+// AD DISPLAY SIGNAGE MODE ENGINE (INDEXEDDB CACHE, PDF.JS RENDERER & TV CAROUSEL)
+// ============================================================================
+
+// 1. Lightweight Native IndexedDB Helper to Store Multi-Megabyte High-Res Slides
+const idbAdStorage = {
+  dbPromise: null,
+  getDB() {
+    if (!this.dbPromise) {
+      this.dbPromise = new Promise((resolve) => {
+        if (typeof window === 'undefined' || !window.indexedDB) {
+          resolve(null);
+          return;
+        }
+        try {
+          const request = window.indexedDB.open('BarRoomTriviaDB', 1);
+          request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('ad_slides')) {
+              db.createObjectStore('ad_slides', { keyPath: 'key' });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+    return this.dbPromise;
+  },
+  async saveSlides(slides) {
+    try {
+      const db = await this.getDB();
+      if (!db) {
+        try {
+          safeStorage.setItem('bar_trivia_ad_slides_fallback', JSON.stringify(slides.slice(0, 3)));
+        } catch (_) {}
+        return true;
+      }
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction('ad_slides', 'readwrite');
+          const store = tx.objectStore('ad_slides');
+          store.put({ key: 'venue_ads', slides });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (err) {
+          console.warn('[idbAdStorage] Save transaction error:', err);
+          resolve(false);
+        }
+      });
+    } catch (e) {
+      console.warn('[idbAdStorage] Save error:', e);
+      return false;
+    }
+  },
+  async loadSlides() {
+    try {
+      const db = await this.getDB();
+      if (!db) {
+        const raw = safeStorage.getItem('bar_trivia_ad_slides_fallback');
+        return raw ? JSON.parse(raw) : [];
+      }
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction('ad_slides', 'readonly');
+          const store = tx.objectStore('ad_slides');
+          const req = store.get('venue_ads');
+          req.onsuccess = () => {
+            resolve(req.result?.slides || []);
+          };
+          req.onerror = () => resolve([]);
+        } catch (err) {
+          console.warn('[idbAdStorage] Load transaction error:', err);
+          resolve([]);
+        }
+      });
+    } catch (e) {
+      console.warn('[idbAdStorage] Load error:', e);
+      return [];
+    }
+  },
+  async clearSlides() {
+    try {
+      const db = await this.getDB();
+      if (!db) {
+        safeStorage.removeItem('bar_trivia_ad_slides_fallback');
+        return true;
+      }
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction('ad_slides', 'readwrite');
+          const store = tx.objectStore('ad_slides');
+          store.delete('venue_ads');
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (_) {
+          resolve(false);
+        }
+      });
+    } catch (e) {
+      console.warn('[idbAdStorage] Clear error:', e);
+      return false;
+    }
+  }
+};
+
+// 2. Ensure PDF.js is loaded from CDN or local environment
+async function ensurePdfJsLoaded() {
+  if (typeof window !== 'undefined' && window.pdfjsLib) {
+    if (!window.pdfjsLib.GlobalWorkerOptions?.workerSrc) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    return window.pdfjsLib;
+  }
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('Document not available'));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      } else {
+        reject(new Error('PDF.js failed to initialize'));
+      }
+    };
+    script.onerror = () => reject(new Error('Failed to load PDF.js from CDN'));
+    document.head.appendChild(script);
+  });
+}
+
+// 3. Render multi-page PDF files into individual HD canvas slides
+async function renderPdfFileToSlides(file) {
+  const pdfjs = await ensurePdfJsLoaded();
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  const slides = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    // Render at 2.0 scale for crisp 1080p display
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // Export as high-quality JPEG (0.90) for crisp text with lightweight storage
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+    slides.push({
+      id: `slide_${Date.now()}_${pageNum}_${Math.random().toString(36).substring(2, 6)}`,
+      name: file.name,
+      dataUrl,
+      type: 'pdf',
+      page: pageNum,
+      totalPages: pdf.numPages,
+      timestamp: Date.now()
+    });
+  }
+  return slides;
+}
+
+// 4. Render direct image files (.png, .jpg, .webp) to slide
+async function renderImageFileToSlide(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      resolve([{
+        id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
+        name: file.name,
+        dataUrl: e.target.result,
+        type: 'image',
+        page: 1,
+        totalPages: 1,
+        timestamp: Date.now()
+      }]);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// 5. TV Ad Signage Synchronization & Carousel Rotation
+function syncTvSignageDisplay() {
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+  const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvLiveGrid = document.getElementById('tv-live-grid');
+  const cornerQr = document.getElementById('tv-ad-corner-qr');
+
+  if (cornerQr) {
+    cornerQr.classList.toggle('hidden', !showAdCornerQr);
+  }
+
+  // Active game play ALWAYS overrides ad mode
+  if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    return;
+  }
+
+  // Idle / Lobby mode:
+  if (isAdModeActive && customAdSlides && customAdSlides.length > 0) {
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
+    if (tvAdScreen) tvAdScreen.classList.remove('hidden');
+    startTvAdSignageRotation();
+  } else {
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    // Only unhide promo if live grid is not currently active
+    const btnLive = document.getElementById('btn-tv-toggle-live');
+    const isLiveActive = btnLive?.classList.contains('active');
+    if (!isLiveActive && tvPromoScreen) {
+      tvPromoScreen.classList.remove('hidden');
+    }
+  }
+}
+
+function startTvAdSignageRotation() {
+  stopTvAdSignageRotation();
+  if (!customAdSlides || customAdSlides.length === 0) return;
+
+  if (currentAdSlideIndex >= customAdSlides.length) {
+    currentAdSlideIndex = 0;
+  }
+
+  displayAdSlide(currentAdSlideIndex);
+
+  const totalMs = (adSlideDurationSeconds || 10) * 1000;
+  const startTime = Date.now();
+  const progressFill = document.getElementById('tv-ad-progress-fill');
+  if (progressFill) progressFill.style.width = '0%';
+
+  adProgressBarInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const pct = Math.min(100, (elapsed / totalMs) * 100);
+    if (progressFill) progressFill.style.width = `${pct}%`;
+    if (elapsed >= totalMs) {
+      clearInterval(adProgressBarInterval);
+    }
+  }, 100);
+
+  adRotationTimeout = setTimeout(() => {
+    currentAdSlideIndex = (currentAdSlideIndex + 1) % customAdSlides.length;
+    startTvAdSignageRotation();
+  }, totalMs);
+}
+
+function stopTvAdSignageRotation() {
+  if (adRotationTimeout) {
+    clearTimeout(adRotationTimeout);
+    adRotationTimeout = null;
+  }
+  if (adProgressBarInterval) {
+    clearInterval(adProgressBarInterval);
+    adProgressBarInterval = null;
+  }
+  const progressFill = document.getElementById('tv-ad-progress-fill');
+  if (progressFill) progressFill.style.width = '0%';
+}
+
+function displayAdSlide(index) {
+  const slide = customAdSlides[index];
+  if (!slide) return;
+
+  const img = document.getElementById('tv-ad-slide-img');
+  const counterText = document.getElementById('tv-ad-slide-counter-text');
+
+  if (img) {
+    img.classList.add('fading');
+    setTimeout(() => {
+      img.src = slide.dataUrl;
+      img.classList.remove('fading');
+    }, 250);
+  }
+
+  if (counterText) {
+    counterText.textContent = `Ad ${index + 1} of ${customAdSlides.length}`;
+  }
+}
+
+// 6. Host Gallery Thumbnail Management
+function renderHostAdGallery() {
+  const gallery = document.getElementById('host-ad-gallery');
+  const countEl = document.getElementById('host-ad-count');
+  if (countEl) countEl.textContent = customAdSlides.length;
+
+  if (!gallery) return;
+
+  if (!customAdSlides || customAdSlides.length === 0) {
+    gallery.innerHTML = `
+      <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
+        <span>No ads uploaded yet. Upload PDF drink specials, food menus, or event flyers above!</span>
+      </div>
+    `;
+    return;
+  }
+
+  gallery.innerHTML = '';
+  customAdSlides.forEach((slide, index) => {
+    const card = document.createElement('div');
+    card.className = 'ad-thumb-card';
+    card.setAttribute('data-slide-id', slide.id);
+
+    const displayName = (slide.totalPages > 1) 
+      ? `${slide.name} (P.${slide.page}/${slide.totalPages})`
+      : slide.name;
+
+    card.innerHTML = `
+      <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
+      <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
+      <button type="button" class="btn-remove-ad-slide" title="Delete Slide" data-slide-index="${index}">✕</button>
+    `;
+
+    const removeBtn = card.querySelector('.btn-remove-ad-slide');
+    removeBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeAdSlide(index);
+    });
+
+    gallery.appendChild(card);
+  });
+}
+
+async function removeAdSlide(index) {
+  if (index < 0 || index >= customAdSlides.length) return;
+  customAdSlides.splice(index, 1);
+  if (currentAdSlideIndex >= customAdSlides.length) {
+    currentAdSlideIndex = 0;
+  }
+  await idbAdStorage.saveSlides(customAdSlides);
+  renderHostAdGallery();
+  broadcastAdSlidesUpdated();
+  syncTvSignageDisplay();
+}
+
+async function clearAllAdSlides() {
+  customAdSlides = [];
+  currentAdSlideIndex = 0;
+  await idbAdStorage.clearSlides();
+  renderHostAdGallery();
+  broadcastAdSlidesUpdated();
+  syncTvSignageDisplay();
+}
+
+// 7. Cross-Device Realtime & Channel Broadcasting
+function broadcastAdModeChange() {
+  const payload = {
+    isAdModeActive,
+    adSlideDurationSeconds,
+    showAdCornerQr,
+    slidesCount: customAdSlides.length
+  };
+  try {
+    channel.postMessage({ type: 'AD_MODE_TOGGLED', payload });
+    broadcastRealtimeEvent('ad_mode_toggled', payload);
+  } catch (e) {
+    console.warn('Ad mode broadcast error:', e);
+  }
+}
+
+function broadcastAdSlidesUpdated() {
+  broadcastAdModeChange();
+  try {
+    channel.postMessage({
+      type: 'AD_SLIDES_UPDATED',
+      payload: {
+        slides: customAdSlides,
+        isAdModeActive,
+        adSlideDurationSeconds,
+        showAdCornerQr
+      }
+    });
+    broadcastRealtimeEvent('ad_slides_updated', {
+      slidesCount: customAdSlides.length,
+      isAdModeActive
+    });
+  } catch (e) {
+    console.warn('Ad slides broadcast error:', e);
+  }
+}
+
+function onAdModeToggled(payload) {
+  if (!payload) return;
+  if (payload.isAdModeActive !== undefined) {
+    isAdModeActive = Boolean(payload.isAdModeActive);
+    safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
+    const toggle = document.getElementById('host-toggle-ad-mode');
+    if (toggle) toggle.checked = isAdModeActive;
+  }
+  if (payload.adSlideDurationSeconds !== undefined) {
+    adSlideDurationSeconds = parseInt(payload.adSlideDurationSeconds, 10);
+    safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+    const durChips = document.querySelectorAll('.ad-dur-chip');
+    durChips.forEach(chip => {
+      chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
+    });
+  }
+  if (payload.showAdCornerQr !== undefined) {
+    showAdCornerQr = Boolean(payload.showAdCornerQr);
+    safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
+    const toggleQr = document.getElementById('host-toggle-ad-qr');
+    if (toggleQr) toggleQr.checked = showAdCornerQr;
+  }
+  syncTvSignageDisplay();
+}
+
+async function onAdSlidesUpdated(payload) {
+  onAdModeToggled(payload);
+  if (payload && Array.isArray(payload.slides)) {
+    customAdSlides = payload.slides;
+    await idbAdStorage.saveSlides(customAdSlides);
+  } else {
+    customAdSlides = await idbAdStorage.loadSlides();
+  }
+  renderHostAdGallery();
+  syncTvSignageDisplay();
+}
+
+// 8. Host Settings UI Listeners Initialization
+function initHostAdSettings() {
+  const toggleAdMode = document.getElementById('host-toggle-ad-mode');
+  const fileInput = document.getElementById('host-ad-files-input');
+  const dropzone = document.getElementById('host-ad-dropzone');
+  const uploadStatus = document.getElementById('host-ad-upload-status');
+  const durChips = document.querySelectorAll('.ad-dur-chip');
+  const toggleAdQr = document.getElementById('host-toggle-ad-qr');
+  const btnClearAll = document.getElementById('btn-clear-all-ads');
+
+  // Master switch
+  if (toggleAdMode) {
+    toggleAdMode.checked = isAdModeActive;
+    toggleAdMode.addEventListener('change', () => {
+      isAdModeActive = toggleAdMode.checked;
+      safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
+      broadcastAdModeChange();
+      syncTvSignageDisplay();
+    });
+  }
+
+  // Duration Chips
+  durChips.forEach(chip => {
+    const dur = parseInt(chip.dataset.dur, 10);
+    chip.classList.toggle('active', dur === adSlideDurationSeconds);
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      durChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      adSlideDurationSeconds = dur;
+      safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+      broadcastAdModeChange();
+      if (isAdModeActive && customAdSlides.length > 0) {
+        startTvAdSignageRotation();
+      }
+    });
+  });
+
+  // Corner QR Checkbox
+  if (toggleAdQr) {
+    toggleAdQr.checked = showAdCornerQr;
+    toggleAdQr.addEventListener('change', () => {
+      showAdCornerQr = toggleAdQr.checked;
+      safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
+      broadcastAdModeChange();
+      syncTvSignageDisplay();
+    });
+  }
+
+  // Clear All Ads Button
+  btnClearAll?.addEventListener('click', (e) => {
+    e.preventDefault();
+    clearAllAdSlides();
+  });
+
+  // File Upload Processing
+  async function handleFilesUpload(files) {
+    if (!files || files.length === 0) return;
+    if (uploadStatus) {
+      uploadStatus.classList.remove('hidden');
+      uploadStatus.textContent = `⏳ Processing ${files.length} file(s)...`;
+    }
+
+    const newSlides = [];
+    try {
+      for (const file of Array.from(files)) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+          if (uploadStatus) uploadStatus.textContent = `📄 Rendering PDF: ${file.name}...`;
+          const pdfSlides = await renderPdfFileToSlides(file);
+          newSlides.push(...pdfSlides);
+        } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name)) {
+          if (uploadStatus) uploadStatus.textContent = `🖼️ Processing image: ${file.name}...`;
+          const imgSlides = await renderImageFileToSlide(file);
+          newSlides.push(...imgSlides);
+        }
+      }
+
+      if (newSlides.length > 0) {
+        customAdSlides.push(...newSlides);
+        await idbAdStorage.saveSlides(customAdSlides);
+        renderHostAdGallery();
+        broadcastAdSlidesUpdated();
+
+        // Automatically toggle Ad Mode ON if it was OFF
+        if (!isAdModeActive) {
+          isAdModeActive = true;
+          safeStorage.setItem('bar_trivia_ad_mode_active', 'true');
+          if (toggleAdMode) toggleAdMode.checked = true;
+          broadcastAdModeChange();
+        }
+
+        syncTvSignageDisplay();
+
+        if (uploadStatus) {
+          uploadStatus.textContent = `✅ Successfully added ${newSlides.length} slide(s)!`;
+          setTimeout(() => uploadStatus.classList.add('hidden'), 3500);
+        }
+      } else {
+        if (uploadStatus) {
+          uploadStatus.textContent = `⚠️ No valid PDF or image files found.`;
+          setTimeout(() => uploadStatus.classList.add('hidden'), 3500);
+        }
+      }
+    } catch (err) {
+      console.error('Error uploading ad files:', err);
+      if (uploadStatus) {
+        uploadStatus.textContent = `❌ Error: ${err.message || 'Failed to process files'}`;
+        setTimeout(() => uploadStatus.classList.add('hidden'), 5000);
+      }
+    }
+
+    if (fileInput) fileInput.value = '';
+  }
+
+  fileInput?.addEventListener('change', (e) => {
+    handleFilesUpload(e.target.files);
+  });
+
+  // Drag and Drop on dropzone
+  if (dropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        handleFilesUpload(dt.files);
+      }
+    });
+  }
+}
+
+// 9. Initial Load from IndexedDB
+async function loadAdSlidesAndInit() {
+  try {
+    customAdSlides = await idbAdStorage.loadSlides();
+  } catch (e) {
+    console.warn('Could not load ad slides:', e);
+    customAdSlides = [];
+  }
+  renderHostAdGallery();
+  syncTvSignageDisplay();
+}
+
+// Expose Ad mode helpers globally for testing and console inspection
+window.idbAdStorage = idbAdStorage;
+window.customAdSlides = customAdSlides;
+window.isAdModeActive = () => isAdModeActive;
+window.syncTvSignageDisplay = syncTvSignageDisplay;
+window.startTvAdSignageRotation = startTvAdSignageRotation;
+window.stopTvAdSignageRotation = stopTvAdSignageRotation;
+window.clearAllAdSlides = clearAllAdSlides;
+window.removeAdSlide = removeAdSlide;
+window.renderHostAdGallery = renderHostAdGallery;
+
 function renderHostPlayersRoster() {
   const rosterList = document.getElementById('host-connected-players-list');
   const countBadge = document.getElementById('host-live-player-badge');
@@ -2226,8 +2913,11 @@ function onQuestionStart(payload) {
   if (btnPromo) btnPromo.classList.remove('active');
 
   const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
   if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+  if (tvAdScreen) tvAdScreen.classList.add('hidden');
+  stopTvAdSignageRotation();
   if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
 
   triggerMockPlayersSimulation(questionData, totalTimerDuration);
@@ -3188,12 +3878,21 @@ function onGameReset() {
   if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
 
   const tvPromoScreen = document.getElementById('tv-promo-screen');
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
 
-  if (tvPromoScreen) tvPromoScreen.classList.remove('hidden');
   if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
 
-  startPromoCarouselRotation();
+  if (isAdModeActive && customAdSlides.length > 0) {
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvAdScreen) tvAdScreen.classList.remove('hidden');
+    startTvAdSignageRotation();
+  } else {
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    if (tvPromoScreen) tvPromoScreen.classList.remove('hidden');
+    startPromoCarouselRotation();
+  }
 }
 
 // 9. CLEAN LEADERBOARD RENDER WITHOUT CLUTTERED TEXT BADGES
