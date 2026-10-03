@@ -113,7 +113,7 @@ class GameEngineManager {
       // Check if 10-question round has completed
       if (currentQuestionIndex >= 10) {
         currentQuestionIndex = 0;
-        final top3 = SupabaseService.getTop3RoundWinners(roomCode);
+        final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
         final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
 
         _realtimeService.broadcastRoundCompleted(
@@ -121,6 +121,11 @@ class GameEngineManager {
           top3Winners: top3,
           roundNumber: currentRound,
           nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
+        );
+
+        _realtimeService.broadcastLeaderboardUpdated(
+          roomCode: roomCode,
+          players: SupabaseService.getLocalPlayersJson(roomCode),
         );
 
         currentRound++;

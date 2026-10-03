@@ -374,14 +374,19 @@ class SupabaseService {
       final idx = players.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
       if (idx >= 0) {
         final existing = players[idx];
+        final newScore = existing.cumulativeScore + pointsToAdd;
         players[idx] = Player(
           id: existing.id,
           roomCode: existing.roomCode,
           playerUid: existing.playerUid,
           nickname: existing.nickname,
-          cumulativeScore: existing.cumulativeScore + pointsToAdd,
+          cumulativeScore: newScore,
           isConnected: true,
         );
+        players.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+        if (normRoom != 'TRIV') {
+          _localPlayersMap['TRIV'] = List<Player>.from(players);
+        }
         RealtimeService().broadcastLeaderboardUpdated(
           roomCode: normRoom,
           players: getLocalPlayersJson(normRoom),
@@ -436,6 +441,24 @@ class SupabaseService {
       players: [],
     );
     _clearRoomLeaderboardInDb(normRoom);
+  }
+
+  static List<Map<String, dynamic>> awardRoundWinnerBonusAndGetTop3(String roomCode, [int bonusPoints = 20]) {
+    final normRoom = roomCode.toUpperCase();
+    final list = _localPlayersMap[normRoom];
+    if (list != null && list.isNotEmpty) {
+      final validPlayers = list.where((p) => !isMockNickname(p.nickname)).toList();
+      if (validPlayers.isNotEmpty) {
+        validPlayers.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+        final winner = validPlayers.first;
+        updatePlayerScoreDirectly(
+          roomCode: normRoom,
+          nickname: winner.nickname,
+          score: winner.cumulativeScore + bonusPoints,
+        );
+      }
+    }
+    return getTop3RoundWinners(roomCode);
   }
 
   static List<Map<String, dynamic>> getTop3RoundWinners(String roomCode) {

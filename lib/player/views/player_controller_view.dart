@@ -360,6 +360,24 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
             : 15;
 
+        if (parsedWinners.isNotEmpty && _player != null) {
+          final winnerName = parsedWinners.first['nickname']?.toString().toLowerCase();
+          if (winnerName == _player!.nickname.toLowerCase()) {
+            final winnerScore = (parsedWinners.first['score'] as num?)?.toInt() ?? (_myScore + 20);
+            if (winnerScore > _myScore) {
+              _myScore = winnerScore;
+              _player = Player(
+                id: _player!.id,
+                roomCode: _player!.roomCode,
+                playerUid: _player!.playerUid,
+                nickname: _player!.nickname,
+                cumulativeScore: _myScore,
+                isConnected: true,
+              );
+            }
+          }
+        }
+
         setState(() {
           _top3Winners = parsedWinners;
           _showRoundWinnersOverlay = parsedWinners.isNotEmpty;
@@ -476,12 +494,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _correctOption = correct;
         if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
-          _myScore += 100;
+          _myScore += 10;
           if (_player != null) {
             _supabaseService.updateLocalPlayerScore(
               roomCode: _player!.roomCode,
               nickname: _player!.nickname,
-              pointsToAdd: 100,
+              pointsToAdd: 10,
             );
           }
         }
@@ -727,7 +745,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   ),
                 ),
                 child: Text(
-                  wasCorrect ? '+100 PTS' : '0 PTS',
+                  wasCorrect ? '+10 PTS' : '0 PTS',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,

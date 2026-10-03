@@ -584,6 +584,49 @@ void main() {
       expect(merged[2].nickname, 'Dave');
       expect(merged[2].cumulativeScore, 50);
     });
+
+    test('Assigns exactly 10 points for getting a question right', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+      SupabaseService.registerIncomingPlayer('TRIV', 'Troy', 0);
+
+      // Troy answers a question correctly (+10 pts)
+      SupabaseService().updateLocalPlayerScore(
+        roomCode: 'TRIV',
+        nickname: 'Troy',
+        pointsToAdd: 10,
+      );
+
+      var players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.first.nickname, 'Troy');
+      expect(players.first.cumulativeScore, 10);
+
+      // Troy answers another question correctly (+10 pts)
+      SupabaseService().updateLocalPlayerScore(
+        roomCode: 'TRIV',
+        nickname: 'Troy',
+        pointsToAdd: 10,
+      );
+
+      players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.first.cumulativeScore, 20);
+    });
+
+    test('Assigns exactly 20 points for winning a round', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+      SupabaseService.registerIncomingPlayer('TRIV', 'Troy', 30);
+      SupabaseService.registerIncomingPlayer('TRIV', 'Alice', 20);
+
+      // Round 1 ends - Troy wins round with 30 pts, earns +20 round bonus
+      final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3('TRIV', 20);
+      expect(top3.first['nickname'], 'Troy');
+      expect(top3.first['score'], 50); // 30 + 20 = 50
+
+      final players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players[0].nickname, 'Troy');
+      expect(players[0].cumulativeScore, 50);
+      expect(players[1].nickname, 'Alice');
+      expect(players[1].cumulativeScore, 20); // Alice did not win, stays at 20
+    });
   });
 }
 

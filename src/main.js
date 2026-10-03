@@ -1798,12 +1798,18 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
 
     if (validPlayers.length > 0) {
       const roundWinner = validPlayers[0];
-      roundWinner.score = (Number(roundWinner.score ?? roundWinner.cumulative_score ?? 0)) + 250;
+      roundWinner.score = (Number(roundWinner.score ?? roundWinner.cumulative_score ?? 0)) + 20;
       roundWinner.cumulative_score = roundWinner.score;
       renderLeaderboard();
       broadcastRealtimeEvent('leaderboard_updated', {
         players: playersLeaderboard,
       });
+
+      if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === roundWinner.nickname.toLowerCase()) {
+        currentPlayer.score = roundWinner.score;
+        const scoreVal = document.getElementById('player-score-val');
+        if (scoreVal) scoreVal.textContent = currentPlayer.score;
+      }
 
       top3 = validPlayers.slice(0, 3);
       winnerPayload = {
@@ -2253,16 +2259,8 @@ function onTimerExpired(payload) {
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
   if (isCorrect && currentPlayer) {
-    let speedBonus = 10;
-    if (remainingTimerSeconds >= totalTimerDuration - 3) speedBonus = 50;
-    else if (remainingTimerSeconds >= Math.floor(totalTimerDuration / 2)) speedBonus = 25;
-
     currentPlayer.streak = (currentPlayer.streak || 0) + 1;
-    let streakMult = 1.0;
-    if (currentPlayer.streak >= 3) streakMult = 1.5;
-    else if (currentPlayer.streak === 2) streakMult = 1.2;
-
-    const pointsEarned = Math.round((100 + speedBonus) * streakMult);
+    const pointsEarned = 10;
     currentPlayer.score += pointsEarned;
     const scoreVal = document.getElementById('player-score-val');
     if (scoreVal) scoreVal.textContent = currentPlayer.score;

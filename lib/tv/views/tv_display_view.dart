@@ -691,9 +691,38 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
-    // Determine top 3 players
+    // Determine top 3 players & award 20 points to the round winner
     final sorted = List<Player>.from(_leaderboard)
       ..sort((a, b) => b.score.compareTo(a.score));
+
+    if (sorted.isNotEmpty) {
+      final winner = sorted.first;
+      final newScore = winner.score + 20;
+      SupabaseService.updatePlayerScoreDirectly(
+        roomCode: _displayRoomCode,
+        nickname: winner.nickname,
+        score: newScore,
+      );
+      final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
+      if (wIdx >= 0) {
+        sorted[wIdx] = Player(
+          id: winner.id,
+          playerUid: winner.playerUid,
+          roomCode: winner.roomCode,
+          nickname: winner.nickname,
+          cumulativeScore: newScore,
+          isConnected: winner.isConnected,
+        );
+      }
+      sorted.sort((a, b) => b.score.compareTo(a.score));
+      _leaderboard = sorted;
+
+      _realtimeService.broadcastLeaderboardUpdated(
+        roomCode: _displayRoomCode,
+        players: SupabaseService.getLocalPlayersJson(_displayRoomCode),
+      );
+    }
+
     final winners = sorted.take(3).map((p) => {
       'nickname': p.nickname,
       'score': p.score,
