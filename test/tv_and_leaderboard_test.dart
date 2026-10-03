@@ -528,6 +528,62 @@ void main() {
         );
       }
     });
+
+    test('Multiple players joining consecutively all persist on leaderboard with zero points', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+
+      // 1. Troy joins
+      SupabaseService.registerIncomingPlayer('TRIV', 'Troy', 0);
+      var players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.map((p) => p.nickname).toList(), ['Troy']);
+
+      // 2. Alice joins
+      SupabaseService.registerIncomingPlayer('TRIV', 'Alice', 0);
+      players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.length, 2);
+      expect(players.map((p) => p.nickname).toSet(), containsAll(['Troy', 'Alice']));
+
+      // 3. Bob joins
+      SupabaseService.registerIncomingPlayer('TRIV', 'Bob', 0);
+      players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.length, 3);
+      expect(players.map((p) => p.nickname).toSet(), containsAll(['Troy', 'Alice', 'Bob']));
+
+      // 4. Incoming leaderboard broadcast with only Alice (100 pts) does NOT wipe Troy or Bob
+      SupabaseService.syncPlayersFromBroadcast('TRIV', [
+        {'nickname': 'Alice', 'cumulative_score': 100, 'is_connected': true}
+      ]);
+      players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players.length, 3);
+      expect(players.first.nickname, 'Alice');
+      expect(players.first.cumulativeScore, 100);
+      expect(players.map((p) => p.nickname).toSet(), containsAll(['Troy', 'Alice', 'Bob']));
+    });
+
+    test('mergeLocalPlayers non-destructively retains all players and updates scores', () {
+      SupabaseService.clearLocalPlayers('TRIV');
+
+      final initial = [
+        Player(id: '1', playerUid: 'u1', roomCode: 'TRIV', nickname: 'Troy', cumulativeScore: 0, isConnected: true),
+        Player(id: '2', playerUid: 'u2', roomCode: 'TRIV', nickname: 'Dave', cumulativeScore: 50, isConnected: true),
+      ];
+      SupabaseService.setLocalPlayers('TRIV', initial);
+
+      // Incoming broadcast from a third player's device
+      final incoming = [
+        Player(id: '3', playerUid: 'u3', roomCode: 'TRIV', nickname: 'Sarah', cumulativeScore: 80, isConnected: true),
+        Player(id: '1', playerUid: 'u1', roomCode: 'TRIV', nickname: 'Troy', cumulativeScore: 120, isConnected: true),
+      ];
+
+      final merged = SupabaseService.mergeLocalPlayers('TRIV', incoming);
+      expect(merged.length, 3);
+      expect(merged[0].nickname, 'Troy');
+      expect(merged[0].cumulativeScore, 120);
+      expect(merged[1].nickname, 'Sarah');
+      expect(merged[1].cumulativeScore, 80);
+      expect(merged[2].nickname, 'Dave');
+      expect(merged[2].cumulativeScore, 50);
+    });
   });
 }
 

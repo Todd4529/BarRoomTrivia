@@ -179,14 +179,14 @@ function isFictitiousPlayer(nickname) {
   if (!nickname) return true;
   const lower = nickname.toString().trim().toLowerCase();
   if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
+  if (lower === 'host' || lower === 'host user' || lower === 'todd4529') return true;
   const banned = [
     'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
     'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',
     'stoutscholars', 'brainybarley', 'pubeinstein', 'lagerlegend', 'quizcrafter',
     'triviamaster99', 'beerguru', 'pubquizpro', 'brewmaster_joe', 'hopsandbarley',
     'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
-    'taverntactician', 'player 1', 'champion', 'runner up', 'third place',
-    'todd4529', 'host', 'host user'
+    'taverntactician', 'player 1', 'champion', 'runner up', 'third place'
   ];
   return banned.some(b => lower === b || lower.includes(b));
 }
@@ -1064,7 +1064,36 @@ function handleRealtimeIncomingEvent(event, data) {
           score: Number(p.score ?? p.cumulative_score ?? 0),
           cumulative_score: Number(p.score ?? p.cumulative_score ?? 0),
         }));
-      playersLeaderboard = valid;
+      valid.forEach(incoming => {
+        const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === incoming.nickname.toLowerCase());
+        if (idx >= 0) {
+          playersLeaderboard[idx] = {
+            ...playersLeaderboard[idx],
+            ...incoming,
+            score: Math.max(Number(playersLeaderboard[idx].score || 0), Number(incoming.score || 0)),
+            cumulative_score: Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), Number(incoming.cumulative_score || 0)),
+            is_connected: incoming.is_connected !== false,
+          };
+        } else {
+          playersLeaderboard.push(incoming);
+        }
+      });
+      if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+        const myIdx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+        if (myIdx === -1) {
+          playersLeaderboard.push({
+            id: currentPlayer.nickname,
+            player_uid: currentPlayer.nickname,
+            room_code: currentRoomCode,
+            nickname: currentPlayer.nickname,
+            score: Number(currentPlayer.score ?? 0),
+            cumulative_score: Number(currentPlayer.score ?? 0),
+            streak: currentPlayer.streak || 0,
+            is_connected: true
+          });
+        }
+      }
+      playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
       renderLeaderboard();
     }
   }
@@ -1074,11 +1103,19 @@ function initRealtimeEngine() {
   // Always initialize Supabase Realtime Channels for Internet-wide broadcasting
   initRealtimeSupabaseChannels();
 
+  const topic = getMqttTopic();
+  const topicsToSub = [topic, 'barrooms_trivia/room_TRIV', 'tv_pairing'];
+
+  if (mqttClient && mqttClient.connected) {
+    console.log(`[Realtime Engine] Already connected, subscribing to ${topicsToSub.join(', ')}...`);
+    mqttClient.subscribe(topicsToSub, { qos: 0 });
+    return;
+  }
+
   if (mqttClient) {
     try { mqttClient.end(true); } catch (_) {}
   }
 
-  const topic = getMqttTopic();
   console.log(`[Realtime Engine] Connecting to MQTT broker for ${topic}...`);
 
   try {
@@ -1090,7 +1127,6 @@ function initRealtimeEngine() {
 
     mqttClient.on('connect', () => {
       console.log(`[Realtime Engine] Connected! Subscribing to room topics...`);
-      const topicsToSub = [topic, 'barrooms_trivia/room_TRIV', 'tv_pairing'];
       mqttClient.subscribe(topicsToSub, { qos: 0 }, (err) => {
         if (!err) {
           console.log(`[Realtime Engine] Subscribed to ${topicsToSub.join(', ')}!`);

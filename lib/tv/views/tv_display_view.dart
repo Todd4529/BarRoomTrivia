@@ -487,26 +487,25 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
         final pList = payload['players'] ?? payload['leaderboard'];
         if (pList is List && pList.isNotEmpty) {
-          final updated = <Player>[];
+          final incoming = <Player>[];
           for (var item in pList) {
             if (item is Map) {
               try {
                 final map = Map<String, dynamic>.from(item);
                 final nick = map['nickname']?.toString() ?? '';
                 if (!SupabaseService.isMockNickname(nick)) {
-                  updated.add(Player.fromJson(map));
+                  incoming.add(Player.fromJson(map));
                 }
               } catch (_) {}
             }
           }
-          if (updated.isNotEmpty) {
-            updated.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+          if (incoming.isNotEmpty) {
+            final merged = SupabaseService.mergeLocalPlayers(_displayRoomCode, incoming);
             if (mounted) {
               setState(() {
-                _leaderboard = updated;
+                _leaderboard = merged;
               });
             }
-            SupabaseService.setLocalPlayers(_displayRoomCode, updated);
             return;
           }
         }
@@ -520,6 +519,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             question: _currentQuestion!,
             durationSeconds: _remainingSeconds > 0 ? _remainingSeconds : 20,
             timerEndsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000),
+          );
+        }
+        // Broadcast current active leaderboard to newly joined players so their screens sync instantly
+        final currentPlayersJson = SupabaseService.getLocalPlayersJson(_displayRoomCode);
+        if (currentPlayersJson.isNotEmpty) {
+          _realtimeService.broadcastLeaderboardUpdated(
+            roomCode: _displayRoomCode,
+            players: currentPlayersJson,
           );
         }
       },

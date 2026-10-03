@@ -103,52 +103,76 @@ class SupabaseService {
     if (nickname.isEmpty) return true;
     final lower = nickname.trim().toLowerCase();
     if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
+    if (lower == 'host' || lower == 'host user' || lower == 'todd4529') return true;
     const banned = [
       'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
       'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',
       'stoutscholars', 'brainybarley', 'pubeinstein', 'lagerlegend', 'quizcrafter',
       'triviamaster99', 'beerguru', 'pubquizpro', 'brewmaster_joe', 'hopsandbarley',
       'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
-      'taverntactician', 'player 1', 'champion', 'runner up', 'third place',
-      'todd4529', 'host', 'host user'
+      'taverntactician', 'player 1', 'champion', 'runner up', 'third place'
     ];
     return banned.any((b) => lower == b || lower.contains(b));
+  }
+
+  static List<Player> mergeLocalPlayers(String roomCode, List<Player> incoming) {
+    final normRoom = roomCode.toUpperCase();
+    final list = _localPlayersMap.putIfAbsent(normRoom, () => []);
+    for (final inc in incoming) {
+      if (isMockNickname(inc.nickname)) continue;
+      final idx = list.indexWhere((p) => p.nickname.toLowerCase() == inc.nickname.toLowerCase());
+      if (idx >= 0) {
+        final existing = list[idx];
+        list[idx] = Player(
+          id: existing.id.isNotEmpty ? existing.id : inc.id,
+          playerUid: existing.playerUid.isNotEmpty ? existing.playerUid : inc.playerUid,
+          roomCode: normRoom,
+          nickname: inc.nickname.isNotEmpty ? inc.nickname : existing.nickname,
+          cumulativeScore: max(existing.cumulativeScore, inc.cumulativeScore),
+          isConnected: inc.isConnected || existing.isConnected,
+        );
+      } else {
+        list.add(Player(
+          id: inc.id.isNotEmpty ? inc.id : 'player-${DateTime.now().millisecondsSinceEpoch}',
+          playerUid: inc.playerUid.isNotEmpty ? inc.playerUid : 'uid-${DateTime.now().millisecondsSinceEpoch}',
+          roomCode: normRoom,
+          nickname: inc.nickname,
+          cumulativeScore: inc.cumulativeScore,
+          isConnected: inc.isConnected,
+        ));
+      }
+    }
+    list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+    if (normRoom != 'TRIV') {
+      _localPlayersMap['TRIV'] = List<Player>.from(list);
+    }
+    return List<Player>.from(list);
   }
 
   static void syncPlayersFromBroadcast(String roomCode, dynamic playersJson) {
     final normRoom = roomCode.toUpperCase();
     if (playersJson is List) {
-      final newList = <Player>[];
+      final parsedList = <Player>[];
       for (var item in playersJson) {
         if (item is Map) {
           try {
-            final p = Player.fromJson(item);
+            final p = Player.fromJson(Map<String, dynamic>.from(item));
             if (!isMockNickname(p.nickname)) {
-              newList.add(p);
+              parsedList.add(p);
             }
           } catch (e) {
             debugPrint('[SupabaseService] Error parsing player: $e');
           }
         }
       }
-      if (newList.isNotEmpty) {
-        newList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-        _localPlayersMap[normRoom] = newList;
-        if (normRoom != 'TRIV') {
-          _localPlayersMap['TRIV'] = newList;
-        }
+      if (parsedList.isNotEmpty) {
+        mergeLocalPlayers(normRoom, parsedList);
       }
     }
   }
 
   static void setLocalPlayers(String roomCode, List<Player> players) {
-    final normRoom = roomCode.toUpperCase();
-    final sorted = List<Player>.from(players);
-    sorted.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    _localPlayersMap[normRoom] = sorted;
-    if (normRoom != 'TRIV') {
-      _localPlayersMap['TRIV'] = List<Player>.from(sorted);
-    }
+    mergeLocalPlayers(roomCode, players);
   }
 
   static void updatePlayerScoreDirectly({
@@ -166,7 +190,7 @@ class SupabaseService {
         playerUid: p.playerUid,
         roomCode: p.roomCode,
         nickname: p.nickname,
-        cumulativeScore: score,
+        cumulativeScore: max(p.cumulativeScore, score),
         isConnected: true,
       );
     } else {
@@ -199,16 +223,17 @@ class SupabaseService {
     final list = _localPlayersMap.putIfAbsent(normRoom, () => []);
     final idx = list.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
     if (idx >= 0) {
+      final existing = list[idx];
       list[idx] = Player(
-        id: list[idx].id,
-        playerUid: list[idx].playerUid,
+        id: existing.id,
+        playerUid: existing.playerUid,
         roomCode: normRoom,
         nickname: nickname,
-        cumulativeScore: score > 0 ? score : list[idx].cumulativeScore,
+        cumulativeScore: max(existing.cumulativeScore, score),
         isConnected: true,
       );
     } else {
-      list.insert(0, Player(
+      list.add(Player(
         id: 'player-${DateTime.now().millisecondsSinceEpoch}',
         playerUid: 'uid-${DateTime.now().millisecondsSinceEpoch}',
         roomCode: normRoom,
@@ -217,14 +242,9 @@ class SupabaseService {
         isConnected: true,
       ));
     }
+    list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
     if (normRoom != 'TRIV') {
-      final trivList = _localPlayersMap.putIfAbsent('TRIV', () => []);
-      final tIdx = trivList.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
-      if (tIdx >= 0) {
-        trivList[tIdx] = list[idx >= 0 ? idx : 0];
-      } else {
-        trivList.insert(0, list[idx >= 0 ? idx : 0]);
-      }
+      _localPlayersMap['TRIV'] = List<Player>.from(list);
     }
   }
 
@@ -519,27 +539,7 @@ class SupabaseService {
   Future<List<Player>> getLeaderboard(String roomCode) async {
     final normRoom = roomCode.toUpperCase();
 
-    // 1. Query remote Supabase DB for registered players
-    try {
-      final res = await _client
-          .from('players')
-          .select()
-          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
-          .order('cumulative_score', ascending: false)
-          .timeout(const Duration(milliseconds: 1000));
-      if (res.isNotEmpty) {
-        for (final item in res) {
-          try {
-            final p = Player.fromJson(item);
-            if (!isMockNickname(p.nickname)) {
-              registerIncomingPlayer(normRoom, p.nickname, p.cumulativeScore);
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
-    // 2. Return local in-memory players
+    // 1. Check local in-memory players first for instantaneous response
     final localList = List<Player>.from(_localPlayersMap[normRoom] ?? [])
         .where((p) => !isMockNickname(p.nickname))
         .toList();
@@ -558,7 +558,31 @@ class SupabaseService {
       }
     }
 
-    return <Player>[];
+    // 2. Query remote Supabase DB for registered players if local is empty
+    try {
+      final res = await _client
+          .from('players')
+          .select()
+          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
+          .order('cumulative_score', ascending: false)
+          .timeout(const Duration(milliseconds: 300));
+      if (res.isNotEmpty) {
+        for (final item in res) {
+          try {
+            final p = Player.fromJson(item);
+            if (!isMockNickname(p.nickname)) {
+              registerIncomingPlayer(normRoom, p.nickname, p.cumulativeScore);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    final finalList = List<Player>.from(_localPlayersMap[normRoom] ?? [])
+        .where((p) => !isMockNickname(p.nickname))
+        .toList();
+    finalList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+    return finalList;
   }
 
   /// Host: Create new room session with Dev Fallback
