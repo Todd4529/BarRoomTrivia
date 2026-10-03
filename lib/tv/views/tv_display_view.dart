@@ -443,6 +443,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             payload['top3Winners'] as List?;
         final rNum = (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt();
+        if (rNum != null) {
+          _currentRound = rNum;
+        }
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
             (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
         final delaySec = nextStartsAt != null

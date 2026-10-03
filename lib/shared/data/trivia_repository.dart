@@ -742,10 +742,44 @@ class TriviaRepository {
     return list;
   }
 
+  static final Map<String, List<Question>> _dynamicWeeklyQuestions = {};
   static final Map<String, List<Question>> _categoryCache = {};
   static final Map<String, List<Question>> _shuffledSessionDecks = {};
   static final Map<String, int> _sessionDeckCursors = {};
   static final Set<String> _globallyServedQuestionIds = {};
+
+  /// Ingest dynamically downloaded weekly trivia questions
+  static void injectQuestions(List<Question> newQuestions) {
+    if (newQuestions.isEmpty) return;
+    for (final q in newQuestions) {
+      final key = q.category.trim();
+      _dynamicWeeklyQuestions.putIfAbsent(key, () => []);
+      
+      final dynamicList = _dynamicWeeklyQuestions[key]!;
+      final textLower = q.questionText.trim().toLowerCase();
+      if (!dynamicList.any((e) => e.questionText.trim().toLowerCase() == textLower)) {
+        dynamicList.add(q);
+      }
+
+      // If category cache is already populated, insert fresh questions at the top
+      if (_categoryCache.containsKey(key)) {
+        final existingList = _categoryCache[key]!;
+        if (!existingList.any((e) => e.questionText.trim().toLowerCase() == textLower)) {
+          existingList.insert(0, q);
+        }
+      }
+
+      // If active session deck is running for this genre, insert upcoming
+      if (_shuffledSessionDecks.containsKey(key)) {
+        final deck = _shuffledSessionDecks[key]!;
+        final cursor = _sessionDeckCursors[key] ?? 0;
+        if (!deck.any((e) => e.questionText.trim().toLowerCase() == textLower)) {
+          final insertIdx = min(cursor + 1, deck.length);
+          deck.insert(insertIdx, q);
+        }
+      }
+    }
+  }
 
   /// Guaranteed 500+ unique, non-repeating questions for EVERY single trivia genre
   static List<Question> getQuestionsForCategory(String category) {
@@ -756,6 +790,19 @@ class TriviaRepository {
 
     final List<Question> pool = [];
     final Set<String> seenTexts = {};
+
+    // 0. Include dynamic weekly ingested questions first
+    for (var entry in _dynamicWeeklyQuestions.entries) {
+      if (entry.key.toLowerCase() == key.toLowerCase()) {
+        for (var q in entry.value) {
+          final textLower = q.questionText.trim().toLowerCase();
+          if (!seenTexts.contains(textLower)) {
+            seenTexts.add(textLower);
+            pool.add(q);
+          }
+        }
+      }
+    }
 
     // 1. Include hand-crafted seeds if present in _genreBank
     if (_genreBank.containsKey(key)) {

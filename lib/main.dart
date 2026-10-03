@@ -18,12 +18,16 @@ import 'auth/tv_qr_auth_view.dart';
 import 'shared/services/realtime_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'shared/services/weekly_trivia_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Supabase Flutter SDK
   await SupabaseConfig.initialize();
+
+  // Silent automatic background check for weekly internet trivia questions
+  unawaited(WeeklyTriviaSyncService.initializeBackgroundSync());
 
   runApp(const BarRoomTriviaApp());
 }

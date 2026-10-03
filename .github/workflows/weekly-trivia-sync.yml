@@ -1,0 +1,42 @@
+name: Weekly Automated Internet Trivia Ingestion
+
+on:
+  schedule:
+    # Runs every Sunday at 04:00 AM UTC (12:00 AM EST)
+    - cron: '0 4 * * 0'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard anytime
+
+permissions:
+  contents: write
+
+concurrency:
+  group: 'weekly-trivia-sync'
+  cancel-in-progress: true
+
+jobs:
+  sync-trivia:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Fetch and Ingest Weekly Trivia
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://tzdikvbvdvgjaiznqkcd.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8' }}
+        run: node scripts/fetch_weekly_trivia.cjs
+
+      - name: Commit and push updated question pack
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/data/weekly_trivia_pack.json public/data/weekly_trivia_pack.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto: Update weekly internet trivia pack [skip ci]" && git push)

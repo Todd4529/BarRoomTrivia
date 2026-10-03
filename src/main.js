@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import mqtt from 'mqtt';
 import { createClient } from '@supabase/supabase-js';
-import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES } from './triviaDatabase.js';
+import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES, syncWeeklyTriviaInBackground } from './triviaDatabase.js';
 
 // Global error handler — prevents blank screen on mobile by logging errors
 window.addEventListener('error', (e) => {
@@ -236,6 +236,7 @@ function loadInitialPlayers() {
 // MAIN APP INITIALIZER
 function initApp() {
   initOpenTdbToken();
+  syncWeeklyTriviaInBackground();
   initNavigation();
   initAuthView();
   initQrCodes();

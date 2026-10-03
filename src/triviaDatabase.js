@@ -297,6 +297,95 @@ const authenticOfflineDatabase = [
 ];
 
 // 3. GET LOCAL QUESTIONS WITH ZERO REPEATS ACROSS 500+ QUESTIONS PER GENRE
+// In-memory pool for dynamically synced weekly internet trivia questions
+const dynamicWeeklyPool = [];
+
+// Automatic background sync for weekly trivia in Web
+export async function syncWeeklyTriviaInBackground() {
+  try {
+    // 1. Immediately load any previously cached weekly trivia from localStorage
+    const cached = localStorage.getItem('cached_weekly_trivia_pack');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          dynamicWeeklyPool.push(...parsed);
+          console.log(`[WeeklyTrivia] Loaded ${parsed.length} cached weekly questions into memory.`);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Check if sync is due (> 7 days)
+    const lastSync = localStorage.getItem('last_weekly_trivia_sync_time');
+    let isDue = true;
+    if (lastSync) {
+      const diffMs = Date.now() - new Date(lastSync).getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      if (diffDays < 7) {
+        isDue = false;
+      }
+    }
+
+    if (!isDue) {
+      return;
+    }
+
+    console.log('[WeeklyTrivia] Checking background update for weekly trivia questions...');
+
+    let fresh = [];
+    // 3. Try fetching from bundled / hosted weekly pack
+    try {
+      const res = await fetch('./data/weekly_trivia_pack.json', { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          fresh = data;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to GitHub raw if local bundle was not found
+    if (fresh.length === 0) {
+      try {
+        const ghRes = await fetch('https://raw.githubusercontent.com/Todd4529/BarRoomTrivia/master/public/data/weekly_trivia_pack.json');
+        if (ghRes.ok) {
+          const ghData = await ghRes.json();
+          if (Array.isArray(ghData) && ghData.length > 0) {
+            fresh = ghData;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (fresh.length > 0) {
+      const normalized = fresh.map(item => ({
+        id: item.id || `weekly_${Date.now()}_${Math.random()}`,
+        category: item.category || 'Pop Culture & Music',
+        difficulty: item.difficulty || 'Standard',
+        text: item.question_text || item.text,
+        options: {
+          A: item.option_a || item.options?.A || 'Option A',
+          B: item.option_b || item.options?.B || 'Option B',
+          C: item.option_c || item.options?.C || 'Option C',
+          D: item.option_d || item.options?.D || 'Option D'
+        },
+        correct: item.correct_option || item.correct || 'A',
+        duration_seconds: item.time_limit_seconds || 20
+      }));
+
+      // Ingest into in-memory pool
+      dynamicWeeklyPool.unshift(...normalized);
+      localStorage.setItem('cached_weekly_trivia_pack', JSON.stringify(normalized.slice(0, 500)));
+      localStorage.setItem('last_weekly_trivia_sync_time', new Date().toISOString());
+      console.log(`[WeeklyTrivia] Background sync completed: +${normalized.length} questions available.`);
+    } else {
+      localStorage.setItem('last_weekly_trivia_sync_time', new Date().toISOString());
+    }
+  } catch (err) {
+    console.warn('[WeeklyTrivia] Background sync skipped:', err);
+  }
+}
+
 export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
   let targetGenre = genre;
   if (!targetGenre || targetGenre === 'Random' || targetGenre === 'Auto Select') {
@@ -305,7 +394,13 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
   }
 
   // Generate or retrieve guaranteed 500+ pool for this genre
-  const pool = generateGenreQuestions(targetGenre);
+  const basePool = generateGenreQuestions(targetGenre);
+
+  // Prepend any dynamic weekly questions matching this genre
+  const matchingDynamic = dynamicWeeklyPool.filter(
+    q => q.category && q.category.toLowerCase() === targetGenre.toLowerCase()
+  );
+  const pool = [...matchingDynamic, ...basePool];
 
   // Filter out any questions already seen in this session
   const unseen = pool.filter(q => !seenQuestionTexts.has(q.text.toLowerCase()));
