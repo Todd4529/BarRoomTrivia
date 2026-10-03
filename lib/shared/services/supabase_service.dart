@@ -103,7 +103,9 @@ class SupabaseService {
     if (nickname.isEmpty) return true;
     final lower = nickname.trim().toLowerCase();
     if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
-    if (lower == 'host' || lower == 'host user' || lower == 'todd4529') return true;
+    if (lower.startsWith('simulated')) return true;
+    if (lower == 'host' || lower.startsWith('host-') || lower.startsWith('host_') || lower == 'host user' || lower == 'todd4529') return true;
+    if (RegExp(r'^player\s*\d+$').hasMatch(lower)) return true;
     const banned = [
       'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
       'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',

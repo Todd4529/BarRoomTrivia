@@ -866,7 +866,20 @@ class TriviaRepository {
     // Retrieve or initialize the randomized non-repeating deck for this genre
     if (!_shuffledSessionDecks.containsKey(targetGenre) || _shuffledSessionDecks[targetGenre]!.isEmpty) {
       final fullPool = getQuestionsForCategory(targetGenre);
-      _shuffledSessionDecks[targetGenre] = List<Question>.from(fullPool)..shuffle(_random);
+      final shuffledDeck = List<Question>.from(fullPool)..shuffle(_random);
+
+      // Prioritize freshly ingested weekly questions by placing them at the front of the active session deck
+      for (final entry in _dynamicWeeklyQuestions.entries) {
+        if (entry.key.toLowerCase() == targetGenre.toLowerCase()) {
+          for (final dynQ in entry.value) {
+            final textLower = dynQ.questionText.trim().toLowerCase();
+            shuffledDeck.removeWhere((q) => q.questionText.trim().toLowerCase() == textLower);
+            shuffledDeck.insert(0, dynQ);
+          }
+        }
+      }
+
+      _shuffledSessionDecks[targetGenre] = shuffledDeck;
       _sessionDeckCursors[targetGenre] = 0;
     }
 
