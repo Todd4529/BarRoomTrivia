@@ -727,6 +727,110 @@ void main() {
       final inRoundIndex = ((cumulativeIndex - 1) % 10) + 1;
       expect(inRoundIndex, 1);
     });
+
+    test('Extensive Multi-Round Simulation (Round 1 -> Round 2 -> Round 3) with Cumulative Scoring', () async {
+      final engine = GameEngineManager.instance;
+      const room = 'EXT_SIM_ROOM';
+      SupabaseService.clearLocalPlayers(room);
+
+      // Register two real players: Troy and Alice
+      SupabaseService.registerIncomingPlayer(room, 'Troy', 0);
+      SupabaseService.registerIncomingPlayer(room, 'Alice', 0);
+
+      // --- ROUND 1 ---
+      engine.currentRound = 1;
+      engine.currentQuestionIndex = 0;
+      engine.selectedGenres = ['Rock & Roll Classics', 'World Geography', 'Movies & Hollywood'];
+
+      // Questions 1 to 10 in Round 1
+      for (int q = 1; q <= 10; q++) {
+        engine.currentQuestionIndex++;
+        // Troy gets question right (+10)
+        SupabaseService().updateLocalPlayerScore(roomCode: room, nickname: 'Troy', pointsToAdd: 10);
+        if (q % 2 == 0) {
+          // Alice gets every even question right (+10)
+          SupabaseService().updateLocalPlayerScore(roomCode: room, nickname: 'Alice', pointsToAdd: 10);
+        }
+      }
+
+      var players = await SupabaseService().getLeaderboard(room);
+      expect(players.firstWhere((p) => p.nickname == 'Troy').cumulativeScore, 100);
+      expect(players.firstWhere((p) => p.nickname == 'Alice').cumulativeScore, 50);
+
+      // Round 1 Finishes: Award 20 bonus points to Troy (Round 1 Winner)
+      final round1Winners = SupabaseService.awardRoundWinnerBonusAndGetTop3(room, 20);
+      expect(round1Winners.first['nickname'], 'Troy');
+      expect(round1Winners.first['score'], 120); // 100 + 20
+
+      // Advance Engine to Round 2
+      engine.currentQuestionIndex = 0;
+      final nextRound = engine.currentRound + 1;
+      expect(nextRound, 2);
+      engine.currentRound = nextRound;
+      final compGenre1 = engine.selectedGenres.removeAt(0);
+      engine.selectedGenres.add(compGenre1);
+      expect(engine.selectedGenres.first, 'World Geography');
+
+      // --- ROUND 2 ---
+      // Question 1 of Round 2: Cumulative index must be 11, question number in round must be 1
+      final r2q1Cumulative = ((engine.currentRound - 1) * 10) + engine.currentQuestionIndex + 1;
+      expect(r2q1Cumulative, 11);
+      expect(((r2q1Cumulative - 1) % 10) + 1, 1);
+      expect(engine.currentRound, 2);
+
+      // Questions 1 to 10 in Round 2
+      for (int q = 1; q <= 10; q++) {
+        engine.currentQuestionIndex++;
+        // Alice answers all questions correctly in round 2 (+10 each)
+        SupabaseService().updateLocalPlayerScore(roomCode: room, nickname: 'Alice', pointsToAdd: 10);
+      }
+
+      players = await SupabaseService().getLeaderboard(room);
+      // Alice: 50 + 100 = 150. Troy: 120. Alice wins Round 2!
+      expect(players.firstWhere((p) => p.nickname == 'Alice').cumulativeScore, 150);
+      expect(players.firstWhere((p) => p.nickname == 'Troy').cumulativeScore, 120);
+
+      // Round 2 Finishes: Award 20 bonus points to Alice
+      final round2Winners = SupabaseService.awardRoundWinnerBonusAndGetTop3(room, 20);
+      expect(round2Winners.first['nickname'], 'Alice');
+      expect(round2Winners.first['score'], 170); // 150 + 20
+
+      // Advance Engine to Round 3
+      engine.currentQuestionIndex = 0;
+      engine.currentRound++;
+      expect(engine.currentRound, 3);
+      final compGenre2 = engine.selectedGenres.removeAt(0);
+      engine.selectedGenres.add(compGenre2);
+      expect(engine.selectedGenres.first, 'Movies & Hollywood');
+
+      // --- ROUND 3 QUESTION 1 ---
+      final r3q1Cumulative = ((engine.currentRound - 1) * 10) + engine.currentQuestionIndex + 1;
+      expect(r3q1Cumulative, 21);
+      expect(((r3q1Cumulative - 1) % 10) + 1, 1);
+      expect(engine.currentRound, 3);
+
+      // Final Leaderboard verification
+      players = await SupabaseService().getLeaderboard(room);
+      expect(players[0].nickname, 'Alice');
+      expect(players[0].cumulativeScore, 170);
+      expect(players[1].nickname, 'Troy');
+      expect(players[1].cumulativeScore, 120);
+    });
+
+    test('RealtimeService broadcastRoundCompleted carries completed_round and next_round', () {
+      final realtime = RealtimeService();
+      expect(() {
+        realtime.broadcastRoundCompleted(
+          roomCode: 'VERIFY_ROOM',
+          top3Winners: [
+            {'nickname': 'Troy', 'score': 120}
+          ],
+          roundNumber: 1,
+          nextRound: 2,
+          nextRoundStartsAtEpochMs: DateTime.now().millisecondsSinceEpoch + 15000,
+        );
+      }, returnsNormally);
+    });
   });
 }
 
