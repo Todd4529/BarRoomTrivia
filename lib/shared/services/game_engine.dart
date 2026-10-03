@@ -53,6 +53,8 @@ class GameEngineManager {
     _realtimeService.broadcastGameStarting(
       roomCode: roomCode,
       startsAtEpochMs: startsAtEpochMs,
+      roundNumber: currentRound,
+      genre: selectedGenres.isNotEmpty ? selectedGenres.first : null,
     );
 
     _preGameTimer?.cancel();
@@ -62,6 +64,8 @@ class GameEngineManager {
         _realtimeService.broadcastGameStarting(
           roomCode: roomCode,
           startsAtEpochMs: DateTime.now().millisecondsSinceEpoch + (preGameSecondsRemaining * 1000),
+          roundNumber: currentRound,
+          genre: selectedGenres.isNotEmpty ? selectedGenres.first : null,
         );
       } else {
         timer.cancel();

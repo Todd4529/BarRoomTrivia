@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -218,7 +219,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               final rawQ = res['current_question_index'] as int? ?? 1;
               const totalQ = 10;
               final qIdx = ((rawQ - 1) % totalQ) + 1;
-              final roundNum = ((rawQ - 1) ~/ totalQ) + 1;
+              final sessionRound = (res['current_round'] as int?) ??
+                  (res['round_number'] as int?) ??
+                  ((rawQ - 1) ~/ totalQ) + 1;
+              final roundNum = sessionRound > _currentRound ? sessionRound : _currentRound;
               final cat = qData['category']?.toString() ?? res['category']?.toString();
               _interQuestionTimer?.cancel();
               setState(() {
@@ -289,8 +293,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _isInterQuestionPhase = false;
           _currentQuestion = null; // Stale question flushed
           _questionIndex = 0;
-          if (rNum != null) {
-            _currentRound = rNum;
+          if (rNum != null && rNum > 0) {
+            _currentRound = max(_currentRound, rNum);
           }
           if (incomingGenre != null && incomingGenre.isNotEmpty) {
             _activeGenre = incomingGenre;
@@ -305,9 +309,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             (payload['question_index'] as num?)?.toInt() ?? 1;
         final totalQ = (payload['total_questions'] as num?)?.toInt() ??
             (payload['total_questions_in_round'] as num?)?.toInt() ?? 10;
-        final roundNum = (payload['round_number'] as num?)?.toInt() ??
-            (payload['roundNumber'] as num?)?.toInt() ??
-            (((rawQIdx - 1) ~/ totalQ) + 1);
+        final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt();
+        final roundNum = (rFromPayload != null && rFromPayload > 0)
+            ? max(_currentRound, rFromPayload)
+            : _currentRound;
         final qInRound = ((rawQIdx - 1) % totalQ) + 1;
         final cat = payload['category']?.toString() ?? payload['genre']?.toString();
         if (cat != null && cat.isNotEmpty) {
@@ -515,10 +521,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         if (mounted && _isGameActive && _currentQuestion != null && !_isTimerExpired) {
           _realtimeService.broadcastQuestion(
             roomCode: _displayRoomCode,
-            questionIndex: _questionIndex > 0 ? _questionIndex : 1,
+            questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + (_questionIndex > 0 ? _questionIndex : 1),
             question: _currentQuestion!,
             durationSeconds: _remainingSeconds > 0 ? _remainingSeconds : 20,
             timerEndsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000),
+            roundNumber: _currentRound,
+            totalQuestions: _totalQuestionsInRound,
           );
         }
         // Broadcast current active leaderboard to newly joined players so their screens sync instantly
@@ -570,10 +578,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             try {
               await _realtimeService.broadcastQuestion(
                 roomCode: _displayRoomCode,
-                questionIndex: 1,
+                questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + 1,
                 question: fallback,
                 durationSeconds: duration,
                 timerEndsAtEpochMs: timerEndsAtEpochMs,
+                roundNumber: _currentRound,
+                totalQuestions: _totalQuestionsInRound,
               );
             } catch (e) {
               debugPrint('[TV] Start round fallback question 1 broadcast error: $e');
@@ -583,7 +593,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               await SupabaseConfig.client.from('game_sessions').upsert({
                 'room_code': _displayRoomCode,
                 'status': 'question_active',
-                'current_question_index': 1,
+                'current_question_index': ((_currentRound - 1) * _totalQuestionsInRound) + 1,
+                'current_round': _currentRound,
+                'round_number': _currentRound,
+                'genre': _activeGenre,
                 'duration_seconds': duration,
                 'timer_ends_at': timerEndsAtEpochMs,
                 'question_data': fallback.toJson(),
@@ -763,6 +776,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         'room_code': _displayRoomCode,
         'status': 'round_summary',
         'current_round': nextRound,
+        'round_number': nextRound,
+        'current_question_index': (nextRound - 1) * _totalQuestionsInRound,
+        'genre': nextGenre,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code');
     } catch (_) {}
@@ -814,10 +830,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     try {
       await _realtimeService.broadcastQuestion(
         roomCode: _displayRoomCode,
-        questionIndex: nextIndex,
+        questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + nextIndex,
         question: question,
         durationSeconds: duration,
         timerEndsAtEpochMs: timerEndsAtEpochMs,
+        roundNumber: _currentRound,
+        totalQuestions: _totalQuestionsInRound,
       );
     } catch (e) {
       debugPrint('[TV] Safety Net broadcast error: $e');
@@ -827,7 +845,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       await SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': _displayRoomCode,
         'status': 'question_active',
-        'current_question_index': nextIndex,
+        'current_question_index': ((_currentRound - 1) * _totalQuestionsInRound) + nextIndex,
+        'current_round': _currentRound,
+        'round_number': _currentRound,
+        'genre': _activeGenre,
         'duration_seconds': duration,
         'timer_ends_at': timerEndsAtEpochMs,
         'question_data': question.toJson(),

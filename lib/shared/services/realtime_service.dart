@@ -240,15 +240,22 @@ class RealtimeService {
     return _channel ?? SupabaseConfig.client.channel('room_$roomCode');
   }
 
-  /// Broadcast 30-second pre-game warm-up countdown payload
+  /// Broadcast pre-game countdown payload
   Future<void> broadcastGameStarting({
     required String roomCode,
     required int startsAtEpochMs,
+    int? roundNumber,
+    String? genre,
   }) async {
     final payload = {
       'event': 'pre_game_countdown',
       'room_code': roomCode,
       'starts_at_epoch_ms': startsAtEpochMs,
+      if (roundNumber != null) 'round_number': roundNumber,
+      if (roundNumber != null) 'roundNumber': roundNumber,
+      if (genre != null) 'genre': genre,
+      if (genre != null) 'current_genre': genre,
+      if (genre != null) 'category': genre,
     };
 
     _localEventBus.add(payload);

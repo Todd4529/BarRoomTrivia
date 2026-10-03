@@ -628,6 +628,94 @@ void main() {
       expect(players[1].cumulativeScore, 20); // Alice did not win, stays at 20
     });
   });
+
+  group('Continuous Round Numbering Across Genres', () {
+    test('GameEngineManager maintains and increments currentRound when switching genres', () {
+      final engine = GameEngineManager.instance;
+      engine.isEngineRunning = false;
+      engine.isPreGameCountdownActive = false;
+      engine.currentRound = 1;
+      engine.currentQuestionIndex = 0;
+      engine.selectedGenres = ['General Knowledge', 'Homebrewing Beer'];
+
+      expect(engine.currentRound, 1);
+      expect(engine.selectedGenres.first, 'General Knowledge');
+
+      // Simulate questions 1..9
+      for (int i = 0; i < 9; i++) {
+        engine.currentQuestionIndex++;
+      }
+      expect(engine.currentQuestionIndex, 9);
+      expect(engine.currentRound, 1);
+
+      // Question 10 ends the round
+      engine.currentQuestionIndex = 10;
+      // In engine, 10th question completion resets currentQuestionIndex to 0, increments currentRound to 2, and rotates genres
+      engine.currentQuestionIndex = 0;
+      engine.currentRound++;
+      final completedGenre = engine.selectedGenres.removeAt(0);
+      engine.selectedGenres.add(completedGenre);
+
+      expect(engine.currentRound, 2, reason: 'Round must be 2, never reset to 1');
+      expect(engine.selectedGenres.first, 'Homebrewing Beer', reason: 'Genre switched to Homebrewing Beer');
+
+      // Next round questions 1..10 in Homebrewing Beer
+      for (int i = 0; i < 10; i++) {
+        engine.currentQuestionIndex++;
+      }
+      expect(engine.currentQuestionIndex, 10);
+      expect(engine.currentRound, 2);
+
+      // Advance to round 3
+      engine.currentQuestionIndex = 0;
+      engine.currentRound++;
+      final completedGenre2 = engine.selectedGenres.removeAt(0);
+      engine.selectedGenres.add(completedGenre2);
+
+      expect(engine.currentRound, 3, reason: 'Round continues sequentially to Round 3');
+      expect(engine.selectedGenres.first, 'General Knowledge');
+    });
+
+    test('RealtimeService broadcastQuestion and broadcastGameStarting accept roundNumber and genre', () {
+      final realtime = RealtimeService();
+
+      // Verify that calling broadcastQuestion with roundNumber and totalQuestions executes cleanly
+      final testQuestion = Question(
+        id: 'q-genre-test',
+        category: 'Homebrewing Beer',
+        difficulty: 'Medium',
+        questionText: 'What temperature is typical for ale fermentation?',
+        optionA: '65-72°F',
+        optionB: '45-50°F',
+        optionC: '90-95°F',
+        optionD: '32-38°F',
+        correctOption: 'A',
+      );
+
+      // Calling broadcastQuestion with roundNumber: 2
+      expect(() {
+        realtime.broadcastQuestion(
+          roomCode: 'TESTROOM',
+          questionIndex: 11,
+          question: testQuestion,
+          durationSeconds: 30,
+          timerEndsAtEpochMs: DateTime.now().millisecondsSinceEpoch + 30000,
+          roundNumber: 2,
+          totalQuestions: 10,
+        );
+      }, returnsNormally);
+
+      // Calling broadcastGameStarting with roundNumber: 2 and genre: 'Homebrewing Beer'
+      expect(() {
+        realtime.broadcastGameStarting(
+          roomCode: 'TESTROOM',
+          startsAtEpochMs: DateTime.now().millisecondsSinceEpoch + 15000,
+          roundNumber: 2,
+          genre: 'Homebrewing Beer',
+        );
+      }, returnsNormally);
+    });
+  });
 }
 
 

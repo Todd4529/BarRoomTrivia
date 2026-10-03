@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +41,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   bool _isReviewPhase = false;
   int _remainingSeconds = 0;
   int _questionNumberInRound = 1;
+  int _currentRound = 1;
   int _myScore = 0;
   Timer? _localTimer;
   Timer? _preGameTimer;
@@ -173,6 +175,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _inputsLocked = false;
             _isReviewPhase = false;
             _isScoredForThisQuestion = false;
+            final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+                (payload['roundNumber'] as num?)?.toInt();
+            if (rFromPayload != null && rFromPayload > 0) {
+              _currentRound = max(_currentRound, rFromPayload);
+            }
             _remainingSeconds = durationSec > 0 ? durationSec : 60;
             _questionNumberInRound = ((qIndex - 1) % 10) + 1;
           });
@@ -224,6 +231,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final now = DateTime.now().millisecondsSinceEpoch;
         final diffMs = startsAt - now;
         final remainingSec = (diffMs / 1000).ceil().clamp(1, 30);
+        final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt();
+        if (rFromPayload != null && rFromPayload > 0) {
+          _currentRound = max(_currentRound, rFromPayload);
+        }
 
         setState(() {
           _isGamePaused = false;
@@ -359,6 +371,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final delaySec = nextStartsAt != null
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
             : 15;
+        final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+            (payload['roundNumber'] as num?)?.toInt();
+        if (rFromPayload != null && rFromPayload > 0) {
+          _currentRound = max(_currentRound, rFromPayload);
+        }
 
         if (parsedWinners.isNotEmpty && _player != null) {
           final winnerName = parsedWinners.first['nickname']?.toString().toLowerCase();
@@ -961,7 +978,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   ),
                   if (_currentQuestion != null)
                     Text(
-                      'Question $_questionNumberInRound of 10',
+                      'Round $_currentRound • Question $_questionNumberInRound of 10',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,

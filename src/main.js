@@ -48,6 +48,7 @@ if (urlRoomCode) {
 }
 let currentPlayer = null;
 let currentQuestionIndex = 0;
+let currentRound = 1;
 let selectedQuestionDuration = 20; // Default 20 seconds
 let selectedDifficulty = 'Standard'; // Kids, Beginner, Standard, Advanced
 let selectedGenreQueue = []; // Up to 10 genres in order
@@ -895,6 +896,11 @@ function handleIncomingPreGameCountdown(rawPayload) {
   currentQuestionData = null;
   playerChoiceSubmitted = null;
 
+  const rNum = Number(payload.round_number || payload.roundNumber);
+  if (rNum && rNum > 0) {
+    currentRound = Math.max(currentRound, rNum);
+  }
+
   hideResultModal();
   hideWinnerModals();
 
@@ -911,16 +917,16 @@ function handleIncomingPreGameCountdown(rawPayload) {
   const tvCategory = document.getElementById('tv-category');
   const tvQuestionText = document.getElementById('tv-question-text');
   if (tvCategory) tvCategory.textContent = '🚀 GAME STARTING';
-  if (tvQuestionText) tvQuestionText.textContent = `Get ready! Question 1 starts in ${countdownSecs} seconds...`;
+  if (tvQuestionText) tvQuestionText.textContent = `Get ready! Round ${currentRound} starts in ${countdownSecs} seconds...`;
 
   const playerQuestionText = document.getElementById('player-question-text');
   if (playerQuestionText) {
-    playerQuestionText.textContent = `🎮 GAME STARTING IN ${countdownSecs} SECONDS! Get ready...`;
+    playerQuestionText.textContent = `🎮 ROUND ${currentRound} STARTING IN ${countdownSecs} SECONDS! Get ready...`;
   }
   const playerStatusBadge = document.getElementById('player-status-badge');
   if (playerStatusBadge) {
     playerStatusBadge.className = 'status-badge status-active';
-    playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> STARTING IN ${countdownSecs}s`;
+    playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> ROUND ${currentRound} IN ${countdownSecs}s`;
   }
   const answerBtns = document.querySelectorAll('.btn-answer');
   answerBtns.forEach(btn => {
@@ -956,7 +962,11 @@ function handleIncomingQuestionStart(rawPayload) {
 
   const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds) || selectedQuestionDuration || 20;
   const qIndex = Number(payload.question_index) || 1;
-  const roundNum = Number(payload.round_number || payload.roundNumber) || Math.floor((qIndex - 1) / 10) + 1;
+  const rFromPayload = Number(payload.round_number || payload.roundNumber);
+  const roundNum = (rFromPayload && rFromPayload > 0)
+    ? Math.max(currentRound, rFromPayload)
+    : Math.max(currentRound, (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : 1));
+  currentRound = roundNum;
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
   timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
@@ -1395,15 +1405,19 @@ function initHostControls() {
     if (isAutomatedEngineRunning) return;
     isAutomatedEngineRunning = true;
     currentRoundQuestions = [];
-    currentQuestionIndex = 0;
+    if (currentGameState === 'LOBBY' || currentGameState === 'NOT_STARTED' || currentQuestionIndex === 0) {
+      currentQuestionIndex = 0;
+      currentRound = 1;
+    }
     updateHostEngineUI('IN PROGRESS');
 
     // 1. Determine active genre and broadcast pre-game countdown (10s) immediately to TV and players
     let initialGenre = 'General Trivia';
     if (selectedGenreQueue.length > 0) {
-      initialGenre = selectedGenreQueue[0];
+      const qIndex = (currentRound - 1) % selectedGenreQueue.length;
+      initialGenre = selectedGenreQueue[qIndex];
     } else if (shuffledAutoGenres && shuffledAutoGenres.length > 0) {
-      initialGenre = shuffledAutoGenres[0];
+      initialGenre = shuffledAutoGenres[(currentRound - 1) % shuffledAutoGenres.length];
     }
 
     const countdownSecs = 10;
@@ -1418,7 +1432,9 @@ function initHostControls() {
       room_code: currentRoomCode,
       genre: initialGenre,
       current_genre: initialGenre,
-      category: initialGenre
+      category: initialGenre,
+      round_number: currentRound,
+      roundNumber: currentRound,
     });
 
     broadcastRealtimeEvent('leaderboard_updated', {
@@ -1473,6 +1489,7 @@ function initHostControls() {
     clearMockPlayerTimeouts();
     resetQuestionHistory();
     currentQuestionIndex = 0;
+    currentRound = 1;
     currentGameState = 'LOBBY';
     updateHostEngineUI('NOT STARTED');
 
@@ -1846,6 +1863,7 @@ function handleHostAdvanceAfterRoundSummary() {
   playerChoiceSubmitted = null;
 
   const nextRound = Math.floor(currentQuestionIndex / 10) + 1;
+  currentRound = nextRound;
   let nextGenre = 'General Trivia';
   if (selectedGenreQueue.length > 0) {
     const qIndex = (nextRound - 1) % selectedGenreQueue.length;
@@ -2764,6 +2782,8 @@ function onAnswerSubmitted({ player, choice }) {
 function onGameReset() {
   playersLeaderboard = [];
   selectedGenreQueue = [];
+  currentRound = 1;
+  currentQuestionIndex = 0;
   updateGenreQueueUI();
   renderLeaderboard();
   currentGameState = 'LOBBY';
