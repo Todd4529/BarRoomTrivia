@@ -14,8 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Mozilla PDF.js for in-browser client-side rendering of PDF ad flyers -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-Dt87oum5.js"></script>
-  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-D6FBSyfG.css">
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-Ci1bx64C.js"></script>
+  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-BzeIEUMQ.css">
 </head>
 <body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
@@ -194,17 +194,6 @@
           <!-- Slide Counter Pill -->
           <div class="tv-ad-slide-counter">
             <span id="tv-ad-slide-counter-text">Ad 1 of 1</span>
-          </div>
-
-          <!-- Corner Floating QR Code Badge to Join Game -->
-          <div id="tv-ad-corner-qr" class="tv-ad-corner-qr">
-            <div class="tv-ad-qr-box">
-              <canvas id="tv-ad-qr-canvas"></canvas>
-            </div>
-            <div class="tv-ad-qr-info">
-              <span class="tv-ad-qr-label">JOIN TRIVIA</span>
-              <strong class="tv-ad-qr-code" id="tv-ad-qr-room-code">TRIV</strong>
-            </div>
           </div>
         </div>
 
@@ -815,23 +804,15 @@
                     </div>
                   </div>
 
-                  <!-- Corner QR Badge Toggle -->
-                  <div class="ad-config-row-checkbox">
-                    <label class="checkbox-label" for="host-toggle-ad-qr">
-                      <input type="checkbox" id="host-toggle-ad-qr" checked>
-                      <span>Display "Join Trivia" QR badge in corner of TV ads</span>
-                    </label>
-                  </div>
-
                   <!-- Ad Slides Gallery / Manager -->
                   <div class="ad-gallery-section">
                     <div class="gallery-header">
-                      <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">0</span>)</span>
-                      <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear All Ads</button>
+                      <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">1</span>)</span>
+                      <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear Custom Ads</button>
                     </div>
                     <div id="host-ad-gallery" class="ad-gallery-strip">
                       <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
-                        <span>No ads uploaded yet. Upload PDF drink specials, food menus, or event flyers above!</span>
+                        <span>Upload custom drink specials, food menus, or event flyers above to rotate alongside the official Bar Rooms Trivia ad!</span>
                       </div>
                     </div>
                   </div>

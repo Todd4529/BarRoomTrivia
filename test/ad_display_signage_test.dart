@@ -36,19 +36,23 @@ void main() {
       expect(htmlContent.contains('pdf.min.js'), isTrue);
     });
 
-    test('index.html includes TV Ad Signage screen elements', () {
+    test('index.html includes TV Ad Signage screen elements without corner QR badge', () {
       expect(htmlContent.contains('id="tv-ad-signage-screen"'), isTrue);
       expect(htmlContent.contains('class="tv-ad-signage-screen hidden"'), isTrue);
       expect(htmlContent.contains('id="tv-ad-slide-img"'), isTrue);
       expect(htmlContent.contains('class="tv-ad-progress-track"'), isTrue);
       expect(htmlContent.contains('id="tv-ad-progress-fill"'), isTrue);
       expect(htmlContent.contains('id="tv-ad-slide-counter-text"'), isTrue);
-      expect(htmlContent.contains('id="tv-ad-corner-qr"'), isTrue);
-      expect(htmlContent.contains('id="tv-ad-qr-canvas"'), isTrue);
-      expect(htmlContent.contains('id="tv-ad-qr-room-code"'), isTrue);
+      // Corner QR badge was explicitly deleted as requested by the user
+      expect(htmlContent.contains('id="tv-ad-corner-qr"'), isFalse,
+          reason: 'Corner QR badge must be removed from ad signage screen');
+      expect(htmlContent.contains('id="tv-ad-qr-canvas"'), isFalse,
+          reason: 'Corner QR canvas must be removed from ad signage screen');
+      expect(htmlContent.contains('id="tv-ad-qr-room-code"'), isFalse,
+          reason: 'Corner QR room code must be removed from ad signage screen');
     });
 
-    test('index.html includes Host Settings Ad Mode controls in Tab 4', () {
+    test('index.html includes Host Settings Ad Mode controls in Tab 4 without QR badge toggle', () {
       expect(htmlContent.contains('id="host-toggle-ad-mode"'), isTrue);
       expect(htmlContent.contains('class="toggle-switch"'), isTrue);
       expect(htmlContent.contains('id="host-ad-files-input"'), isTrue);
@@ -60,7 +64,9 @@ void main() {
       expect(htmlContent.contains('data-dur="15"'), isTrue);
       expect(htmlContent.contains('data-dur="20"'), isTrue);
       expect(htmlContent.contains('data-dur="30"'), isTrue);
-      expect(htmlContent.contains('id="host-toggle-ad-qr"'), isTrue);
+      // Host QR toggle was explicitly removed
+      expect(htmlContent.contains('id="host-toggle-ad-qr"'), isFalse,
+          reason: 'Host toggle for corner QR code must be removed');
       expect(htmlContent.contains('id="host-ad-gallery"'), isTrue);
       expect(htmlContent.contains('id="host-ad-count"'), isTrue);
       expect(htmlContent.contains('id="btn-clear-all-ads"'), isTrue);
@@ -95,13 +101,16 @@ void main() {
       expect(cssContent.contains('.ad-upload-status'), isTrue);
     });
 
-    test('CSS defines duration chips and gallery thumbnail cards', () {
+    test('CSS defines duration chips and gallery thumbnail cards with system permanent badges', () {
       expect(cssContent.contains('.ad-duration-chips'), isTrue);
       expect(cssContent.contains('.ad-dur-chip'), isTrue);
       expect(cssContent.contains('.ad-dur-chip.active'), isTrue);
       expect(cssContent.contains('.ad-gallery-strip'), isTrue);
       expect(cssContent.contains('.ad-gallery-empty'), isTrue);
       expect(cssContent.contains('.ad-thumb-card'), isTrue);
+      expect(cssContent.contains('.ad-thumb-card.system-card'), isTrue);
+      expect(cssContent.contains('.ad-thumb-system-tag'), isTrue);
+      expect(cssContent.contains('.ad-thumb-lock-badge'), isTrue);
       expect(cssContent.contains('.ad-thumb-img'), isTrue);
       expect(cssContent.contains('.ad-thumb-badge'), isTrue);
       expect(cssContent.contains('.btn-remove-ad-slide'), isTrue);
@@ -114,9 +123,6 @@ void main() {
       expect(cssContent.contains('.tv-ad-progress-track'), isTrue);
       expect(cssContent.contains('.tv-ad-progress-fill'), isTrue);
       expect(cssContent.contains('.tv-ad-slide-counter'), isTrue);
-      expect(cssContent.contains('.tv-ad-corner-qr'), isTrue);
-      expect(cssContent.contains('.tv-ad-qr-box'), isTrue);
-      expect(cssContent.contains('@keyframes qrFloat'), isTrue);
     });
   });
 
@@ -132,11 +138,28 @@ void main() {
     test('main.js defines ad state variables with local storage persistence', () {
       expect(jsContent.contains('isAdModeActive'), isTrue);
       expect(jsContent.contains('adSlideDurationSeconds'), isTrue);
-      expect(jsContent.contains('showAdCornerQr'), isTrue);
       expect(jsContent.contains('customAdSlides'), isTrue);
       expect(jsContent.contains('bar_trivia_ad_mode_active'), isTrue);
       expect(jsContent.contains('bar_trivia_ad_duration'), isTrue);
-      expect(jsContent.contains('bar_trivia_ad_show_qr'), isTrue);
+    });
+
+    test('main.js generates permanent official Bar Rooms Trivia ad with key features and Google Play badge', () {
+      expect(jsContent.contains('generateOfficialBarRoomsTriviaAdDataUrl'), isTrue);
+      expect(jsContent.contains('getOfficialBarRoomsTriviaAdSlide'), isTrue);
+      expect(jsContent.contains('getAllActiveAdSlides'), isTrue);
+      expect(jsContent.contains('isSystemPermanent: true'), isTrue);
+      expect(jsContent.contains('USE AT HOME FOR TRIVIA NIGHT PARTIES'), isTrue);
+      expect(jsContent.contains('Google Play'), isTrue);
+      expect(jsContent.contains('DOWNLOAD FROM GOOGLE PLAY'), isTrue);
+      expect(jsContent.contains('PLAY ON ANY PHONE'), isTrue);
+      expect(jsContent.contains('REAL-TIME MULTIPLAYER'), isTrue);
+    });
+
+    test('Host gallery renders system permanent ad and prevents host from removing it', () {
+      expect(jsContent.contains('if (slide.isSystemPermanent)'), isTrue);
+      expect(jsContent.contains('⭐ OFFICIAL APP AD'), isTrue);
+      expect(jsContent.contains('removeCustomAdSlide'), isTrue);
+      expect(jsContent.contains('clearAllAdSlides'), isTrue);
     });
 
     test('main.js implements IndexedDB cache (idbAdStorage)', () {
@@ -173,7 +196,7 @@ void main() {
       expect(jsContent.contains('tv-ad-signage-screen'), isTrue);
 
       // In onGameReset, returns to ad signage if active
-      expect(jsContent.contains('if (isAdModeActive && customAdSlides.length > 0)'), isTrue);
+      expect(jsContent.contains('if (isAdModeActive && allSlides && allSlides.length > 0)'), isTrue);
     });
 
     test('main.js broadcasts ad mode toggles and slides across devices', () {
@@ -191,6 +214,8 @@ void main() {
       expect(jsContent.contains('window.startTvAdSignageRotation = startTvAdSignageRotation;'), isTrue);
       expect(jsContent.contains('window.stopTvAdSignageRotation = stopTvAdSignageRotation;'), isTrue);
       expect(jsContent.contains('window.clearAllAdSlides = clearAllAdSlides;'), isTrue);
+      expect(jsContent.contains('window.getOfficialBarRoomsTriviaAdSlide = getOfficialBarRoomsTriviaAdSlide;'), isTrue);
+      expect(jsContent.contains('window.getAllActiveAdSlides = getAllActiveAdSlides;'), isTrue);
     });
   });
 

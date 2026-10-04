@@ -76,7 +76,6 @@ let currentGameState = 'LOBBY';
 // Ad Display Signage Mode State
 let isAdModeActive = safeStorage.getItem('bar_trivia_ad_mode_active') === 'true';
 let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '10', 10);
-let showAdCornerQr = safeStorage.getItem('bar_trivia_ad_show_qr') !== 'false';
 let customAdSlides = [];
 let currentAdSlideIndex = 0;
 let adRotationTimeout = null;
@@ -580,7 +579,8 @@ function initTvModeToggle() {
     tvLiveGrid?.classList.add('hidden');
 
     const tvAdScreen = document.getElementById('tv-ad-signage-screen');
-    if (isAdModeActive && customAdSlides.length > 0) {
+    const allSlides = getAllActiveAdSlides();
+    if (isAdModeActive && allSlides.length > 0) {
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (tvAdScreen) tvAdScreen.classList.remove('hidden');
       startTvAdSignageRotation();
@@ -678,7 +678,8 @@ function switchView(viewName) {
       });
     } else {
       // Idle / Lobby state:
-      if (isAdModeActive && customAdSlides.length > 0) {
+      const allSlides = getAllActiveAdSlides();
+      if (isAdModeActive && allSlides && allSlides.length > 0) {
         if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
         if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
         if (tvAdScreen) tvAdScreen.classList.remove('hidden');
@@ -826,16 +827,6 @@ function initQrCodes() {
       if (err) console.error('Promo QR Code error:', err);
     });
   }
-
-  const canvasAd = document.getElementById('tv-ad-qr-canvas');
-  if (canvasAd) {
-    QRCode.toCanvas(canvasAd, playUrl, { width: 90, margin: 1 }, (err) => {
-      if (err) console.error('Ad QR Code error:', err);
-    });
-  }
-
-  const adRoomCode = document.getElementById('tv-ad-qr-room-code');
-  if (adRoomCode) adRoomCode.textContent = currentRoomCode;
 
   const roomLabels = document.querySelectorAll('.qr-room-code');
   roomLabels.forEach(el => {
@@ -1318,8 +1309,7 @@ function initBroadcastChannelListeners() {
           timerEndsAtGlobalMs,
           totalTimerDuration,
           isAdModeActive,
-          adSlideDurationSeconds,
-          showAdCornerQr
+          adSlideDurationSeconds
         }
       });
     } else if (type === 'STATE_SYNC_RESPONSE') {
@@ -1388,13 +1378,6 @@ function onStateSyncResponse(payload) {
     durChips.forEach(chip => {
       chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
     });
-  }
-
-  if (payload.showAdCornerQr !== undefined) {
-    showAdCornerQr = Boolean(payload.showAdCornerQr);
-    safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
-    const toggleQr = document.getElementById('host-toggle-ad-qr');
-    if (toggleQr) toggleQr.checked = showAdCornerQr;
   }
 
   syncTvSignageDisplay();
@@ -2049,16 +2032,357 @@ async function renderImageFileToSlide(file) {
   });
 }
 
-// 5. TV Ad Signage Synchronization & Carousel Rotation
+// 5. Official Bar Rooms Trivia Permanent System Ad Generator
+const OFFICIAL_SYSTEM_AD_ID = 'system_bar_rooms_trivia_official_ad';
+let cachedOfficialAdSlide = null;
+
+function generateOfficialBarRoomsTriviaAdDataUrl() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1920;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // 1. Deep Sleek Dark Theme Gradient Background
+  const bgGrad = ctx.createLinearGradient(0, 0, 1920, 1080);
+  bgGrad.addColorStop(0, '#0a0a14');
+  bgGrad.addColorStop(0.35, '#121026');
+  bgGrad.addColorStop(0.7, '#161330');
+  bgGrad.addColorStop(1, '#0b0918');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, 1920, 1080);
+
+  // 2. Ambient Lighting Glow Orbs
+  function drawGlow(x, y, r, color) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  drawGlow(960, 120, 600, 'rgba(0, 229, 255, 0.16)');
+  drawGlow(200, 850, 500, 'rgba(255, 214, 0, 0.14)');
+  drawGlow(1700, 850, 550, 'rgba(124, 77, 255, 0.20)');
+  drawGlow(1600, 200, 400, 'rgba(255, 0, 122, 0.10)');
+
+  // Helper: Rounded Rectangle
+  function roundRect(x, y, w, h, r, fill, stroke, strokeWidth) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = strokeWidth || 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Text wrap helper
+  function wrapText(text, x, y, maxWidth, lineHeight, fill, font) {
+    ctx.save();
+    if (font) ctx.font = font;
+    if (fill) ctx.fillStyle = fill;
+    const words = text.split(' ');
+    let line = '';
+    let currentY = y;
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line, x, currentY);
+        line = words[n] + ' ';
+        currentY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, currentY);
+    ctx.restore();
+  }
+
+  // 3. Outer Neon Accent Border
+  roundRect(24, 24, 1872, 1032, 28, null, 'rgba(0, 229, 255, 0.35)', 2);
+
+  // 4. Header Section
+  // Pill Badge at top
+  roundRect(710, 48, 500, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
+  ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#00e5ff';
+  ctx.textAlign = 'center';
+  ctx.fillText('⚡ OFFICIAL BAR & HOME TRIVIA APP ⚡', 960, 72);
+
+  // App Title
+  ctx.font = "900 60px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
+  ctx.shadowBlur = 24;
+  ctx.fillText('BAR ROOMS TRIVIA', 960, 142);
+  ctx.shadowBlur = 0;
+
+  // Catchy Hook
+  ctx.font = "800 26px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#ffd600';
+  ctx.fillText('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!', 960, 184);
+
+  // Subhead
+  ctx.font = "500 16px 'Inter', sans-serif";
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('Turn any TV and mobile phones into an interactive game show for parties, game nights & events.', 960, 214);
+
+  // 5. 6 Key Feature Cards Grid (3 cols x 2 rows)
+  const features = [
+    {
+      icon: '📱',
+      title: 'PLAY ON ANY PHONE',
+      color: '#00e5ff',
+      desc: 'No app download needed for players! Guests scan the TV QR code with their mobile cameras to join and buzz in instantly.'
+    },
+    {
+      icon: '⚡',
+      title: 'REAL-TIME MULTIPLAYER',
+      color: '#00e5ff',
+      desc: 'Instant 20s countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.'
+    },
+    {
+      icon: '🏆',
+      title: 'LIVE TV LEADERBOARD',
+      color: '#ffd600',
+      desc: 'Standings update in real-time on the big screen! Watch players climb the ranks with speed bonuses and round bonuses.'
+    },
+    {
+      icon: '🎯',
+      title: '30+ TRIVIA GENRES',
+      color: '#00e676',
+      desc: 'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions!'
+    },
+    {
+      icon: '🤖',
+      title: 'AUTOMATED GAME HOST',
+      color: '#ff007a',
+      desc: 'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.'
+    },
+    {
+      icon: '🏠',
+      title: 'PERFECT FOR TRIVIA PARTIES',
+      color: '#ffd600',
+      desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!'
+    }
+  ];
+
+  ctx.textAlign = 'left';
+  features.forEach((feat, idx) => {
+    const col = idx % 3;
+    const row = Math.floor(idx / 3);
+    const cardX = 80 + col * 600;
+    const cardY = 246 + row * 194;
+    const cardW = 560;
+    const cardH = 176;
+
+    // Card background & border
+    roundRect(cardX, cardY, cardW, cardH, 16, 'rgba(22, 22, 34, 0.88)', 'rgba(255, 255, 255, 0.12)', 1.5);
+
+    // Feature Icon circle
+    roundRect(cardX + 20, cardY + 24, 48, 48, 12, 'rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.15)', 1);
+    ctx.font = '26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(feat.icon, cardX + 44, cardY + 58);
+
+    // Feature Title
+    ctx.font = "800 20px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = feat.color;
+    ctx.textAlign = 'left';
+    ctx.fillText(feat.title, cardX + 82, cardY + 54);
+
+    // Feature Description
+    wrapText(feat.desc, cardX + 22, cardY + 104, cardW - 44, 23, '#cbd5e1', "400 14px 'Inter', sans-serif");
+  });
+
+  // 6. Bottom Section: Home Party Highlight (Left) & Google Play Store Badge (Right)
+  const botY = 650;
+  const botH = 370;
+
+  // Left Card: Home Party Highlight
+  const leftW = 1170;
+  roundRect(80, botY, leftW, botH, 20, 'rgba(18, 18, 30, 0.92)', 'rgba(0, 229, 255, 0.35)', 2);
+
+  // Badge pill
+  roundRect(110, botY + 28, 360, 32, 16, 'rgba(0, 230, 118, 0.15)', 'rgba(0, 230, 118, 0.5)', 1);
+  ctx.font = "800 13px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#00e676';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES', 290, botY + 49);
+
+  // Big Headline
+  ctx.font = "900 30px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.fillText('BRING THE EXCITEMENT OF PUB TRIVIA HOME!', 110, botY + 102);
+
+  // Explanatory Paragraph
+  const homeDesc = 'No pens, no paper answer sheets, and no manual score calculation! Hook up your laptop, tablet, or smart TV, gather your friends and family, and start playing in under 60 seconds.';
+  wrapText(homeDesc, 110, botY + 140, leftW - 80, 26, '#94a3b8', "500 17px 'Inter', sans-serif");
+
+  // 4 Event Chips
+  const eventChips = [
+    { label: '👨‍👩‍👧‍👦 Family Game Nights', stroke: 'rgba(0, 230, 118, 0.5)', bg: 'rgba(0, 230, 118, 0.1)' },
+    { label: '🍻 Friends & House Parties', stroke: 'rgba(255, 214, 0, 0.5)', bg: 'rgba(255, 214, 0, 0.1)' },
+    { label: '🏢 Office & Team Socials', stroke: 'rgba(0, 229, 255, 0.5)', bg: 'rgba(0, 229, 255, 0.1)' },
+    { label: '🎉 Holiday & Birthday Parties', stroke: 'rgba(255, 0, 122, 0.5)', bg: 'rgba(255, 0, 122, 0.1)' }
+  ];
+
+  eventChips.forEach((chip, i) => {
+    const chipX = 110 + (i % 2) * 520;
+    const chipY = botY + 215 + Math.floor(i / 2) * 52;
+    roundRect(chipX, chipY, 490, 42, 10, chip.bg, chip.stroke, 1.5);
+    ctx.font = "700 15px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(chip.label, chipX + 18, chipY + 27);
+  });
+
+  // Footer Tagline on Left Card
+  ctx.font = "600 14px 'Inter', sans-serif";
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.fillText('★ Compatible with any Smart TV, Projector, Laptop, Tablet, Android Phone & iPhone ★', 110, botY + 342);
+
+  // Right Corner Card: Google Play Store Callout
+  const rightX = 1270;
+  const rightW = 570;
+  roundRect(rightX, botY, rightW, botH, 20, 'rgba(16, 16, 26, 0.96)', 'rgba(0, 229, 255, 0.5)', 2);
+
+  // Header inside right card
+  roundRect(rightX + 30, botY + 28, 260, 32, 16, 'rgba(0, 229, 255, 0.18)', 'rgba(0, 229, 255, 0.6)', 1.5);
+  ctx.font = "800 13px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#00e5ff';
+  ctx.textAlign = 'center';
+  ctx.fillText('📱 GET THE HOST APP', rightX + 160, botY + 49);
+
+  // Action text
+  ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.fillText('DOWNLOAD FROM GOOGLE PLAY', rightX + 30, botY + 98);
+
+  ctx.font = "400 14px 'Inter', sans-serif";
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('Install the official app on your Android Phone, Tablet or Google TV:', rightX + 30, botY + 128);
+
+  // Official-looking Google Play Store Badge Button
+  const badgeX = rightX + 30;
+  const badgeY = botY + 152;
+  const badgeW = 510;
+  const badgeH = 96;
+  roundRect(badgeX, badgeY, badgeW, badgeH, 16, '#000000', 'rgba(255, 255, 255, 0.35)', 2);
+
+  // Draw Google Play Multi-Color Triangle Icon
+  const iconCenterX = badgeX + 46;
+  const iconCenterY = badgeY + 48;
+
+  // Blue segment
+  ctx.fillStyle = '#00e5ff';
+  ctx.beginPath();
+  ctx.moveTo(iconCenterX - 20, iconCenterY - 26);
+  ctx.lineTo(iconCenterX + 16, iconCenterY);
+  ctx.lineTo(iconCenterX - 4, iconCenterY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Green segment
+  ctx.fillStyle = '#00e676';
+  ctx.beginPath();
+  ctx.moveTo(iconCenterX + 16, iconCenterY);
+  ctx.lineTo(iconCenterX + 28, iconCenterY + 10);
+  ctx.lineTo(iconCenterX - 20, iconCenterY + 26);
+  ctx.closePath();
+  ctx.fill();
+
+  // Yellow segment
+  ctx.fillStyle = '#ffd600';
+  ctx.beginPath();
+  ctx.moveTo(iconCenterX + 16, iconCenterY);
+  ctx.lineTo(iconCenterX + 28, iconCenterY - 10);
+  ctx.lineTo(iconCenterX - 20, iconCenterY - 26);
+  ctx.closePath();
+  ctx.fill();
+
+  // Red/Pink segment
+  ctx.fillStyle = '#ff007a';
+  ctx.beginPath();
+  ctx.moveTo(iconCenterX + 16, iconCenterY);
+  ctx.lineTo(iconCenterX + 28, iconCenterY - 10);
+  ctx.lineTo(iconCenterX + 28, iconCenterY + 10);
+  ctx.closePath();
+  ctx.fill();
+
+  // Badge Text
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = "600 14px 'Inter', sans-serif";
+  ctx.fillText('GET IT ON', badgeX + 90, badgeY + 36);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = "800 32px 'Outfit', 'Inter', sans-serif";
+  ctx.fillText('Google Play', badgeX + 90, badgeY + 74);
+
+  // Sub-badge callout
+  ctx.font = "700 13px 'Outfit', 'Inter', sans-serif";
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText('✓ Search "Bar Rooms Trivia" on Google Play Store', rightX + 30, botY + 280);
+
+  // Web play link
+  roundRect(rightX + 30, botY + 300, 510, 48, 10, 'rgba(255, 255, 255, 0.05)', 'rgba(255, 214, 0, 0.3)', 1);
+  ctx.font = "700 14px 'Inter', sans-serif";
+  ctx.fillStyle = '#ffd600';
+  ctx.fillText('🌐 Or Play Instantly Online: todd4529.github.io/BarRoomTrivia', rightX + 46, botY + 330);
+
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+function getOfficialBarRoomsTriviaAdSlide() {
+  if (cachedOfficialAdSlide) return cachedOfficialAdSlide;
+  try {
+    const dataUrl = generateOfficialBarRoomsTriviaAdDataUrl();
+    cachedOfficialAdSlide = {
+      id: OFFICIAL_SYSTEM_AD_ID,
+      name: 'Bar Rooms Trivia (Official App Ad)',
+      dataUrl: dataUrl,
+      type: 'system',
+      page: 1,
+      totalPages: 1,
+      isSystemPermanent: true,
+      timestamp: 0
+    };
+  } catch (err) {
+    console.error('Error generating official Bar Rooms Trivia ad:', err);
+  }
+  return cachedOfficialAdSlide;
+}
+
+function getAllActiveAdSlides() {
+  const officialAd = getOfficialBarRoomsTriviaAdSlide();
+  if (!officialAd) return [...customAdSlides];
+  return [officialAd, ...customAdSlides];
+}
+
+// 6. TV Ad Signage Synchronization & Carousel Rotation
 function syncTvSignageDisplay() {
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvPromoScreen = document.getElementById('tv-promo-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
-  const cornerQr = document.getElementById('tv-ad-corner-qr');
-
-  if (cornerQr) {
-    cornerQr.classList.toggle('hidden', !showAdCornerQr);
-  }
 
   // Active game play ALWAYS overrides ad mode
   if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {
@@ -2067,8 +2391,10 @@ function syncTvSignageDisplay() {
     return;
   }
 
+  const allSlides = getAllActiveAdSlides();
+
   // Idle / Lobby mode:
-  if (isAdModeActive && customAdSlides && customAdSlides.length > 0) {
+  if (isAdModeActive && allSlides && allSlides.length > 0) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
@@ -2087,9 +2413,10 @@ function syncTvSignageDisplay() {
 
 function startTvAdSignageRotation() {
   stopTvAdSignageRotation();
-  if (!customAdSlides || customAdSlides.length === 0) return;
+  const allSlides = getAllActiveAdSlides();
+  if (!allSlides || allSlides.length === 0) return;
 
-  if (currentAdSlideIndex >= customAdSlides.length) {
+  if (currentAdSlideIndex >= allSlides.length) {
     currentAdSlideIndex = 0;
   }
 
@@ -2110,7 +2437,8 @@ function startTvAdSignageRotation() {
   }, 100);
 
   adRotationTimeout = setTimeout(() => {
-    currentAdSlideIndex = (currentAdSlideIndex + 1) % customAdSlides.length;
+    const slides = getAllActiveAdSlides();
+    currentAdSlideIndex = (currentAdSlideIndex + 1) % slides.length;
     startTvAdSignageRotation();
   }, totalMs);
 }
@@ -2129,7 +2457,8 @@ function stopTvAdSignageRotation() {
 }
 
 function displayAdSlide(index) {
-  const slide = customAdSlides[index];
+  const allSlides = getAllActiveAdSlides();
+  const slide = allSlides[index];
   if (!slide) return;
 
   const img = document.getElementById('tv-ad-slide-img');
@@ -2144,58 +2473,61 @@ function displayAdSlide(index) {
   }
 
   if (counterText) {
-    counterText.textContent = `Ad ${index + 1} of ${customAdSlides.length}`;
+    counterText.textContent = `Ad ${index + 1} of ${allSlides.length}`;
   }
 }
 
-// 6. Host Gallery Thumbnail Management
+// 7. Host Gallery Thumbnail Management
 function renderHostAdGallery() {
   const gallery = document.getElementById('host-ad-gallery');
   const countEl = document.getElementById('host-ad-count');
-  if (countEl) countEl.textContent = customAdSlides.length;
+  const allSlides = getAllActiveAdSlides();
+  if (countEl) countEl.textContent = allSlides.length;
 
   if (!gallery) return;
 
-  if (!customAdSlides || customAdSlides.length === 0) {
-    gallery.innerHTML = `
-      <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
-        <span>No ads uploaded yet. Upload PDF drink specials, food menus, or event flyers above!</span>
-      </div>
-    `;
-    return;
-  }
-
   gallery.innerHTML = '';
-  customAdSlides.forEach((slide, index) => {
+  allSlides.forEach((slide, index) => {
     const card = document.createElement('div');
-    card.className = 'ad-thumb-card';
+    card.className = slide.isSystemPermanent ? 'ad-thumb-card system-card' : 'ad-thumb-card';
     card.setAttribute('data-slide-id', slide.id);
 
     const displayName = (slide.totalPages > 1) 
       ? `${slide.name} (P.${slide.page}/${slide.totalPages})`
       : slide.name;
 
-    card.innerHTML = `
-      <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
-      <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
-      <button type="button" class="btn-remove-ad-slide" title="Delete Slide" data-slide-index="${index}">✕</button>
-    `;
+    if (slide.isSystemPermanent) {
+      card.innerHTML = `
+        <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
+        <div class="ad-thumb-system-tag">⭐ OFFICIAL APP AD</div>
+        <div class="ad-thumb-lock-badge" title="Permanent System Ad - Displays in all rotations">🔒</div>
+        <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
+      `;
+    } else {
+      const customIndex = index - 1; // 0-based index in customAdSlides
+      card.innerHTML = `
+        <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
+        <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
+        <button type="button" class="btn-remove-ad-slide" title="Delete Custom Slide" data-custom-index="${customIndex}">✕</button>
+      `;
 
-    const removeBtn = card.querySelector('.btn-remove-ad-slide');
-    removeBtn?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      removeAdSlide(index);
-    });
+      const removeBtn = card.querySelector('.btn-remove-ad-slide');
+      removeBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeCustomAdSlide(customIndex);
+      });
+    }
 
     gallery.appendChild(card);
   });
 }
 
-async function removeAdSlide(index) {
-  if (index < 0 || index >= customAdSlides.length) return;
-  customAdSlides.splice(index, 1);
-  if (currentAdSlideIndex >= customAdSlides.length) {
+async function removeCustomAdSlide(customIndex) {
+  if (customIndex < 0 || customIndex >= customAdSlides.length) return;
+  customAdSlides.splice(customIndex, 1);
+  const allSlides = getAllActiveAdSlides();
+  if (currentAdSlideIndex >= allSlides.length) {
     currentAdSlideIndex = 0;
   }
   await idbAdStorage.saveSlides(customAdSlides);
@@ -2213,13 +2545,14 @@ async function clearAllAdSlides() {
   syncTvSignageDisplay();
 }
 
-// 7. Cross-Device Realtime & Channel Broadcasting
+// 8. Cross-Device Realtime & Channel Broadcasting
 function broadcastAdModeChange() {
+  const allSlides = getAllActiveAdSlides();
   const payload = {
     isAdModeActive,
     adSlideDurationSeconds,
-    showAdCornerQr,
-    slidesCount: customAdSlides.length
+    slidesCount: allSlides.length,
+    customSlidesCount: customAdSlides.length
   };
   try {
     channel.postMessage({ type: 'AD_MODE_TOGGLED', payload });
@@ -2231,6 +2564,7 @@ function broadcastAdModeChange() {
 
 function broadcastAdSlidesUpdated() {
   broadcastAdModeChange();
+  const allSlides = getAllActiveAdSlides();
   try {
     channel.postMessage({
       type: 'AD_SLIDES_UPDATED',
@@ -2238,11 +2572,11 @@ function broadcastAdSlidesUpdated() {
         slides: customAdSlides,
         isAdModeActive,
         adSlideDurationSeconds,
-        showAdCornerQr
+        slidesCount: allSlides.length
       }
     });
     broadcastRealtimeEvent('ad_slides_updated', {
-      slidesCount: customAdSlides.length,
+      slidesCount: allSlides.length,
       isAdModeActive
     });
   } catch (e) {
@@ -2266,12 +2600,6 @@ function onAdModeToggled(payload) {
       chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
     });
   }
-  if (payload.showAdCornerQr !== undefined) {
-    showAdCornerQr = Boolean(payload.showAdCornerQr);
-    safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
-    const toggleQr = document.getElementById('host-toggle-ad-qr');
-    if (toggleQr) toggleQr.checked = showAdCornerQr;
-  }
   syncTvSignageDisplay();
 }
 
@@ -2287,14 +2615,13 @@ async function onAdSlidesUpdated(payload) {
   syncTvSignageDisplay();
 }
 
-// 8. Host Settings UI Listeners Initialization
+// 9. Host Settings UI Listeners Initialization
 function initHostAdSettings() {
   const toggleAdMode = document.getElementById('host-toggle-ad-mode');
   const fileInput = document.getElementById('host-ad-files-input');
   const dropzone = document.getElementById('host-ad-dropzone');
   const uploadStatus = document.getElementById('host-ad-upload-status');
   const durChips = document.querySelectorAll('.ad-dur-chip');
-  const toggleAdQr = document.getElementById('host-toggle-ad-qr');
   const btnClearAll = document.getElementById('btn-clear-all-ads');
 
   // Master switch
@@ -2319,24 +2646,14 @@ function initHostAdSettings() {
       adSlideDurationSeconds = dur;
       safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
       broadcastAdModeChange();
-      if (isAdModeActive && customAdSlides.length > 0) {
+      const allSlides = getAllActiveAdSlides();
+      if (isAdModeActive && allSlides.length > 0) {
         startTvAdSignageRotation();
       }
     });
   });
 
-  // Corner QR Checkbox
-  if (toggleAdQr) {
-    toggleAdQr.checked = showAdCornerQr;
-    toggleAdQr.addEventListener('change', () => {
-      showAdCornerQr = toggleAdQr.checked;
-      safeStorage.setItem('bar_trivia_ad_show_qr', String(showAdCornerQr));
-      broadcastAdModeChange();
-      syncTvSignageDisplay();
-    });
-  }
-
-  // Clear All Ads Button
+  // Clear Custom Ads Button
   btnClearAll?.addEventListener('click', (e) => {
     e.preventDefault();
     clearAllAdSlides();
@@ -2382,7 +2699,7 @@ function initHostAdSettings() {
         syncTvSignageDisplay();
 
         if (uploadStatus) {
-          uploadStatus.textContent = `✅ Successfully added ${newSlides.length} slide(s)!`;
+          uploadStatus.textContent = `✅ Successfully added ${newSlides.length} custom slide(s)!`;
           setTimeout(() => uploadStatus.classList.add('hidden'), 3500);
         }
       } else {
@@ -2433,7 +2750,7 @@ function initHostAdSettings() {
   }
 }
 
-// 9. Initial Load from IndexedDB
+// 10. Initial Load from IndexedDB
 async function loadAdSlidesAndInit() {
   try {
     customAdSlides = await idbAdStorage.loadSlides();
@@ -2449,11 +2766,13 @@ async function loadAdSlidesAndInit() {
 window.idbAdStorage = idbAdStorage;
 window.customAdSlides = customAdSlides;
 window.isAdModeActive = () => isAdModeActive;
+window.getOfficialBarRoomsTriviaAdSlide = getOfficialBarRoomsTriviaAdSlide;
+window.getAllActiveAdSlides = getAllActiveAdSlides;
 window.syncTvSignageDisplay = syncTvSignageDisplay;
 window.startTvAdSignageRotation = startTvAdSignageRotation;
 window.stopTvAdSignageRotation = stopTvAdSignageRotation;
 window.clearAllAdSlides = clearAllAdSlides;
-window.removeAdSlide = removeAdSlide;
+window.removeCustomAdSlide = removeCustomAdSlide;
 window.renderHostAdGallery = renderHostAdGallery;
 
 function renderHostPlayersRoster() {
@@ -3883,7 +4202,8 @@ function onGameReset() {
 
   if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
 
-  if (isAdModeActive && customAdSlides.length > 0) {
+  const allSlides = getAllActiveAdSlides();
+  if (isAdModeActive && allSlides && allSlides.length > 0) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
     startTvAdSignageRotation();
