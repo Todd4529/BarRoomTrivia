@@ -99,9 +99,170 @@ async function requestScreenWakeLock() {
 }
 
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && !screenWakeLock) {
-    await requestScreenWakeLock();
+  if (document.visibilityState === 'visible') {
+    if (!screenWakeLock) {
+      await requestScreenWakeLock();
+    }
+    if (currentPlayer && currentPlayer.nickname) {
+      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+    }
   }
+});
+
+// ==========================================
+// 1. GAME SHOW SOUND ENGINE (Web Audio API)
+// Synthesized in-browser with zero network latency
+// ==========================================
+let audioCtx = null;
+let isSoundEffectsEnabled = safeStorage.getItem('bar_trivia_sound_enabled') !== 'false';
+
+function getAudioContext() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+function unlockAudioOnInteraction() {
+  const unlock = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'running') {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    }
+  };
+  window.addEventListener('pointerdown', unlock, { passive: true });
+  window.addEventListener('keydown', unlock, { passive: true });
+}
+unlockAudioOnInteraction();
+
+function playSound(type) {
+  if (!isSoundEffectsEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === 'tick') {
+      // Crisp countdown tick (880Hz sine blip)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+      osc.start(now);
+      osc.stop(now + 0.04);
+    } else if (type === 'tap') {
+      // Tactile buzzer click (440Hz triangle)
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, now);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } else if (type === 'correct') {
+      // Upbeat cheerful chime (587Hz D5 -> 880Hz A5)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.setValueAtTime(880.00, now + 0.08);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } else if (type === 'wrong') {
+      // Descending buzzer for incorrect answers (240Hz -> 140Hz)
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(240, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + 0.25);
+      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } else if (type === 'buzz') {
+      // Time-expired low buzzer (180Hz square)
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(180, now);
+      gain.gain.setValueAtTime(0.14, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.start(now);
+      osc.stop(now + 0.28);
+    } else if (type === 'fanfare') {
+      // Victory arpeggio (C5, E5, G5, C6)
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(freq, now + idx * 0.09);
+        g.gain.setValueAtTime(0.20, now + idx * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + (idx === 3 ? 0.6 : 0.22));
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(now + idx * 0.09);
+        o.stop(now + idx * 0.09 + (idx === 3 ? 0.6 : 0.22));
+      });
+    }
+  } catch (err) {
+    console.warn('[Audio] Synthesizer error:', err);
+  }
+}
+
+function setSoundEffectsEnabled(enabled, shouldBroadcast = true) {
+  isSoundEffectsEnabled = Boolean(enabled);
+  safeStorage.setItem('bar_trivia_sound_enabled', String(isSoundEffectsEnabled));
+  const toggleSound = document.getElementById('host-toggle-sound');
+  if (toggleSound) toggleSound.checked = isSoundEffectsEnabled;
+
+  if (shouldBroadcast) {
+    const payload = { isSoundEffectsEnabled };
+    try {
+      channel.postMessage({ type: 'SOUND_TOGGLED', payload });
+      broadcastRealtimeEvent('sound_toggled', payload);
+    } catch (_) {}
+  }
+}
+
+// ==========================================
+// 2. NETWORK RESILIENCE & RECONNECTION BANNER
+// ==========================================
+let networkBannerTimeout = null;
+
+function showNetworkStatus(status, message, autoHideMs = 3000) {
+  const banner = document.getElementById('network-status-banner');
+  const text = document.getElementById('network-status-text');
+  if (!banner || !text) return;
+
+  clearTimeout(networkBannerTimeout);
+  banner.className = `network-status-banner ${status}`;
+  text.textContent = message;
+  banner.classList.remove('hidden');
+
+  if (autoHideMs > 0) {
+    networkBannerTimeout = setTimeout(() => {
+      banner.classList.add('hidden');
+    }, autoHideMs);
+  }
+}
+
+window.addEventListener('online', () => {
+  showNetworkStatus('connected', '✓ Reconnected to Network', 2500);
+  if (currentRoomCode) {
+    broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+  }
+});
+
+window.addEventListener('offline', () => {
+  showNetworkStatus('offline', '⚠️ Network Connection Lost', 0);
 });
 
 // Robust Host Heartbeat Engine (Epoch Timestamp-Based, Immune to Mobile OS Throttling)
@@ -1202,6 +1363,10 @@ function handleRealtimeIncomingEvent(event, data) {
     onAdModeToggled(payload);
   } else if (normEvent === 'ad_slides_updated') {
     onAdSlidesUpdated(payload);
+  } else if (normEvent === 'sound_toggled') {
+    if (payload && payload.isSoundEffectsEnabled !== undefined) {
+      setSoundEffectsEnabled(Boolean(payload.isSoundEffectsEnabled), false);
+    }
   }
 }
 
@@ -1309,7 +1474,8 @@ function initBroadcastChannelListeners() {
           timerEndsAtGlobalMs,
           totalTimerDuration,
           isAdModeActive,
-          adSlideDurationSeconds
+          adSlideDurationSeconds,
+          isSoundEffectsEnabled
         }
       });
     } else if (type === 'STATE_SYNC_RESPONSE') {
@@ -1339,12 +1505,20 @@ function initBroadcastChannelListeners() {
       onAdModeToggled(payload);
     } else if (type === 'AD_SLIDES_UPDATED') {
       onAdSlidesUpdated(payload);
+    } else if (type === 'SOUND_TOGGLED') {
+      if (payload && payload.isSoundEffectsEnabled !== undefined) {
+        setSoundEffectsEnabled(Boolean(payload.isSoundEffectsEnabled), false);
+      }
     }
   };
 }
 
 function onStateSyncResponse(payload) {
   if (!payload) return;
+
+  if (payload.isSoundEffectsEnabled !== undefined) {
+    setSoundEffectsEnabled(Boolean(payload.isSoundEffectsEnabled), false);
+  }
 
   if (payload.currentVenueName) {
     currentVenueName = payload.currentVenueName;
@@ -2635,6 +2809,15 @@ function initHostAdSettings() {
     });
   }
 
+  // Sound Effects toggle
+  const toggleSound = document.getElementById('host-toggle-sound');
+  if (toggleSound) {
+    toggleSound.checked = isSoundEffectsEnabled;
+    toggleSound.addEventListener('change', () => {
+      setSoundEffectsEnabled(toggleSound.checked, true);
+    });
+  }
+
   // Duration Chips
   durChips.forEach(chip => {
     const dur = parseInt(chip.dataset.dur, 10);
@@ -2774,6 +2957,10 @@ window.stopTvAdSignageRotation = stopTvAdSignageRotation;
 window.clearAllAdSlides = clearAllAdSlides;
 window.removeCustomAdSlide = removeCustomAdSlide;
 window.renderHostAdGallery = renderHostAdGallery;
+window.playSound = playSound;
+window.setSoundEffectsEnabled = setSoundEffectsEnabled;
+window.isSoundEffectsEnabled = () => isSoundEffectsEnabled;
+window.showNetworkStatus = showNetworkStatus;
 
 function renderHostPlayersRoster() {
   const rosterList = document.getElementById('host-connected-players-list');
@@ -3400,6 +3587,7 @@ function startCountdown(seconds) {
   remainingTimerSeconds = Math.min(seconds, initialRem);
   updateTimerUI();
 
+  let lastTickedSecond = -1;
   countdownInterval = setInterval(() => {
     if (timerEndsAtGlobalMs > 0) {
       remainingTimerSeconds = Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
@@ -3407,8 +3595,15 @@ function startCountdown(seconds) {
       remainingTimerSeconds--;
     }
     updateTimerUI();
+
+    if (remainingTimerSeconds <= 5 && remainingTimerSeconds > 0 && remainingTimerSeconds !== lastTickedSecond) {
+      lastTickedSecond = remainingTimerSeconds;
+      playSound('tick');
+    }
+
     if (remainingTimerSeconds <= 0) {
       clearInterval(countdownInterval);
+      playSound('buzz');
       // Autonomous fallback: if timer expired and still in QUESTION_ACTIVE,
       // reveal answer locally and prepare to sync if host was delayed!
       if (currentGameState === 'QUESTION_ACTIVE') {
@@ -3619,6 +3814,14 @@ function onTimerExpired(payload) {
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
+
+  if (isCorrect) {
+    playSound('correct');
+  } else if (playerChoiceSubmitted) {
+    playSound('wrong');
+  } else {
+    playSound('buzz');
+  }
 
   if (isCorrect && currentPlayer) {
     currentPlayer.streak = (currentPlayer.streak || 0) + 1;
@@ -3878,6 +4081,7 @@ function onRoundWinner(payload) {
   }, 1000);
 
   confetti({ particleCount: 120, spread: 100, origin: { y: 0.5 } });
+  playSound('fanfare');
 }
 
 function hideWinnerModals() {
@@ -4052,9 +4256,13 @@ function initPlayerControls() {
       if (!currentPlayer || playerChoiceSubmitted !== null) return;
 
       const choice = (btn.dataset.choice || '').toUpperCase();
-      if (!choice) return;
-
       playerChoiceSubmitted = choice;
+
+      // Haptic feedback (buzzer vibration on mobile devices)
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try { navigator.vibrate(45); } catch (_) {}
+      }
+      playSound('tap');
 
       // Lock visually: highlight selected and dim unselected
       answerBtns.forEach(b => {

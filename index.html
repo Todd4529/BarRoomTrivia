@@ -26,6 +26,12 @@
   </header>
 
   <main class="main-container">
+    <!-- GLOBAL RECONNECTION / NETWORK RESILIENCE BANNER -->
+    <div id="network-status-banner" class="network-status-banner hidden">
+      <span class="status-dot"></span>
+      <span id="network-status-text">Reconnecting to trivia server...</span>
+    </div>
+
     <!-- 1. HOST SIGN-IN / SIGN-UP VIEW (Opens when Host scans TV QR Code) -->
     <section id="view-auth" class="view-panel active">
       <div class="auth-card-wrapper">
@@ -815,6 +821,39 @@
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- GAME SOUND EFFECTS -->
+              <div class="settings-subgroup sound-settings-subgroup">
+                <div class="config-label-with-toggle">
+                  <div class="config-label">
+                    <span class="icon">🔊</span>
+                    <div>
+                      <span class="lbl-title">GAME SOUND EFFECTS</span>
+                      <span class="lbl-desc">Synthesized audio cues for countdown timer, buzzers & winner fanfares</span>
+                    </div>
+                  </div>
+                  <label class="toggle-switch" for="host-toggle-sound" aria-label="Toggle Sound Effects">
+                    <input type="checkbox" id="host-toggle-sound" checked>
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- ABOUT & LEGAL COMPLIANCE -->
+              <div class="settings-subgroup legal-subgroup">
+                <div class="config-label">
+                  <span class="icon">ℹ️</span>
+                  <div>
+                    <span class="lbl-title">ABOUT & LEGAL</span>
+                    <span class="lbl-desc">Google Play compliance, privacy policy & terms</span>
+                  </div>
+                </div>
+                <div class="legal-links-row" style="display: flex; gap: 14px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+                  <a href="privacy.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">🔒 Privacy Policy</a>
+                  <a href="terms.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">📜 Terms of Service</a>
+                  <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.37 Official Release</span>
                 </div>
               </div>
             </div>
