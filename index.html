@@ -574,24 +574,20 @@
 
           <!-- TAB 1: LIVE STAGE MONITOR -->
           <div id="host-pane-stage" class="host-tab-pane active">
-            <!-- LIVE QUESTION & TIMER MONITOR CARD -->
+            <!-- COMPACT LIVE STAGE MONITOR CARD -->
             <div class="host-card live-stage-hero-card">
               <div class="stage-card-header">
                 <span class="stage-status-indicator" id="host-stage-badge">🔴 LOBBY STAGE</span>
-                <span class="stage-q-tracker" id="host-stage-q-counter">Ready to Launch Round 1</span>
+                <span class="live-genre-tag" id="host-live-genre-pill">⚡ Auto Select / General Trivia</span>
+                <span class="stage-q-tracker" id="host-stage-q-counter">Ready</span>
               </div>
 
               <!-- Question & Answer Preview -->
               <div class="host-live-q-box" id="host-live-q-box">
-                <div class="live-genre-tag" id="host-live-genre-pill">⚡ Auto Select / General Trivia</div>
-                <h3 class="live-question-headline" id="host-live-q-text">Game is waiting in lobby. Tap "▶️ Start Game" below to launch Round 1 on TV and player phones!</h3>
+                <h3 class="live-question-headline" id="host-live-q-text">Game is waiting in lobby. Tap "▶️ Start Game" below to launch Round 1!</h3>
 
-                <!-- Host Answer Key Grid (Hidden during lobby; active only during live question) -->
+                <!-- Host Answer Key Grid (Compact 2x2, hidden during lobby; active during live question) -->
                 <div class="host-answer-key-grid hidden" id="host-live-answer-grid">
-                  <div class="answer-key-header-banner">
-                    <span class="ak-badge">ℹ️ HOST ANSWER KEY (READ-ONLY)</span>
-                    <span class="ak-hint">Correct option is highlighted</span>
-                  </div>
                   <div class="answer-key-options-grid">
                     <div class="answer-key-card" id="host-ans-A">
                       <span class="opt-letter">A</span>
@@ -625,18 +621,13 @@
               </div>
             </div>
 
-            <!-- Active Playlist Snapshot -->
-            <div class="host-card playlist-snapshot-card">
-              <div class="card-title-row">
-                <div class="title-left">
-                  <span class="icon">🎵</span>
-                  <h4>ACTIVE ROUND PLAYLIST</h4>
-                </div>
-                <button type="button" class="btn-text-link-accent" id="btn-host-goto-playlist">Edit Playlist ➔</button>
+            <!-- Compact Playlist Quick-Preview Strip (Hidden from visual clutter, preserves ID for state sync) -->
+            <div class="host-stage-playlist-bar" id="host-stage-playlist-bar">
+              <span class="stage-pl-lbl">🎵 PLAYLIST:</span>
+              <div class="queue-chips-list compact-chips-list" id="host-stage-queue-preview">
+                <span class="queue-empty-msg">Auto-Select Rotation</span>
               </div>
-              <div class="queue-chips-list" id="host-stage-queue-preview">
-                <span class="queue-empty-msg">All 30 Specific Genres in Auto-Select Rotation</span>
-              </div>
+              <button type="button" class="btn-text-link-accent" id="btn-host-goto-playlist">Edit ➔</button>
             </div>
           </div>
 

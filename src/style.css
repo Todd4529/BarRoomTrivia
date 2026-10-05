@@ -1835,11 +1835,11 @@ body[data-view="player"] .logo-container {
 .host-app-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
-  padding: 8px 12px calc(110px + env(safe-area-inset-bottom, 16px)) 12px;
+  padding: 6px 12px calc(76px + env(safe-area-inset-bottom, 12px)) 12px;
   box-sizing: border-box;
 }
 
@@ -2118,11 +2118,12 @@ body[data-view="player"] .logo-container {
   box-sizing: border-box;
 }
 
-/* TAB 1: LIVE STAGE HERO CARD */
+/* TAB 1: COMPACT SINGLE-SCREEN LIVE STAGE HERO CARD */
 .live-stage-hero-card {
   border: 1.5px solid rgba(0, 229, 255, 0.3);
   position: relative;
   overflow: hidden;
+  padding: 12px 14px;
 }
 
 .live-stage-hero-card::before {
@@ -2139,125 +2140,107 @@ body[data-view="player"] .logo-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .stage-status-indicator {
   font-family: var(--font-heading);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   color: var(--accent-cyan);
   background: rgba(0, 229, 255, 0.12);
-  padding: 4px 10px;
-  border-radius: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .stage-q-tracker {
   font-family: var(--font-heading);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .host-live-q-box {
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 14px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
 }
 
 .live-genre-tag {
   display: inline-block;
   font-family: var(--font-heading);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
   color: var(--accent-amber, #ffab00);
   background: rgba(255, 171, 0, 0.15);
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 6px;
-  margin-bottom: 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-question-headline {
-  margin: 0 0 14px 0;
+  margin: 0;
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1.4;
+  line-height: 1.35;
   color: white;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-/* HOST ANSWER KEY (Shows correct answer in vibrant green for quizmaster) */
+/* HOST ANSWER KEY (Ultra-Compact 2x2 grid) */
 .host-answer-key-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.answer-key-header-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  background: rgba(0, 229, 255, 0.08);
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  border-radius: 8px;
-}
-
-.ak-badge {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  color: var(--accent-cyan);
-}
-
-.ak-hint {
-  font-size: 11px;
-  color: var(--text-muted);
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .answer-key-options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-@media (max-width: 480px) {
-  .answer-key-options-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
+  gap: 6px;
 }
 
 .answer-key-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px 14px;
-  min-height: 48px;
-  border-radius: 12px;
-  font-size: 14px;
+  padding: 6px 8px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 12px;
   color: var(--text-muted);
   box-sizing: border-box;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
 .answer-key-card .opt-letter {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
   color: white;
   font-weight: 900;
-  font-size: 12px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -2267,13 +2250,15 @@ body[data-view="player"] .logo-container {
   overflow: hidden;
   text-overflow: ellipsis;
   color: #e0e0e0;
+  font-size: 12px;
+  flex: 1;
 }
 
 .answer-key-card.correct-key {
-  background: rgba(0, 230, 118, 0.16);
+  background: rgba(0, 230, 118, 0.2);
   border: 1.5px solid var(--accent-green);
   color: white;
-  box-shadow: 0 0 16px rgba(0, 230, 118, 0.25);
+  box-shadow: 0 0 10px rgba(0, 230, 118, 0.3);
 }
 
 .answer-key-card.correct-key .opt-letter {
@@ -2282,92 +2267,100 @@ body[data-view="player"] .logo-container {
 }
 
 .answer-key-card.correct-key .opt-text {
-  color: white;
-  font-weight: 700;
+  color: #fff;
+  font-weight: 800;
 }
 
 .answer-key-card.correct-key::after {
-  content: '✓ CORRECT';
+  content: '✓';
   margin-left: auto;
   color: var(--accent-green);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.5px;
+  font-weight: 900;
+  font-size: 12px;
 }
 
 /* STAGE TIMER BAR */
 .stage-timer-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .stage-timer-track {
   flex: 1;
-  height: 8px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
 .stage-timer-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
-  border-radius: 10px;
+  border-radius: 6px;
   transition: width 0.25s linear;
 }
 
 .stage-timer-number {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: 12px;
   color: var(--accent-cyan);
 }
 
 .stage-timer-number strong {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 900;
 }
 
-/* PLAYLIST SNAPSHOT CARD */
-.card-title-row {
+/* COMPACT PLAYLIST BAR ON STAGE */
+.host-stage-playlist-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 8px;
+  background: rgba(18, 20, 29, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 6px 10px;
 }
 
-.title-left {
+.stage-pl-lbl {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--accent-purple);
+  white-space: nowrap;
+}
+
+.compact-chips-list {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-height: auto;
 }
 
-.card-title-row h4 {
-  margin: 0;
-  font-family: var(--font-heading);
-  font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 0.5px;
-  color: white;
+.compact-chips-list::-webkit-scrollbar {
+  display: none;
 }
 
-.btn-text-link-accent {
-  background: none;
-  border: none;
-  color: var(--accent-cyan);
-  font-family: var(--font-heading);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
+.compact-chips-list .queue-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
-.btn-text-link-accent:hover {
-  background: rgba(0, 229, 255, 0.1);
+.compact-chips-list .queue-empty-msg {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-muted);
 }
 
 /* TAB 2: PLAYLIST & GENRES BUILDER */
@@ -2836,86 +2829,88 @@ body[data-view="player"] .logo-container {
 @media (max-width: 768px) {
   /* Container spacing for thumb navigation */
   .host-app-container {
-    padding: 8px 12px calc(140px + env(safe-area-inset-bottom, 0px)) 12px;
+    padding: 6px 10px calc(80px + env(safe-area-inset-bottom, 14px)) 10px;
     max-width: 100%;
+    gap: 6px;
   }
 
-  /* Sticky Top App Bar */
+  /* Compact Top App Bar */
   .host-mobile-navbar {
     position: sticky;
     top: 0;
-    margin-bottom: 12px;
-    padding: 12px 14px;
-    border-radius: 16px;
+    margin-bottom: 0px !important;
+    padding: 8px 12px;
+    border-radius: 12px;
     background: rgba(12, 14, 22, 0.94);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* 2x2 spacious metrics grid on mobile */
+  .host-navbar-title {
+    font-size: 15px;
+  }
+
+  /* Compact 4-column metrics strip on mobile so it takes 1 slim line instead of 2 stacked rows */
   .host-quick-metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .host-status-ribbon {
+    gap: 6px;
+  }
+
+  .engine-badge {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 10px;
   }
 
   .metric-pill {
-    padding: 10px 8px;
-    border-radius: 14px;
+    padding: 6px 4px;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .metric-pill strong {
-    font-size: 18px;
+    font-size: 14px;
   }
 
   .metric-lbl {
-    font-size: 11px;
-    letter-spacing: 0.6px;
+    font-size: 9px;
+    letter-spacing: 0.4px;
   }
 
-  /* Fixed Native Bottom App Navigation Bar */
+  /* Clean Segmented Tab Switcher at top on mobile */
   .host-segmented-tabs {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 999;
-    height: 64px;
-    margin: 0;
-    padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
-    border-radius: 0;
-    background: rgba(10, 12, 20, 0.98);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
     display: flex;
-    justify-content: space-around;
-    align-items: center;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
-    box-sizing: border-box;
+    position: static;
+    height: auto;
+    padding: 3px;
+    border-radius: 12px;
+    background: rgba(15, 17, 26, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    margin: 0;
   }
 
   .host-tab-btn {
     flex: 1;
     min-width: 0;
-    height: 100%;
-    min-height: 48px;
-    padding: 2px 4px 4px 4px;
+    height: auto;
+    min-height: 34px;
+    padding: 4px 2px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    border-radius: 10px;
+    gap: 4px;
+    border-radius: 8px;
     border: none;
     background: transparent;
     color: var(--text-muted);
-    overflow: visible;
   }
 
   .host-tab-btn .tab-ico {
