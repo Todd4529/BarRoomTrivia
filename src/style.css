@@ -1835,11 +1835,11 @@ body[data-view="player"] .logo-container {
 .host-app-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
-  padding: 8px 12px 100px 12px;
+  padding: 8px 12px calc(110px + env(safe-area-inset-bottom, 16px)) 12px;
   box-sizing: border-box;
 }
 
@@ -1850,27 +1850,25 @@ body[data-view="player"] .logo-container {
   z-index: 95;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
+  justify-content: center;
+  position: relative;
+  padding: 12px 16px;
   background: rgba(10, 11, 18, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-}
-
-.navbar-brand-col {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  margin-bottom: 0px !important;
 }
 
 .brand-title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  width: 100%;
 }
 
 .brand-crown-icon {
@@ -1884,9 +1882,14 @@ body[data-view="player"] .logo-container {
   font-weight: 900;
   letter-spacing: 1px;
   color: white;
+  text-align: center;
 }
 
 .host-room-pill {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2717,17 +2720,19 @@ body[data-view="player"] .logo-container {
 
 /* 5. STICKY MOBILE BOTTOM ACTION DOCK */
 .host-sticky-bottom-dock {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)) 16px;
-  background: rgba(10, 11, 18, 0.95);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  z-index: 1000 !important;
+  padding: 10px 16px max(14px, env(safe-area-inset-bottom, 14px)) 16px !important;
+  background: rgba(10, 11, 18, 0.96) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6) !important;
 }
 
 .dock-actions-flex {
@@ -2735,7 +2740,9 @@ body[data-view="player"] .logo-container {
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .btn-dock-icon-wrapper {
@@ -2746,12 +2753,14 @@ body[data-view="player"] .logo-container {
   height: 22px;
   flex-shrink: 0;
   vertical-align: middle;
+  overflow: visible;
 }
 
 .btn-dock-icon-wrapper svg {
   width: 20px;
   height: 20px;
   display: block;
+  flex-shrink: 0;
 }
 
 .btn-dock-text {
@@ -2779,19 +2788,39 @@ body[data-view="player"] .logo-container {
 }
 
 .btn-dock-primary {
-  flex: 1.8;
+  flex: 2;
   font-size: 16px;
   box-shadow: 0 4px 18px rgba(0, 230, 118, 0.35);
 }
 
 .btn-dock-action {
-  flex: 1.1;
+  flex: 1.2;
   font-size: 14px;
 }
 
 .btn-dock-icon {
   flex: 1;
   font-size: 14px;
+}
+
+/* GREYED OUT DISABLED STATE FOR START BUTTON */
+.btn-dock-primary:disabled,
+.btn-dock-primary.disabled,
+.btn-dock-primary.btn-greyed-out {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 0.5 !important;
+  pointer-events: none !important;
+}
+
+.btn-dock-primary:disabled svg,
+.btn-dock-primary.disabled svg,
+.btn-dock-primary.btn-greyed-out svg {
+  opacity: 0.35 !important;
+  fill: currentColor !important;
 }
 
 /* BUTTON ACTIVE PRESS (Native Haptic Feel) */
@@ -2917,20 +2946,23 @@ body[data-view="player"] .logo-container {
     border: 1px solid rgba(0, 229, 255, 0.25);
   }
 
-  /* Sticky In-Game Action Dock (Floats comfortably above bottom navigation) */
+  /* Sticky In-Game Action Dock (Fixed at bottom with safe-area support) */
   .host-sticky-bottom-dock {
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-    padding: 8px 10px;
-    background: rgba(10, 12, 20, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
-    z-index: 998;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding: 8px 12px max(14px, env(safe-area-inset-bottom, 14px)) 12px !important;
+    background: rgba(10, 12, 20, 0.96) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6) !important;
+    z-index: 1000 !important;
   }
 
   .dock-actions-flex {
-    gap: 6px;
+    gap: 8px;
+    width: 100%;
   }
 
   .btn-dock-primary,
@@ -2938,17 +2970,17 @@ body[data-view="player"] .logo-container {
   .btn-dock-icon {
     min-height: 48px;
     height: 48px;
-    padding: 0 8px;
+    padding: 0 10px;
   }
 
   .btn-dock-primary {
-    font-size: 14px;
-    flex: 1.6;
+    font-size: 15px;
+    flex: 2;
   }
 
   .btn-dock-action {
     font-size: 13px;
-    flex: 1.1;
+    flex: 1.2;
   }
 
   .btn-dock-icon {
@@ -2957,8 +2989,10 @@ body[data-view="player"] .logo-container {
   }
 
   .btn-dock-icon-wrapper svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
+    display: block;
+    flex-shrink: 0;
   }
 
   .sub-card {

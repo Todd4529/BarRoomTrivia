@@ -260,10 +260,58 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  void _exitToTvDisplay() {
-    if (mounted) {
-      context.go('/tv?room=$_userCode');
-    }
+  bool _isExitDialogOpen = false;
+
+  void _showExitApplicationDialog() {
+    if (_isExitDialogOpen) return;
+    setState(() => _isExitDialogOpen = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {},
+        child: AlertDialog(
+          backgroundColor: AppTheme.cardSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
+          ),
+          title: const Text(
+            'Exit Application',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          actionsAlignment: MainAxisAlignment.end,
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 16)),
+            ),
+            ElevatedButton(
+              autofocus: true,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+                SystemNavigator.pop();
+              },
+              child: const Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+    });
   }
 
   @override
@@ -275,12 +323,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _exitToTvDisplay();
+        _showExitApplicationDialog();
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _exitToTvDisplay,
-          const SingleActivator(LogicalKeyboardKey.goBack): _exitToTvDisplay,
+          const SingleActivator(LogicalKeyboardKey.escape): _showExitApplicationDialog,
+          const SingleActivator(LogicalKeyboardKey.goBack): _showExitApplicationDialog,
         },
         child: Scaffold(
           backgroundColor: AppTheme.darkBackground,
@@ -356,6 +404,14 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                 children: [
                   Row(
                     children: [
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 28),
+                        tooltip: 'Exit Application',
+                        onPressed: _showExitApplicationDialog,
+                      ),
+                      const SizedBox(width: 16),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.asset(
@@ -571,6 +627,17 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 28),
+                tooltip: 'Exit Application',
+                onPressed: _showExitApplicationDialog,
+              ),
+            ),
+            const SizedBox(height: 12),
             const Text(
               'BAR ROOMS TRIVIA',
               style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 2.0, color: Colors.white),

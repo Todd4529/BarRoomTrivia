@@ -103,7 +103,7 @@ void main() {
       expect(htmlContent.contains('id="host-players-room-code"'), isTrue);
     });
 
-    test('Tab 4 (Settings) retains difficulty chips, timer chips, venue name and logo upload', () {
+    test('Tab 4 (Settings) retains difficulty chips and timer chips', () {
       expect(htmlContent.contains('class="diff-chip"'), isTrue);
       expect(htmlContent.contains('data-diff="Kids"'), isTrue);
       expect(htmlContent.contains('data-diff="Beginner"'), isTrue);
@@ -115,17 +115,11 @@ void main() {
       expect(htmlContent.contains('data-timer="20"'), isTrue);
       expect(htmlContent.contains('data-timer="60"'), isTrue);
       expect(htmlContent.contains('data-timer="120"'), isTrue);
-
-      expect(htmlContent.contains('id="host-venue-name-input"'), isTrue);
-      expect(htmlContent.contains('id="host-logo-input"'), isTrue);
-      expect(htmlContent.contains('id="btn-remove-logo"'), isTrue);
-      expect(htmlContent.contains('id="host-logo-preview"'), isTrue);
     });
 
     test('Sticky bottom dock contains ergonomic action buttons', () {
       expect(htmlContent.contains('id="btn-start-auto"'), isTrue);
       expect(htmlContent.contains('id="btn-pause-auto"'), isTrue);
-      expect(htmlContent.contains('id="btn-skip-question"'), isTrue);
       expect(htmlContent.contains('id="btn-reset-game"'), isTrue);
     });
   });
@@ -181,8 +175,7 @@ void main() {
       expect(jsContent.contains('genre-cat-pill'), isTrue);
     });
 
-    test('main.js implements skip question handler', () {
-      expect(jsContent.contains('btnSkipQuestion?.addEventListener'), isTrue);
+    test('main.js implements host timeout and advance review logic', () {
       expect(jsContent.contains('handleHostQuestionTimeout'), isTrue);
       expect(jsContent.contains('handleHostAdvanceAfterReview'), isTrue);
     });

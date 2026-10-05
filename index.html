@@ -492,16 +492,14 @@
         
         <!-- A. STICKY TOP APP HEADER -->
         <header class="host-mobile-navbar">
-          <div class="navbar-brand-col">
-            <div class="brand-title-row">
-              <span class="brand-crown-icon">👑</span>
-              <h2 class="host-navbar-title">HOST CONSOLE</h2>
-            </div>
-            <div class="host-room-pill" id="host-room-pill" title="Active Room Code">
-              <span class="room-pulse-dot"></span>
-              <span class="room-label">ROOM:</span>
-              <strong id="host-room-code-display">TRIV</strong>
-            </div>
+          <div class="brand-title-row">
+            <span class="brand-crown-icon">👑</span>
+            <h2 class="host-navbar-title">HOST CONSOLE</h2>
+          </div>
+          <div class="host-room-pill" id="host-room-pill" title="Active Room Code">
+            <span class="room-pulse-dot"></span>
+            <span class="room-label">ROOM:</span>
+            <strong id="host-room-code-display">TRIV</strong>
           </div>
         </header>
 
@@ -779,31 +777,6 @@
                 </div>
               </div>
 
-              <!-- VENUE CUSTOMIZATION -->
-              <div class="settings-subgroup">
-                <div class="config-label">
-                  <span class="icon">🏢</span>
-                  <span class="lbl-title">VENUE & BRANDING</span>
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 14px;">
-                  <label for="host-venue-name-input" style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Venue / Pub Name</label>
-                  <input type="text" id="host-venue-name-input" class="venue-name-input" placeholder="e.g. The Rusty Anchor Pub" autocomplete="off" style="width: 100%;">
-                </div>
-
-                <div class="form-group">
-                  <label style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Custom Bar Logo (Displays on TV Stage)</label>
-                  <div class="logo-upload-box">
-                    <label for="host-logo-input" class="btn btn-secondary btn-sm logo-btn-lbl">📁 Upload Logo</label>
-                    <input type="file" id="host-logo-input" accept="image/*" class="hidden">
-                    <div id="host-logo-preview-wrapper" class="logo-preview-wrapper hidden">
-                      <img id="host-logo-preview" src="" alt="Logo Preview" class="logo-preview-img">
-                      <button type="button" id="btn-remove-logo" class="btn-icon-remove" title="Remove Logo">✕</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <!-- AD DISPLAY SIGNAGE MODE -->
               <div class="settings-subgroup ad-signage-subgroup">
                 <div class="config-label-with-toggle">
@@ -917,14 +890,6 @@
                 </svg>
               </span>
               <span class="btn-dock-text" id="btn-pause-auto-text">Pause</span>
-            </button>
-            <button type="button" id="btn-skip-question" class="btn btn-info btn-dock-action hidden" title="Skip Current Question">
-              <span class="btn-dock-icon-wrapper">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/>
-                </svg>
-              </span>
-              <span class="btn-dock-text" id="btn-skip-text">Skip Q</span>
             </button>
             <button type="button" id="btn-reset-game" class="btn btn-danger btn-dock-icon" title="Reset Game & Room">
               <span class="btn-dock-icon-wrapper">

@@ -99,6 +99,7 @@ async function requestScreenWakeLock() {
 }
 
 let triggerActiveSessionSync = null;
+let triggerHostActiveSessionSync = null;
 
 async function handleAppVisibilityResume() {
   if (!screenWakeLock) {
@@ -109,6 +110,9 @@ async function handleAppVisibilityResume() {
   }
   if (typeof triggerActiveSessionSync === 'function') {
     triggerActiveSessionSync();
+  }
+  if (typeof triggerHostActiveSessionSync === 'function') {
+    triggerHostActiveSessionSync();
   }
   if (currentPlayer && currentPlayer.nickname) {
     broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
@@ -1332,11 +1336,8 @@ function handleIncomingPreGameCountdown(rawPayload) {
   }
   if (hostTimerSecs) hostTimerSecs.textContent = `${countdownSecs}s`;
   if (hostTimerFill) hostTimerFill.style.width = '100%';
-  if (btnSkip) {
-    btnSkip.classList.add('hidden');
-    const skipTxt = document.getElementById('btn-skip-text');
-    if (skipTxt) skipTxt.textContent = 'Skip Q';
-  }
+  isAutomatedEngineRunning = true;
+  updateHostEngineUI('IN PROGRESS');
 
   const hostAnswerGrid = document.getElementById('host-live-answer-grid');
   if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
@@ -1393,6 +1394,9 @@ function handleIncomingQuestionStart(rawPayload) {
 
   timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || (Date.now() + durationSeconds * 1000);
   const remainingSecs = Math.max(1, Math.min(durationSeconds, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)));
+
+  isAutomatedEngineRunning = true;
+  updateHostEngineUI('IN PROGRESS');
 
   onQuestionStart({
     questionData,
@@ -1777,7 +1781,6 @@ function initHostControls() {
   const btnStartAuto = document.getElementById('btn-start-auto');
   const btnPauseAuto = document.getElementById('btn-pause-auto');
   const btnResetGame = document.getElementById('btn-reset-game');
-  const btnSkipQuestion = document.getElementById('btn-skip-question');
   const btnClearQueue = document.getElementById('btn-clear-queue');
   const diffChips = document.querySelectorAll('.diff-chip');
   const timerChips = document.querySelectorAll('.timer-chip');
@@ -1862,20 +1865,6 @@ function initHostControls() {
       activeCategoryFilter = pill.dataset.cat || 'all';
       filterGenreChips();
     });
-  });
-
-  // SKIP QUESTION ACTION
-  btnSkipQuestion?.addEventListener('click', () => {
-    if (!isAutomatedEngineRunning) return;
-    if (hostEngineState === 'QUESTION_ACTIVE' && currentQuestionData) {
-      clearTimeout(autoEngineTimeout);
-      const qInRound = (currentQuestionIndex % 10) + 1;
-      handleHostQuestionTimeout(currentQuestionData, currentRound, qInRound);
-    } else if (hostEngineState === 'QUESTION_REVIEW') {
-      clearTimeout(autoEngineTimeout);
-      const qInRound = (currentQuestionIndex % 10) + 1;
-      handleHostAdvanceAfterReview(qInRound, currentRound);
-    }
   });
 
   // Venue Name Input Handler
@@ -2087,10 +2076,68 @@ function initHostControls() {
     onGameReset({ roomCode: currentRoomCode });
   });
 
-  // Initial UI Render
+  // Initial UI Render & Active Session Sync
   updateGenreQueueUI();
   updateHostEngineUI('NOT STARTED');
   renderHostPlayersRoster();
+
+  async function checkHostActiveGameSession() {
+    try {
+      const code = (currentRoomCode || 'TRIV').trim().toUpperCase();
+      let { data } = await supabase.from('game_sessions')
+        .select('*')
+        .eq('room_code', code)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+      if ((!data || data.length === 0) && code !== 'TRIV') {
+        const fallback = await supabase.from('game_sessions')
+          .select('*')
+          .eq('room_code', 'TRIV')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        data = fallback.data;
+      }
+
+      const session = (data && data.length > 0) ? data[0] : null;
+      if (session) {
+        const now = Date.now();
+        if (session.status === 'pre_game_countdown') {
+          const startsAt = session.starts_at || now;
+          if (startsAt > now - 45000) {
+            isAutomatedEngineRunning = true;
+            currentGameState = 'PRE_GAME';
+            currentRound = session.current_round || session.round_number || currentRound || 1;
+            updateHostEngineUI('IN PROGRESS');
+          }
+        } else if (session.status === 'question_active') {
+          const endsAt = session.timer_ends_at || (now + 20000);
+          if ((endsAt - now) > -35000) {
+            isAutomatedEngineRunning = true;
+            currentGameState = 'QUESTION_ACTIVE';
+            currentRound = session.current_round || session.round_number || currentRound || 1;
+            currentQuestionIndex = session.current_question_index || currentQuestionIndex || 1;
+            if (session.question_data) {
+              currentQuestionData = session.question_data;
+              const qInRound = ((currentQuestionIndex - 1) % 10) + 1;
+              updateHostLiveStagePreviewCard(session.question_data, currentRound, qInRound);
+            }
+            updateHostEngineUI('IN PROGRESS');
+          }
+        } else if (session.status === 'paused') {
+          isAutomatedEngineRunning = false;
+          currentGameState = 'PAUSED';
+          updateHostEngineUI('PAUSED');
+        }
+      }
+    } catch (err) {
+      console.warn('[Host Sync] Error checking active session:', err);
+    }
+  }
+
+  triggerHostActiveSessionSync = checkHostActiveGameSession;
+  checkHostActiveGameSession();
+  setInterval(checkHostActiveGameSession, 2500);
 }
 
 function updateGenreQueueUI() {
@@ -3227,10 +3274,16 @@ function updateHostEngineUI(statusText) {
 
   const isRunning = (statusText === 'IN PROGRESS');
 
-  if (btnStartAuto) btnStartAuto.disabled = isRunning;
-  if (btnPauseAuto) btnPauseAuto.disabled = !isRunning;
-  if (btnSkip && !isRunning) {
-    btnSkip.classList.add('hidden');
+  if (btnStartAuto) {
+    btnStartAuto.disabled = isRunning;
+    if (isRunning) {
+      btnStartAuto.classList.add('disabled', 'btn-greyed-out');
+    } else {
+      btnStartAuto.classList.remove('disabled', 'btn-greyed-out');
+    }
+  }
+  if (btnPauseAuto) {
+    btnPauseAuto.disabled = !isRunning;
   }
 
   if (statRound) statRound.textContent = currentRound;
@@ -3727,12 +3780,8 @@ function onQuestionStart(payload) {
   if (hostLiveQText) {
     hostLiveQText.textContent = cleanQText;
   }
-  if (btnSkip) {
-    btnSkip.classList.remove('hidden');
-    btnSkip.disabled = false;
-    const skipTxt = document.getElementById('btn-skip-text');
-    if (skipTxt) skipTxt.textContent = 'Skip Q';
-  }
+  isAutomatedEngineRunning = true;
+  updateHostEngineUI('IN PROGRESS');
 
   // Populate Host Answer Key Grid & Highlight Correct Option
   const hostAnswerGrid = document.getElementById('host-live-answer-grid');
@@ -3962,11 +4011,6 @@ function onTimerExpired(payload) {
   }
   if (hostTimerSecs) {
     hostTimerSecs.textContent = `${reviewSeconds}s`;
-  }
-  if (btnSkip) {
-    const skipTxt = document.getElementById('btn-skip-text');
-    if (skipTxt) skipTxt.textContent = 'Next Q';
-    btnSkip.classList.remove('hidden');
   }
 
   startPlayerReviewCountdown(reviewSeconds, nextEpoch);
@@ -4668,11 +4712,6 @@ function onGameReset() {
   }
   if (hostTimerFill) hostTimerFill.style.width = '100%';
   if (hostTimerSecs) hostTimerSecs.textContent = `${selectedQuestionDuration}s`;
-  if (btnSkip) {
-    btnSkip.classList.add('hidden');
-    const skipTxt = document.getElementById('btn-skip-text');
-    if (skipTxt) skipTxt.textContent = 'Skip Q';
-  }
 
   const hostAnswerGrid = document.getElementById('host-live-answer-grid');
   if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
