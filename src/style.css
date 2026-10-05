@@ -2082,23 +2082,61 @@ body[data-view="player"] .logo-container {
   color: white;
 }
 
-/* HOST ANSWER KEY GRID (Shows correct answer in vibrant green for quizmaster) */
+/* HOST ANSWER KEY (Shows correct answer in vibrant green for quizmaster) */
 .host-answer-key-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.answer-key-header-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 8px;
+}
+
+.ak-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--accent-cyan);
+}
+
+.ak-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.answer-key-options-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .answer-key-options-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 .answer-key-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 13px;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 14px;
+  min-height: 48px;
+  border-radius: 12px;
+  font-size: 14px;
   color: var(--text-muted);
+  box-sizing: border-box;
   transition: all 0.2s ease;
 }
 
@@ -2106,13 +2144,13 @@ body[data-view="player"] .logo-container {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
   color: white;
   font-weight: 900;
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -2121,13 +2159,14 @@ body[data-view="player"] .logo-container {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #e0e0e0;
 }
 
 .answer-key-card.correct-key {
-  background: rgba(0, 230, 118, 0.18);
+  background: rgba(0, 230, 118, 0.16);
   border: 1.5px solid var(--accent-green);
   color: white;
-  box-shadow: 0 0 12px rgba(0, 230, 118, 0.3);
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.25);
 }
 
 .answer-key-card.correct-key .opt-letter {
@@ -2135,12 +2174,18 @@ body[data-view="player"] .logo-container {
   color: #000;
 }
 
+.answer-key-card.correct-key .opt-text {
+  color: white;
+  font-weight: 700;
+}
+
 .answer-key-card.correct-key::after {
-  content: '✓';
+  content: '✓ CORRECT';
   margin-left: auto;
   color: var(--accent-green);
-  font-weight: 900;
-  font-size: 13px;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.5px;
 }
 
 /* STAGE TIMER BAR */
@@ -2638,31 +2683,137 @@ body[data-view="player"] .logo-container {
   display: none !important;
 }
 
-/* MOBILE & TABLET RESPONSIVE OVERHAUL */
+/* MOBILE & TABLET RESPONSIVE OVERHAUL (Native App Store PWA Feel) */
 @media (max-width: 768px) {
+  /* Container spacing for thumb navigation */
+  .host-app-container {
+    padding: 8px 12px calc(140px + env(safe-area-inset-bottom, 0px)) 12px;
+    max-width: 100%;
+  }
+
+  /* Sticky Top App Bar */
+  .host-mobile-navbar {
+    position: sticky;
+    top: 0;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(12, 14, 22, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* 2x2 spacious metrics grid on mobile */
+  .host-quick-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .metric-pill {
+    padding: 10px 8px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .metric-pill strong {
+    font-size: 18px;
+  }
+
+  .metric-lbl {
+    font-size: 11px;
+    letter-spacing: 0.6px;
+  }
+
+  /* Fixed Native Bottom App Navigation Bar */
+  .host-segmented-tabs {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    height: 58px;
+    margin: 0;
+    padding: 4px 8px calc(6px + env(safe-area-inset-bottom, 0px)) 8px;
+    border-radius: 0;
+    background: rgba(10, 12, 20, 0.96);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+  }
+
+  .host-tab-btn {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    min-height: 48px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .host-tab-btn .tab-ico {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .host-tab-btn .tab-lbl {
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .host-tab-btn.active {
+    background: rgba(0, 229, 255, 0.12);
+    color: var(--accent-cyan);
+    border: 1px solid rgba(0, 229, 255, 0.25);
+  }
+
+  /* Sticky In-Game Action Dock (Floats comfortably above bottom navigation) */
+  .host-sticky-bottom-dock {
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 12px;
+    background: rgba(10, 12, 20, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+    z-index: 998;
+  }
+
+  .btn-dock-primary {
+    min-height: 50px;
+    font-size: 16px;
+  }
+
+  .btn-dock-action {
+    min-height: 50px;
+    font-size: 14px;
+  }
+
+  .btn-dock-icon {
+    min-height: 50px;
+    flex: 0 0 50px;
+  }
+
   .sub-card {
     flex-direction: column;
     align-items: stretch;
     gap: 16px;
-  }
-  
-  .venue-name-input {
-    width: 100%;
-  }
-
-  .logo-upload-box {
-    justify-content: flex-start;
-  }
-
-  .host-controls-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  #btn-start-auto {
-    width: 100%;
-    min-height: 56px;
-    font-size: 18px;
   }
 
   #btn-pause-auto, #btn-reset-game {

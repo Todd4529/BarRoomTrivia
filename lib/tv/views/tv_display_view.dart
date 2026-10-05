@@ -252,15 +252,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   void _initTvSession() {
-    try {
-      SupabaseConfig.client
-          .from('players')
-          .delete()
-          .or('nickname.ilike.%todd4529%,nickname.ilike.%host%')
-          .then((_) {})
-          .catchError((_) {});
-    } catch (_) {}
-
     _loadLeaderboard();
     _startTvSessionPolling();
 

@@ -102,19 +102,8 @@ class SupabaseService {
   static bool isMockNickname(String nickname) {
     if (nickname.isEmpty) return true;
     final lower = nickname.trim().toLowerCase();
-    if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
-    if (lower.startsWith('simulated')) return true;
-    if (lower == 'host' || lower.startsWith('host-') || lower.startsWith('host_') || lower == 'host user' || lower == 'todd4529') return true;
-    if (RegExp(r'^player\s*\d+$').hasMatch(lower)) return true;
-    const banned = [
-      'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
-      'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',
-      'stoutscholars', 'brainybarley', 'pubeinstein', 'lagerlegend', 'quizcrafter',
-      'triviamaster99', 'beerguru', 'pubquizpro', 'brewmaster_joe', 'hopsandbarley',
-      'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
-      'taverntactician', 'player 1', 'champion', 'runner up', 'third place'
-    ];
-    return banned.any((b) => lower == b || lower.contains(b));
+    if (lower.startsWith('mock-test-') || lower.startsWith('test-mock-')) return true;
+    return false;
   }
 
   static List<Player> mergeLocalPlayers(String roomCode, List<Player> incoming) {

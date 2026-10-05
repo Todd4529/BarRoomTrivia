@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Bar Rooms Trivia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090912;
+      --card-bg: #141424;
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --cyan: #00e5ff;
+      --gold: #ffd600;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      line-height: 1.7;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      padding: 44px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(0, 229, 255, 0.12);
+      color: var(--cyan);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+    }
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 900;
+      font-size: 32px;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+    .effective-date {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      color: var(--cyan);
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+    p, ul {
+      color: #cbd5e1;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+    ul {
+      padding-left: 24px;
+    }
+    li {
+      margin-bottom: 8px;
+    }
+    .highlight-card {
+      background: rgba(0, 229, 255, 0.05);
+      border-left: 4px solid var(--cyan);
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    a {
+      color: var(--cyan);
+      text-decoration: underline;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">LEGAL COMPLIANCE</div>
+      <h1>Privacy Policy for Bar Rooms Trivia</h1>
+      <div class="effective-date">Last updated: October 4, 2026 • Version 1.1</div>
+    </div>
+
+    <p>
+      At <strong>Bar Rooms Trivia</strong> ("we", "our", or "the App"), we respect your privacy and are committed to protecting it. This Privacy Policy explains how information is handled when you use the Bar Rooms Trivia application, web controller, and associated TV display services.
+    </p>
+
+    <div class="highlight-card">
+      <strong>Zero Personal Data Sold:</strong> We do not sell, rent, monetize, or share your personal information with third-party data brokers or advertisers.
+    </div>
+
+    <h2>1. Information We Collect and How We Use It</h2>
+    <ul>
+      <li><strong>Player Nicknames & Scores:</strong> When joining a trivia session, players provide a display nickname. This nickname, along with transient game scores, is used strictly to render real-time leaderboards and answer results during that game session.</li>
+      <li><strong>Camera Access (Optional):</strong> Mobile player devices may request camera permissions solely to scan the room QR code displayed on the TV screen. Camera feeds are processed locally on your device in real-time. No video feeds or images are ever recorded, stored, or uploaded to any server.</li>
+      <li><strong>Host Uploaded Media:</strong> Hosts may upload venue logos, drink specials, and promotional flyers (PDFs or images). These files are stored locally in the host device's browser IndexedDB storage and transmitted transiently via secure channels to connected TV screens in that room.</li>
+      <li><strong>Local Storage:</strong> We use your device's browser localStorage and IndexedDB to persist host preferences, selected room codes, and sound preferences between sessions.</li>
+    </ul>
+
+    <h2>2. Real-Time Multiplayer Network Communications</h2>
+    <p>
+      To enable synchronized real-time trivia gameplay across TVs, host controls, and mobile player phones, game events (question starts, answer submissions, timers, leaderboard ranks) are transmitted over secure encrypted WebSockets (WSS/HTTPS) powered by Supabase. These game sessions are ephemeral and transient.
+    </p>
+
+    <h2>3. Third-Party Services</h2>
+    <p>The app relies on trusted infrastructure providers:</p>
+    <ul>
+      <li><strong>Supabase:</strong> For secure database hosting and real-time multiplayer message synchronization.</li>
+      <li><strong>Open Trivia Database (OpenTDB):</strong> For curated community trivia question banks.</li>
+      <li><strong>Mozilla PDF.js:</strong> Client-side rendering of host-provided PDF flyers entirely within your device's browser.</li>
+    </ul>
+
+    <h2>4. Children's Privacy</h2>
+    <p>
+      Bar Rooms Trivia is designed for all audiences, including family game nights and parties. We do not knowingly collect personal identifiable information from children under the age of 13.
+    </p>
+
+    <h2>5. Changes to This Privacy Policy</h2>
+    <p>
+      We may update our Privacy Policy periodically. We will notify users of any changes by updating the "Last updated" date at the top of this document.
+    </p>
+
+    <h2>6. Contact Us</h2>
+    <p>
+      If you have questions or concerns about this Privacy Policy, please contact us via email at: <a href="mailto:todd4529@yahoo.com">todd4529@yahoo.com</a>.
+    </p>
+
+    <div class="footer">
+      &copy; 2026 Bar Rooms Trivia. All rights reserved. • <a href="terms.html">Terms of Service</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -344,35 +344,19 @@ const funnyWrongQuotes = [
   "Ouch! The trivia gods demanded a sacrifice. Next one is yours! ⚡"
 ];
 
-// COMPREHENSIVE FICTITIOUS & BOGUS PLAYER PURGE HELPER
+// REAL PLAYER PURGE HELPER: Only filters out automated mock unit tests
 function isFictitiousPlayer(nickname) {
   if (!nickname) return true;
   const lower = nickname.toString().trim().toLowerCase();
-  if (lower.startsWith('mock-') || lower.startsWith('mock_')) return true;
-  if (lower === 'host' || lower === 'host user' || lower === 'todd4529') return true;
-  const banned = [
-    'beerwhisperer', 'trivianinja', 'quizquark', 'hopsandglory', 'professorpint',
-    'smartypints', 'brewmasterflex', 'mindovermug', 'alechemist', 'factchecker',
-    'stoutscholars', 'brainybarley', 'pubeinstein', 'lagerlegend', 'quizcrafter',
-    'triviamaster99', 'beerguru', 'pubquizpro', 'brewmaster_joe', 'hopsandbarley',
-    'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
-    'taverntactician', 'player 1', 'champion', 'runner up', 'third place'
-  ];
-  return banned.some(b => lower === b || lower.includes(b));
+  if (lower.startsWith('mock-test-') || lower.startsWith('test-mock-')) return true;
+  return false;
 }
 
-// INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY (No bogus / mock players)
+// INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY
 let playersLeaderboard = [];
 
 function loadInitialPlayers() {
   const normRoom = (currentRoomCode || 'TRIV').toUpperCase();
-  try {
-    supabase.from('players')
-      .delete()
-      .or('nickname.ilike.%todd4529%,nickname.ilike.%host%')
-      .then(() => {})
-      .catch(() => {});
-  } catch (_) {}
 
   try {
     supabase.from('players')
@@ -380,27 +364,27 @@ function loadInitialPlayers() {
       .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
       .order('cumulative_score', { ascending: false })
       .then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          // Filter out any legacy bogus players if present in DB, while retaining all real players even with score 0
+        if (!error && data) {
           const realPlayers = data.filter(p => !isFictitiousPlayer(p.nickname));
-          if (realPlayers.length > 0) {
-            playersLeaderboard = realPlayers.map(p => ({
-              id: p.id || p.nickname,
-              player_uid: p.player_uid || p.nickname,
-              room_code: normRoom,
-              nickname: p.nickname,
-              score: Number(p.cumulative_score ?? p.score ?? 0),
-              cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
-              streak: p.streak || 0,
-              is_connected: p.is_connected !== false
-            }));
-            renderLeaderboard();
-            updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
-          }
+          playersLeaderboard = realPlayers.map(p => ({
+            id: p.id || p.nickname,
+            player_uid: p.player_uid || p.nickname,
+            room_code: normRoom,
+            nickname: p.nickname,
+            score: Number(p.cumulative_score ?? p.score ?? 0),
+            cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
+            streak: p.streak || 0,
+            is_connected: p.is_connected !== false
+          }));
+          renderLeaderboard();
+          updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.warn('[Leaderboard] Load players error:', err);
+      });
   } catch (_) {}
 }
+window.loadInitialPlayers = loadInitialPlayers;
 
 // MAIN APP INITIALIZER
 function initApp() {
@@ -428,6 +412,10 @@ function initApp() {
   startLeaderboardAutoScroll();
   renderLeaderboard();
   loadInitialPlayers();
+  // Continuous background sync ensures players always populate even if WebSockets dropped
+  setInterval(() => {
+    loadInitialPlayers();
+  }, 4000);
 }
 
 // Execute immediately when DOM is ready or completed
@@ -1037,6 +1025,15 @@ function initRealtimeSupabaseChannels() {
 
     liveGlobalChannel = supabase.channel('room_GLOBAL');
     attachListener(liveGlobalChannel);
+
+    // Active postgres_changes subscription for real-time player joins/scores
+    try {
+      supabase.channel('db_players_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {
+          loadInitialPlayers();
+        })
+        .subscribe();
+    } catch (_) {}
   } catch (e) {
     console.warn('Error setting up Supabase Realtime channels:', e);
   }
@@ -1169,6 +1166,9 @@ function handleIncomingPreGameCountdown(rawPayload) {
   if (hostTimerSecs) hostTimerSecs.textContent = `${countdownSecs}s`;
   if (hostTimerFill) hostTimerFill.style.width = '100%';
   if (btnSkip) btnSkip.classList.add('hidden');
+
+  const hostAnswerGrid = document.getElementById('host-live-answer-grid');
+  if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
 
   ['A', 'B', 'C', 'D'].forEach(letter => {
     const card = document.getElementById(`host-ans-${letter}`);
@@ -3512,6 +3512,9 @@ function onQuestionStart(payload) {
   }
 
   // Populate Host Answer Key Grid & Highlight Correct Option
+  const hostAnswerGrid = document.getElementById('host-live-answer-grid');
+  if (hostAnswerGrid) hostAnswerGrid.classList.remove('hidden');
+
   const correctOptLetter = (questionData.correct || 'A').toUpperCase().trim();
   ['A', 'B', 'C', 'D'].forEach(letter => {
     const card = document.getElementById(`host-ans-${letter}`);
@@ -4383,6 +4386,9 @@ function onGameReset() {
   if (hostTimerFill) hostTimerFill.style.width = '100%';
   if (hostTimerSecs) hostTimerSecs.textContent = `${selectedQuestionDuration}s`;
   if (btnSkip) btnSkip.classList.add('hidden');
+
+  const hostAnswerGrid = document.getElementById('host-live-answer-grid');
+  if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
 
   ['A', 'B', 'C', 'D'].forEach(letter => {
     const card = document.getElementById(`host-ans-${letter}`);

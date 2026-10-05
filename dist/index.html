@@ -13,9 +13,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Mozilla PDF.js for in-browser client-side rendering of PDF ad flyers -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-DowBa9eS.js"></script>
-  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-pk2WkE9c.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- PWA Manifest & App Icons -->
+  <link rel="manifest" href="/BarRoomTrivia/assets/manifest--2K9kbVy.webmanifest">
+  <link rel="apple-touch-icon" href="./app_logo.png">
+  <link rel="icon" type="image/png" href="./app_logo.png">
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-BPAins2-.js"></script>
+  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-0mg56Ine.css">
 </head>
 <body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
@@ -557,23 +561,29 @@
                 <div class="live-genre-tag" id="host-live-genre-pill">⚡ Auto Select / General Trivia</div>
                 <h3 class="live-question-headline" id="host-live-q-text">Game is waiting in lobby. Tap "▶️ Start Game" below to launch Round 1 on TV and player phones!</h3>
 
-                <!-- Host Answer Key Grid (Host sees correct option highlighted in green) -->
-                <div class="host-answer-key-grid" id="host-live-answer-grid">
-                  <div class="answer-key-card" id="host-ans-A">
-                    <span class="opt-letter">A</span>
-                    <span class="opt-text" id="host-ans-text-A">Option A</span>
+                <!-- Host Answer Key Grid (Hidden during lobby; active only during live question) -->
+                <div class="host-answer-key-grid hidden" id="host-live-answer-grid">
+                  <div class="answer-key-header-banner">
+                    <span class="ak-badge">ℹ️ HOST ANSWER KEY (READ-ONLY)</span>
+                    <span class="ak-hint">Correct option is highlighted</span>
                   </div>
-                  <div class="answer-key-card" id="host-ans-B">
-                    <span class="opt-letter">B</span>
-                    <span class="opt-text" id="host-ans-text-B">Option B</span>
-                  </div>
-                  <div class="answer-key-card" id="host-ans-C">
-                    <span class="opt-letter">C</span>
-                    <span class="opt-text" id="host-ans-text-C">Option C</span>
-                  </div>
-                  <div class="answer-key-card" id="host-ans-D">
-                    <span class="opt-letter">D</span>
-                    <span class="opt-text" id="host-ans-text-D">Option D</span>
+                  <div class="answer-key-options-grid">
+                    <div class="answer-key-card" id="host-ans-A">
+                      <span class="opt-letter">A</span>
+                      <span class="opt-text" id="host-ans-text-A">Option A</span>
+                    </div>
+                    <div class="answer-key-card" id="host-ans-B">
+                      <span class="opt-letter">B</span>
+                      <span class="opt-text" id="host-ans-text-B">Option B</span>
+                    </div>
+                    <div class="answer-key-card" id="host-ans-C">
+                      <span class="opt-letter">C</span>
+                      <span class="opt-text" id="host-ans-text-C">Option C</span>
+                    </div>
+                    <div class="answer-key-card" id="host-ans-D">
+                      <span class="opt-letter">D</span>
+                      <span class="opt-text" id="host-ans-text-D">Option D</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -691,7 +701,7 @@
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.renderLeaderboard && window.renderLeaderboard()">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.loadInitialPlayers ? window.loadInitialPlayers() : (window.renderLeaderboard && window.renderLeaderboard())">🔄 Refresh</button>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
 
@@ -742,30 +752,6 @@
                 </div>
               </div>
 
-              <!-- VENUE CUSTOMIZATION -->
-              <div class="settings-subgroup">
-                <div class="config-label">
-                  <span class="icon">🏢</span>
-                  <span class="lbl-title">VENUE & BRANDING</span>
-                </div>
-                
-                <div class="form-group" style="margin-bottom: 14px;">
-                  <label for="host-venue-name-input" style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Venue / Pub Name</label>
-                  <input type="text" id="host-venue-name-input" class="venue-name-input" placeholder="e.g. The Rusty Anchor Pub" autocomplete="off" style="width: 100%;">
-                </div>
-
-                <div class="form-group">
-                  <label style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Custom Bar Logo (Displays on TV Stage)</label>
-                  <div class="logo-upload-box">
-                    <label for="host-logo-input" class="btn btn-secondary btn-sm logo-btn-lbl">📁 Upload Logo</label>
-                    <input type="file" id="host-logo-input" accept="image/*" class="hidden">
-                    <div id="host-logo-preview-wrapper" class="logo-preview-wrapper hidden">
-                      <img id="host-logo-preview" src="" alt="Logo Preview" class="logo-preview-img">
-                      <button type="button" id="btn-remove-logo" class="btn-icon-remove" title="Remove Logo">✕</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               <!-- AD DISPLAY SIGNAGE MODE -->
               <div class="settings-subgroup ad-signage-subgroup">

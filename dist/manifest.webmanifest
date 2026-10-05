@@ -1,0 +1,19 @@
+{
+  "name": "Bar Rooms Trivia - Host Controls",
+  "short_name": "Host Trivia",
+  "description": "Real-time Host Controller and Live Game Management for Bar Rooms Trivia",
+  "start_url": "./?view=host",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0f111a",
+  "icons": [
+    {
+      "src": "./app_logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
