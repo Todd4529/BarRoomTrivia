@@ -100,6 +100,16 @@
           <div class="tv-mode-toggle">
             <button id="btn-tv-toggle-promo" class="tv-toggle-btn active">📣 Promo Ads</button>
             <button id="btn-tv-toggle-live" class="tv-toggle-btn">🎯 Live Stage</button>
+            <button id="btn-tv-toggle-sound" class="tv-toggle-btn tv-sound-toggle-btn" title="Toggle TV Sound Effects">🔊 Sound ON</button>
+          </div>
+        </div>
+
+        <!-- TV AUDIO UNMUTE BANNER (Prompt to unlock Web Audio in browsers with strict autoplay policies) -->
+        <div id="tv-audio-unlock-banner" class="tv-audio-unlock-banner hidden">
+          <div class="tv-audio-banner-content">
+            <span class="tv-audio-banner-icon">🔊</span>
+            <span class="tv-audio-banner-text">TV sound is ready! Tap or click anywhere on this screen to enable game sound effects.</span>
+            <button id="btn-tv-unlock-audio" class="tv-audio-banner-btn">Enable Sound</button>
           </div>
         </div>
 
@@ -493,11 +503,6 @@
               <strong id="host-room-code-display">TRIV</strong>
             </div>
           </div>
-          <div class="navbar-actions-col">
-            <button type="button" id="btn-host-view-tv" class="btn-navbar-pill" onclick="window.switchView && window.switchView('tv')" title="Switch to TV Stage">
-              📺 <span class="nav-pill-text">TV View</span>
-            </button>
-          </div>
         </header>
 
         <!-- B. COMPACT GAME STATUS & METRICS BAR -->
@@ -526,19 +531,42 @@
         <!-- C. SEGMENTED TAB SWITCHER (App Tabs) -->
         <nav class="host-segmented-tabs" role="tablist">
           <button type="button" class="host-tab-btn active" data-tab="stage" role="tab" aria-selected="true">
-            <span class="tab-ico">🎮</span>
+            <span class="tab-ico">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="3"></rect>
+                <path d="M6 12h4m-2-2v4m7-3h.01m3 2h.01"></path>
+              </svg>
+            </span>
             <span class="tab-lbl">Live Stage</span>
           </button>
           <button type="button" class="host-tab-btn" data-tab="playlist" role="tab" aria-selected="false">
-            <span class="tab-ico">📋</span>
+            <span class="tab-ico">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+              </svg>
+            </span>
             <span class="tab-lbl">Playlist</span>
           </button>
           <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
-            <span class="tab-ico">👥</span>
+            <span class="tab-ico">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </span>
             <span class="tab-lbl">Players (<span id="host-tab-player-count">0</span>)</span>
           </button>
           <button type="button" class="host-tab-btn" data-tab="settings" role="tab" aria-selected="false">
-            <span class="tab-ico">⚙️</span>
+            <span class="tab-ico">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </span>
             <span class="tab-lbl">Settings</span>
           </button>
         </nav>
@@ -751,6 +779,30 @@
                 </div>
               </div>
 
+              <!-- VENUE CUSTOMIZATION -->
+              <div class="settings-subgroup">
+                <div class="config-label">
+                  <span class="icon">🏢</span>
+                  <span class="lbl-title">VENUE & BRANDING</span>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 14px;">
+                  <label for="host-venue-name-input" style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Venue / Pub Name</label>
+                  <input type="text" id="host-venue-name-input" class="venue-name-input" placeholder="e.g. The Rusty Anchor Pub" autocomplete="off" style="width: 100%;">
+                </div>
+
+                <div class="form-group">
+                  <label style="font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; display: block;">Custom Bar Logo (Displays on TV Stage)</label>
+                  <div class="logo-upload-box">
+                    <label for="host-logo-input" class="btn btn-secondary btn-sm logo-btn-lbl">📁 Upload Logo</label>
+                    <input type="file" id="host-logo-input" accept="image/*" class="hidden">
+                    <div id="host-logo-preview-wrapper" class="logo-preview-wrapper hidden">
+                      <img id="host-logo-preview" src="" alt="Logo Preview" class="logo-preview-img">
+                      <button type="button" id="btn-remove-logo" class="btn-icon-remove" title="Remove Logo">✕</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <!-- AD DISPLAY SIGNAGE MODE -->
               <div class="settings-subgroup ad-signage-subgroup">
@@ -839,7 +891,7 @@
                 <div class="legal-links-row" style="display: flex; gap: 14px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
                   <a href="privacy.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">🔒 Privacy Policy</a>
                   <a href="terms.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">📜 Terms of Service</a>
-                  <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.39 Official Release</span>
+                  <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.40 Official Release</span>
                 </div>
               </div>
             </div>
@@ -850,17 +902,38 @@
         <!-- E. STICKY BOTTOM ACTION DOCK (Thumb Ergonomics) -->
         <div class="host-sticky-bottom-dock">
           <div class="dock-actions-flex">
-            <button type="button" id="btn-start-auto" class="btn btn-success btn-dock-primary">
-              ▶️ Start Game
+            <button type="button" id="btn-start-auto" class="btn btn-success btn-dock-primary" title="Start Game">
+              <span class="btn-dock-icon-wrapper">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </span>
+              <span class="btn-dock-text" id="btn-start-auto-text">Start Game</span>
             </button>
-            <button type="button" id="btn-pause-auto" class="btn btn-warning btn-dock-action" disabled>
-              ⏸️ Pause
+            <button type="button" id="btn-pause-auto" class="btn btn-warning btn-dock-action" disabled title="Pause Game">
+              <span class="btn-dock-icon-wrapper">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </span>
+              <span class="btn-dock-text" id="btn-pause-auto-text">Pause</span>
             </button>
-            <button type="button" id="btn-skip-question" class="btn btn-info btn-dock-action hidden">
-              ⏩ Skip Q
+            <button type="button" id="btn-skip-question" class="btn btn-info btn-dock-action hidden" title="Skip Current Question">
+              <span class="btn-dock-icon-wrapper">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/>
+                </svg>
+              </span>
+              <span class="btn-dock-text" id="btn-skip-text">Skip Q</span>
             </button>
             <button type="button" id="btn-reset-game" class="btn btn-danger btn-dock-icon" title="Reset Game & Room">
-              🔄 Reset
+              <span class="btn-dock-icon-wrapper">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+              </span>
+              <span class="btn-dock-text" id="btn-reset-text">Reset</span>
             </button>
           </div>
         </div>

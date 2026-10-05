@@ -94,6 +94,10 @@ class MqttService {
   void subscribeToRoom(String roomCode) {
     final norm = roomCode.toUpperCase().trim();
     subscribeTopic('barrooms_trivia/room_$norm');
+    final stripped = norm.replaceAll('-', '');
+    if (stripped != norm) {
+      subscribeTopic('barrooms_trivia/room_$stripped');
+    }
     if (norm != 'TRIV') {
       subscribeTopic('barrooms_trivia/room_TRIV');
     }

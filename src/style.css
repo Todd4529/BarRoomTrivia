@@ -355,6 +355,98 @@ body[data-view="player"] .logo-container {
   box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3);
 }
 
+.tv-sound-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.tv-sound-toggle-btn.sound-on {
+  color: #00ffff;
+  border-color: rgba(0, 255, 255, 0.4);
+  background: rgba(0, 255, 255, 0.12);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.tv-sound-toggle-btn.sound-off {
+  color: var(--text-muted);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: transparent;
+}
+
+.tv-sound-toggle-btn.needs-unlock {
+  animation: pulseAudioAttention 1.5s infinite alternate;
+  color: #ffb300;
+  border-color: #ffb300;
+  background: rgba(255, 179, 0, 0.15);
+}
+
+@keyframes pulseAudioAttention {
+  0% { transform: scale(1); box-shadow: 0 0 0 rgba(255, 179, 0, 0); }
+  100% { transform: scale(1.04); box-shadow: 0 0 14px rgba(255, 179, 0, 0.5); }
+}
+
+.tv-audio-unlock-banner {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: linear-gradient(135deg, rgba(20, 25, 45, 0.96), rgba(10, 15, 30, 0.98));
+  border: 1.5px solid var(--accent-cyan);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 24px rgba(0, 229, 255, 0.4);
+  border-radius: 30px;
+  padding: 10px 24px;
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.tv-audio-unlock-banner.hidden {
+  display: none !important;
+}
+
+.tv-audio-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.tv-audio-banner-icon {
+  font-size: 20px;
+  animation: bounceSpeaker 1s infinite alternate ease-in-out;
+}
+
+@keyframes bounceSpeaker {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.2); }
+}
+
+.tv-audio-banner-btn {
+  background: linear-gradient(135deg, var(--accent-cyan), #00b0ff);
+  color: #000;
+  border: none;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 229, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tv-audio-banner-btn:hover {
+  filter: brightness(1.15);
+  transform: scale(1.05);
+}
+
 .tv-brand {
   display: flex;
   align-items: center;
@@ -1963,7 +2055,19 @@ body[data-view="player"] .logo-container {
 }
 
 .host-tab-btn .tab-ico {
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.host-tab-btn .tab-ico svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .host-tab-btn.active {
@@ -2634,44 +2738,60 @@ body[data-view="player"] .logo-container {
   gap: 10px;
 }
 
-.btn-dock-primary {
-  flex: 2;
-  min-height: 54px;
-  font-size: 17px;
-  font-weight: 900;
+.btn-dock-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.btn-dock-icon-wrapper svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.btn-dock-text {
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.btn-dock-primary,
+.btn-dock-action,
+.btn-dock-icon {
+  min-height: 52px;
+  height: 52px;
   border-radius: 14px;
-  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.35);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  font-family: var(--font-heading);
+  font-weight: 800;
   touch-action: manipulation;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-dock-primary {
+  flex: 1.8;
+  font-size: 16px;
+  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.35);
 }
 
 .btn-dock-action {
-  flex: 1;
-  min-height: 54px;
+  flex: 1.1;
   font-size: 14px;
-  font-weight: 800;
-  border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  touch-action: manipulation;
 }
 
 .btn-dock-icon {
-  flex: 0 0 54px;
-  min-height: 54px;
-  border-radius: 14px;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  touch-action: manipulation;
+  flex: 1;
+  font-size: 14px;
 }
 
 /* BUTTON ACTIVE PRESS (Native Haptic Feel) */
@@ -2733,14 +2853,14 @@ body[data-view="player"] .logo-container {
     left: 0;
     right: 0;
     z-index: 999;
-    height: 58px;
+    height: 64px;
     margin: 0;
-    padding: 4px 8px calc(6px + env(safe-area-inset-bottom, 0px)) 8px;
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
     border-radius: 0;
-    background: rgba(10, 12, 20, 0.96);
+    background: rgba(10, 12, 20, 0.98);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
     border-left: none;
     border-right: none;
     border-bottom: none;
@@ -2748,6 +2868,7 @@ body[data-view="player"] .logo-container {
     justify-content: space-around;
     align-items: center;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+    box-sizing: border-box;
   }
 
   .host-tab-btn {
@@ -2755,7 +2876,7 @@ body[data-view="player"] .logo-container {
     min-width: 0;
     height: 100%;
     min-height: 48px;
-    padding: 4px;
+    padding: 2px 4px 4px 4px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2765,16 +2886,29 @@ body[data-view="player"] .logo-container {
     border: none;
     background: transparent;
     color: var(--text-muted);
+    overflow: visible;
   }
 
   .host-tab-btn .tab-ico {
-    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
     line-height: 1;
+    overflow: visible;
+  }
+
+  .host-tab-btn .tab-ico svg {
+    width: 20px;
+    height: 20px;
+    display: block;
   }
 
   .host-tab-btn .tab-lbl {
     font-size: 11px;
     font-weight: 700;
+    line-height: 1.1;
   }
 
   .host-tab-btn.active {
@@ -2785,9 +2919,9 @@ body[data-view="player"] .logo-container {
 
   /* Sticky In-Game Action Dock (Floats comfortably above bottom navigation) */
   .host-sticky-bottom-dock {
-    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
-    padding: 10px 12px;
-    background: rgba(10, 12, 20, 0.92);
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 10px;
+    background: rgba(10, 12, 20, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -2795,31 +2929,42 @@ body[data-view="player"] .logo-container {
     z-index: 998;
   }
 
+  .dock-actions-flex {
+    gap: 6px;
+  }
+
+  .btn-dock-primary,
+  .btn-dock-action,
+  .btn-dock-icon {
+    min-height: 48px;
+    height: 48px;
+    padding: 0 8px;
+  }
+
   .btn-dock-primary {
-    min-height: 50px;
-    font-size: 16px;
+    font-size: 14px;
+    flex: 1.6;
   }
 
   .btn-dock-action {
-    min-height: 50px;
-    font-size: 14px;
+    font-size: 13px;
+    flex: 1.1;
   }
 
   .btn-dock-icon {
-    min-height: 50px;
-    flex: 0 0 50px;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .btn-dock-icon-wrapper svg {
+    width: 18px;
+    height: 18px;
   }
 
   .sub-card {
     flex-direction: column;
     align-items: stretch;
     gap: 16px;
-  }
-
-  #btn-pause-auto, #btn-reset-game {
-    width: 100%;
-    min-height: 50px;
-    font-size: 15px;
   }
 
   .host-stats-bar {

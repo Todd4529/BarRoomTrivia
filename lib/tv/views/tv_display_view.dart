@@ -64,6 +64,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _adSlideTimer;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
+  bool _isExitDialogOpen = false;
+  Set<String> _previousWrongOptions = {};
   static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
   @override
@@ -101,69 +103,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     return '$_playerBaseUrl/?view=player&room=$_displayRoomCode';
   }
 
-  Set<String> _previousWrongOptions = {};
-
-  Question? _sanitizeQuestionDistractors(Question? q) {
-    if (q == null) return null;
-    final currentWrongs = q.wrongOptions;
-    final hasOverlap = currentWrongs.any((w) => _previousWrongOptions.contains(w.toLowerCase()));
-    if (!hasOverlap || _previousWrongOptions.isEmpty) {
-      _previousWrongOptions = currentWrongs.map((w) => w.toLowerCase()).toSet();
-      return q;
-    }
-
-    final correctText = q.correctOption == 'A' ? q.optionA
-        : q.correctOption == 'B' ? q.optionB
-        : q.correctOption == 'C' ? q.optionC
-        : q.optionD;
-
-    final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-    final altPool = <String>[];
-    for (var fq in fallbackList) {
-      altPool.addAll(fq.wrongOptions);
-      if (altPool.length > 50) break;
-    }
-
-    final newWrongs = List<String>.from(currentWrongs);
-    final currentLower = currentWrongs.map((w) => w.toLowerCase()).toSet();
-    currentLower.add(correctText.toLowerCase());
-
-    int altIdx = 0;
-    for (int i = 0; i < newWrongs.length; i++) {
-      if (_previousWrongOptions.contains(newWrongs[i].toLowerCase())) {
-        while (altIdx < altPool.length &&
-            (altPool[altIdx].toLowerCase() == correctText.toLowerCase() ||
-             currentLower.contains(altPool[altIdx].toLowerCase()) ||
-             _previousWrongOptions.contains(altPool[altIdx].toLowerCase()))) {
-          altIdx++;
-        }
-        if (altIdx < altPool.length) {
-          final chosen = altPool[altIdx++];
-          newWrongs[i] = chosen;
-          currentLower.add(chosen.toLowerCase());
-        }
-      }
-    }
-    _previousWrongOptions = newWrongs.map((w) => w.toLowerCase()).toSet();
-
-    final newOpts = [
-      {'text': correctText, 'isCorrect': true},
-      {'text': newWrongs[0], 'isCorrect': false},
-      {'text': newWrongs[1], 'isCorrect': false},
-      {'text': newWrongs[2], 'isCorrect': false},
-    ];
-    newOpts.shuffle();
-    final letters = ['A', 'B', 'C', 'D'];
-    final correctIdx = newOpts.indexWhere((o) => o['isCorrect'] == true);
-
-    return q.copyWith(
-      optionA: newOpts[0]['text'] as String,
-      optionB: newOpts[1]['text'] as String,
-      optionC: newOpts[2]['text'] as String,
-      optionD: newOpts[3]['text'] as String,
-      correctOption: letters[correctIdx],
-    );
-  }
+  // Preserve exact broadcast options so TV display 100% matches player phones and host
+  Question? _sanitizeQuestionDistractors(Question? q) => q;
 
 
   void _startAdSlideTimer() {
@@ -313,7 +254,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         Question? question;
 
         try {
-          if (payload.containsKey('question_text') || payload.containsKey('text')) {
+          if (payload.containsKey('question_text') ||
+              payload.containsKey('text') ||
+              payload.containsKey('question') ||
+              payload.containsKey('questionData') ||
+              payload.containsKey('question_data') ||
+              payload.containsKey('option_a') ||
+              payload.containsKey('options')) {
             question = Question.fromJson(payload);
           } else {
             final qId = (payload['question_id'] ?? payload['id'])?.toString();
@@ -335,7 +282,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
           setState(() {
-            _currentQuestion = _sanitizeQuestionDistractors(question);
+            _currentQuestion = question;
             _totalDuration = duration;
             _remainingSeconds = duration;
             _questionIndex = qInRound;
@@ -564,7 +511,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
             setState(() {
-              _currentQuestion = _sanitizeQuestionDistractors(fallback);
+              _currentQuestion = fallback;
               _questionIndex = 1;
               _totalDuration = duration;
               _remainingSeconds = duration;
@@ -865,6 +812,58 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     super.dispose();
   }
 
+  void _showExitApplicationDialog() {
+    if (_isExitDialogOpen) return;
+    setState(() => _isExitDialogOpen = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {},
+        child: AlertDialog(
+          backgroundColor: AppTheme.cardSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
+          ),
+          title: const Text(
+            'Exit Application',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          actionsAlignment: MainAxisAlignment.end,
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 16)),
+            ),
+            ElevatedButton(
+              autofocus: true,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                if (mounted) setState(() => _isExitDialogOpen = false);
+                Navigator.of(dialogContext).pop();
+                SystemNavigator.pop();
+              },
+              child: const Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -872,17 +871,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (context.mounted) {
-          context.go('/hub');
+          _showExitApplicationDialog();
         }
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () {
-            if (context.mounted) context.go('/hub');
-          },
-          const SingleActivator(LogicalKeyboardKey.goBack): () {
-            if (context.mounted) context.go('/hub');
-          },
+          const SingleActivator(LogicalKeyboardKey.escape): _showExitApplicationDialog,
+          const SingleActivator(LogicalKeyboardKey.goBack): _showExitApplicationDialog,
         },
         child: Scaffold(
           backgroundColor: AppTheme.darkBackground,
@@ -893,7 +888,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
               child: Column(
                 children: [
-                  // Top Centered Header Bar with Exit to Hub & QR Settings
+                  // Top Centered Header Bar with Exit Application
                   SizedBox(
                     height: 42,
                     child: Row(
@@ -903,8 +898,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
-                          tooltip: 'Return to Hub',
-                          onPressed: () => context.go('/hub'),
+                          tooltip: 'Exit Application',
+                          onPressed: _showExitApplicationDialog,
                         ),
                         Row(
                           mainAxisSize: MainAxisSize.min,

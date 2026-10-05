@@ -377,6 +377,27 @@ class RealtimeService {
       'option_b': question.optionB,
       'option_c': question.optionC,
       'option_d': question.optionD,
+      'options': {
+        'A': question.optionA,
+        'B': question.optionB,
+        'C': question.optionC,
+        'D': question.optionD,
+      },
+      'questionData': {
+        'id': question.id,
+        'category': question.category,
+        'difficulty': question.difficulty,
+        'text': question.questionText,
+        'question_text': question.questionText,
+        'options': {
+          'A': question.optionA,
+          'B': question.optionB,
+          'C': question.optionC,
+          'D': question.optionD,
+        },
+        'correct': question.correctOption,
+        'correct_option': question.correctOption,
+      },
       'correct_option': question.correctOption,
       'time_limit_seconds': durationSeconds,
     };

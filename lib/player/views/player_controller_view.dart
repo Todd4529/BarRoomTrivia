@@ -57,6 +57,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   bool _showResultOverlay = false;
+  Timer? _resultOverlayTimer;
 
   @override
   void initState() {
@@ -145,7 +146,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final qIndex = payload['question_index'] as int? ?? 1;
 
         Question? question;
-        if (payload.containsKey('question_text')) {
+        if (payload.containsKey('question_text') ||
+            payload.containsKey('text') ||
+            payload.containsKey('question') ||
+            payload.containsKey('questionData') ||
+            payload.containsKey('question_data') ||
+            payload.containsKey('option_a') ||
+            payload.containsKey('options')) {
           question = Question.fromJson(payload);
         } else {
           final qId = (payload['question_id'] ?? payload['id']) as String?;
@@ -522,6 +529,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         }
       });
+
+      _resultOverlayTimer?.cancel();
+      _resultOverlayTimer = Timer(const Duration(seconds: 15), () {
+        if (mounted && _showResultOverlay) {
+          setState(() {
+            _showResultOverlay = false;
+          });
+        }
+      });
     }
   }
 
@@ -550,6 +566,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   @override
   void dispose() {
+    _resultOverlayTimer?.cancel();
     _localTimer?.cancel();
     _nicknameController.dispose();
     _roomCodeController.dispose();
@@ -711,10 +728,20 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     }
 
     return Positioned.fill(
-      child: Container(
-        color: Colors.black.withOpacity(0.85),
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (mounted) {
+            _resultOverlayTimer?.cancel();
+            setState(() {
+              _showResultOverlay = false;
+            });
+          }
+        },
+        child: Container(
+          color: Colors.black.withOpacity(0.85),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
@@ -826,6 +853,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

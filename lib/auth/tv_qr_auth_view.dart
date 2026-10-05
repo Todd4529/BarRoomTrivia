@@ -216,8 +216,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
       _authorizedUserName = userInfo?['display_name'] ?? userInfo?['email'] ?? 'Host';
     });
 
-    // Register authorized user on the room leaderboard
-    SupabaseService.registerIncomingPlayer(_userCode, _authorizedUserName);
+    // Host is authorized to control TV display (host is not registered as a player)
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboardingCompleted', true);

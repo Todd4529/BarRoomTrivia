@@ -98,15 +98,33 @@ async function requestScreenWakeLock() {
   }
 }
 
+let triggerActiveSessionSync = null;
+
+async function handleAppVisibilityResume() {
+  if (!screenWakeLock) {
+    await requestScreenWakeLock();
+  }
+  if (!mqttClient || !mqttClient.connected) {
+    try { initRealtimeEngine(); } catch (_) {}
+  }
+  if (typeof triggerActiveSessionSync === 'function') {
+    triggerActiveSessionSync();
+  }
+  if (currentPlayer && currentPlayer.nickname) {
+    broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+  }
+}
+
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible') {
-    if (!screenWakeLock) {
-      await requestScreenWakeLock();
-    }
-    if (currentPlayer && currentPlayer.nickname) {
-      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
-    }
+    await handleAppVisibilityResume();
   }
+});
+window.addEventListener('focus', () => {
+  handleAppVisibilityResume();
+});
+window.addEventListener('pageshow', () => {
+  handleAppVisibilityResume();
 });
 
 // ==========================================
@@ -129,24 +147,99 @@ function getAudioContext() {
   return audioCtx;
 }
 
+function unlockAudioContext(playConfirmation = false) {
+  const ctx = getAudioContext();
+  if (!ctx) return Promise.resolve(false);
+
+  if (ctx.state === 'suspended') {
+    return ctx.resume().then(() => {
+      console.log('[Audio] AudioContext successfully resumed & unlocked!');
+      updateTvAudioUI();
+      if (playConfirmation && isSoundEffectsEnabled) {
+        playSound('correct');
+      }
+      return true;
+    }).catch(err => {
+      console.warn('[Audio] Failed to resume AudioContext:', err);
+      return false;
+    });
+  } else if (ctx.state === 'running') {
+    updateTvAudioUI();
+    return Promise.resolve(true);
+  }
+  return Promise.resolve(false);
+}
+
 function unlockAudioOnInteraction() {
   const unlock = () => {
     const ctx = getAudioContext();
-    if (ctx && ctx.state === 'running') {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        updateTvAudioUI();
+        if (ctx.state === 'running') {
+          ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
+            window.removeEventListener(e, unlock);
+          });
+        }
+      }).catch(() => {});
+    } else if (ctx && ctx.state === 'running') {
+      updateTvAudioUI();
+      ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
+        window.removeEventListener(e, unlock);
+      });
     }
   };
-  window.addEventListener('pointerdown', unlock, { passive: true });
-  window.addEventListener('keydown', unlock, { passive: true });
+  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
+    window.addEventListener(e, unlock, { passive: true });
+  });
 }
 unlockAudioOnInteraction();
+
+function updateTvAudioUI() {
+  const btnTvSound = document.getElementById('btn-tv-toggle-sound');
+  const banner = document.getElementById('tv-audio-unlock-banner');
+  const ctx = audioCtx;
+
+  if (!isSoundEffectsEnabled) {
+    if (btnTvSound) {
+      btnTvSound.className = 'tv-toggle-btn tv-sound-toggle-btn sound-off';
+      btnTvSound.textContent = '🔇 Sound OFF';
+      btnTvSound.setAttribute('title', 'Sound effects are muted. Click to enable.');
+    }
+    if (banner) banner.classList.add('hidden');
+    return;
+  }
+
+  const isSuspended = !ctx || (ctx.state === 'suspended');
+  if (isSuspended) {
+    if (btnTvSound) {
+      btnTvSound.className = 'tv-toggle-btn tv-sound-toggle-btn needs-unlock';
+      btnTvSound.textContent = '🔇 Click to Enable Sound';
+      btnTvSound.setAttribute('title', 'Browser has audio paused. Click anywhere to enable game sound effects.');
+    }
+    const activeView = document.body.getAttribute('data-view') || 'tv';
+    if (banner && activeView === 'tv') {
+      banner.classList.remove('hidden');
+    }
+  } else {
+    if (btnTvSound) {
+      btnTvSound.className = 'tv-toggle-btn tv-sound-toggle-btn sound-on';
+      btnTvSound.textContent = '🔊 Sound ON';
+      btnTvSound.setAttribute('title', 'Game sound effects active. Click to mute.');
+    }
+    if (banner) banner.classList.add('hidden');
+  }
+}
 
 function playSound(type) {
   if (!isSoundEffectsEnabled) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+      updateTvAudioUI();
+    }
 
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
@@ -155,47 +248,64 @@ function playSound(type) {
     gain.connect(ctx.destination);
 
     if (type === 'tick') {
-      // Crisp countdown tick (880Hz sine blip)
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, now);
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-      osc.start(now);
-      osc.stop(now + 0.04);
-    } else if (type === 'tap') {
-      // Tactile buzzer click (440Hz triangle)
+      // Crisp, punchy countdown tick for big TV audio systems (triangle dual-sweep)
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(440, now);
-      gain.gain.setValueAtTime(0.18, now);
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(440, now + 0.05);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } else if (type === 'tap') {
+      // Tactile buzzer click (500Hz -> 300Hz triangle)
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
+      gain.gain.setValueAtTime(0.28, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
       osc.start(now);
       osc.stop(now + 0.05);
-    } else if (type === 'correct') {
-      // Upbeat cheerful chime (587Hz D5 -> 880Hz A5)
+    } else if (type === 'question_start' || type === 'start') {
+      // Ascending game show stinger (440Hz -> 880Hz)
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now);
-      osc.frequency.setValueAtTime(880.00, now + 0.08);
-      gain.gain.setValueAtTime(0.22, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+      gain.gain.setValueAtTime(0.30, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
       osc.start(now);
-      osc.stop(now + 0.35);
+      osc.stop(now + 0.16);
+    } else if (type === 'correct') {
+      // Upbeat cheerful chime (triad: 587.33Hz D5 -> 880Hz A5 -> 1174.66Hz D6)
+      const notes = [587.33, 880.00, 1174.66];
+      notes.forEach((freq, idx) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now + idx * 0.07);
+        g.gain.setValueAtTime(0.32, now + idx * 0.07);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + (idx === 2 ? 0.40 : 0.18));
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(now + idx * 0.07);
+        o.stop(now + idx * 0.07 + (idx === 2 ? 0.40 : 0.18));
+      });
     } else if (type === 'wrong') {
       // Descending buzzer for incorrect answers (240Hz -> 140Hz)
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(240, now);
       osc.frequency.exponentialRampToValueAtTime(140, now + 0.25);
-      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.setValueAtTime(0.28, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       osc.start(now);
       osc.stop(now + 0.25);
     } else if (type === 'buzz') {
-      // Time-expired low buzzer (180Hz square)
+      // Time-expired authoritative buzzer (180Hz square)
       osc.type = 'square';
       osc.frequency.setValueAtTime(180, now);
-      gain.gain.setValueAtTime(0.14, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      gain.gain.setValueAtTime(0.30, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
       osc.start(now);
-      osc.stop(now + 0.28);
+      osc.stop(now + 0.30);
     } else if (type === 'fanfare') {
       // Victory arpeggio (C5, E5, G5, C6)
       const notes = [523.25, 659.25, 783.99, 1046.50];
@@ -204,12 +314,12 @@ function playSound(type) {
         const g = ctx.createGain();
         o.type = 'triangle';
         o.frequency.setValueAtTime(freq, now + idx * 0.09);
-        g.gain.setValueAtTime(0.20, now + idx * 0.09);
-        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + (idx === 3 ? 0.6 : 0.22));
+        g.gain.setValueAtTime(0.32, now + idx * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + (idx === 3 ? 0.65 : 0.22));
         o.connect(g);
         g.connect(ctx.destination);
         o.start(now + idx * 0.09);
-        o.stop(now + idx * 0.09 + (idx === 3 ? 0.6 : 0.22));
+        o.stop(now + idx * 0.09 + (idx === 3 ? 0.65 : 0.22));
       });
     }
   } catch (err) {
@@ -222,6 +332,7 @@ function setSoundEffectsEnabled(enabled, shouldBroadcast = true) {
   safeStorage.setItem('bar_trivia_sound_enabled', String(isSoundEffectsEnabled));
   const toggleSound = document.getElementById('host-toggle-sound');
   if (toggleSound) toggleSound.checked = isSoundEffectsEnabled;
+  updateTvAudioUI();
 
   if (shouldBroadcast) {
     const payload = { isSoundEffectsEnabled };
@@ -344,11 +455,17 @@ const funnyWrongQuotes = [
   "Ouch! The trivia gods demanded a sacrifice. Next one is yours! ⚡"
 ];
 
-// REAL PLAYER PURGE HELPER: Only filters out automated mock unit tests
+// REAL PLAYER PURGE HELPER: Filters out mock tests and host user (todd4529)
 function isFictitiousPlayer(nickname) {
   if (!nickname) return true;
   const lower = nickname.toString().trim().toLowerCase();
   if (lower.startsWith('mock-test-') || lower.startsWith('test-mock-')) return true;
+  if (lower === 'host' || lower === 'host user' || lower === 'todd4529' || lower.startsWith('host-') || lower.startsWith('host_')) return true;
+  const savedHostEmail = safeStorage.getItem('bar_trivia_host_email');
+  if (savedHostEmail) {
+    const hostUser = savedHostEmail.split('@')[0].toLowerCase();
+    if (lower === hostUser || lower === savedHostEmail.toLowerCase()) return true;
+  }
   return false;
 }
 
@@ -357,6 +474,9 @@ let playersLeaderboard = [];
 
 function loadInitialPlayers() {
   const normRoom = (currentRoomCode || 'TRIV').toUpperCase();
+
+  // Purge any fictitious / host users from memory
+  playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
 
   try {
     supabase.from('players')
@@ -406,6 +526,12 @@ function initApp() {
     onLogoUpdated({ logoUrl: customBarLogoUrl });
     updateHostLogoPreview(customBarLogoUrl);
   }
+
+  const savedNick = safeStorage.getItem('bar_trivia_player_nickname');
+  if (savedNick && isFictitiousPlayer(savedNick)) {
+    safeStorage.removeItem('bar_trivia_player_nickname');
+  }
+  playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
 
   loadAdSlidesAndInit();
   startPromoCarouselRotation();
@@ -764,6 +890,42 @@ function initTvModeToggle() {
       });
     }
   });
+
+  const btnTvSound = document.getElementById('btn-tv-toggle-sound');
+  btnTvSound?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      unlockAudioContext(true);
+    } else {
+      setSoundEffectsEnabled(!isSoundEffectsEnabled, true);
+      if (isSoundEffectsEnabled) {
+        playSound('correct');
+      }
+      updateTvAudioUI();
+    }
+  });
+
+  const banner = document.getElementById('tv-audio-unlock-banner');
+  const btnUnlock = document.getElementById('btn-tv-unlock-audio');
+  banner?.addEventListener('click', () => {
+    unlockAudioContext(true);
+  });
+  btnUnlock?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    unlockAudioContext(true);
+  });
+
+  const tvView = document.getElementById('view-tv');
+  tvView?.addEventListener('click', () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      unlockAudioContext(true);
+    }
+  });
+
+  updateTvAudioUI();
 }
 
 // 1. NAVIGATION ROUTING & INSTANT VIEW SWITCHING
@@ -800,6 +962,7 @@ function switchView(viewName) {
 
   // 4. TV View specific behavior: Show Live Stage or Ad Signage when switching to TV
   if (viewName === 'tv') {
+    updateTvAudioUI();
     const tvPromoScreen = document.getElementById('tv-promo-screen');
     const tvLiveGrid = document.getElementById('tv-live-grid');
     const tvAdScreen = document.getElementById('tv-ad-signage-screen');
@@ -1064,6 +1227,10 @@ function broadcastRealtimeEvent(event, payload = {}) {
       if (topic !== 'barrooms_trivia/room_TRIV') {
         mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
       }
+      const strippedTopic = `barrooms_trivia/room_${currentRoomCode.toUpperCase().replace(/-/g, '')}`;
+      if (strippedTopic !== topic && strippedTopic !== 'barrooms_trivia/room_TRIV') {
+        mqttClient.publish(strippedTopic, jsonStr);
+      }
       mqttClient.publish('tv_pairing', jsonStr);
     } catch (e) {
       console.warn('[Realtime MQTT] Failed to publish:', e);
@@ -1165,7 +1332,11 @@ function handleIncomingPreGameCountdown(rawPayload) {
   }
   if (hostTimerSecs) hostTimerSecs.textContent = `${countdownSecs}s`;
   if (hostTimerFill) hostTimerFill.style.width = '100%';
-  if (btnSkip) btnSkip.classList.add('hidden');
+  if (btnSkip) {
+    btnSkip.classList.add('hidden');
+    const skipTxt = document.getElementById('btn-skip-text');
+    if (skipTxt) skipTxt.textContent = 'Skip Q';
+  }
 
   const hostAnswerGrid = document.getElementById('host-live-answer-grid');
   if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
@@ -1186,25 +1357,33 @@ function handleIncomingQuestionStart(rawPayload) {
   hideWinnerModals();
   hideResultModal();
 
+  const qObj = payload.questionData || payload.question_data || payload;
+  const opts = qObj.options || payload.options || {};
+  const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
+  const optB = payload.option_b || payload.optionB || qObj.option_b || qObj.optionB || opts.B || opts.b || (Array.isArray(opts) ? opts[1] : 'Option B');
+  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.option_c || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
+  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
+  const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
+
   const questionData = {
-    id: payload.question_id || payload.id || String(Date.now()),
-    category: payload.category || 'General Knowledge',
-    difficulty: payload.difficulty || selectedDifficulty || 'Standard',
-    text: payload.question_text || payload.text || payload.question || '',
+    id: qObj.id || payload.question_id || payload.id || String(Date.now()),
+    category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
+    difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
+    text: qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || '',
     options: {
-      A: payload.option_a || payload.options?.A || payload.options?.a || 'Option A',
-      B: payload.option_b || payload.options?.B || payload.options?.b || 'Option B',
-      C: payload.option_c || payload.options?.C || payload.options?.c || 'Option C',
-      D: payload.option_d || payload.options?.D || payload.options?.d || 'Option D',
+      A: optA,
+      B: optB,
+      C: optC,
+      D: optD,
     },
-    correct: (payload.correct_option || payload.correct || 'A').toUpperCase().trim(),
+    correct: correct,
   };
 
   currentQuestionData = questionData;
   currentGameState = 'QUESTION_ACTIVE';
 
-  const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds) || selectedQuestionDuration || 20;
-  const qIndex = Number(payload.question_index) || 1;
+  const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds || payload.durationSeconds) || selectedQuestionDuration || 20;
+  const qIndex = Number(payload.question_index || payload.questionIndex) || 1;
   const rFromPayload = Number(payload.round_number || payload.roundNumber);
   const roundNum = (rFromPayload && rFromPayload > 0)
     ? Math.max(currentRound, rFromPayload)
@@ -1212,7 +1391,7 @@ function handleIncomingQuestionStart(rawPayload) {
   currentRound = roundNum;
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
-  timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || (Date.now() + durationSeconds * 1000);
+  timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || (Date.now() + durationSeconds * 1000);
   const remainingSecs = Math.max(1, Math.min(durationSeconds, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)));
 
   onQuestionStart({
@@ -1288,6 +1467,8 @@ function handleRealtimeIncomingEvent(event, data) {
           option_b: currentQuestionData.options.B,
           option_c: currentQuestionData.options.C,
           option_d: currentQuestionData.options.D,
+          options: currentQuestionData.options,
+          questionData: currentQuestionData,
           correct_option: currentQuestionData.correct,
         });
       } else if (hostEngineState === 'QUESTION_REVIEW' && currentQuestionData) {
@@ -1375,7 +1556,15 @@ function initRealtimeEngine() {
   initRealtimeSupabaseChannels();
 
   const topic = getMqttTopic();
+  const norm = currentRoomCode.toUpperCase();
+  const stripped = norm.replace(/-/g, '');
   const topicsToSub = [topic, 'barrooms_trivia/room_TRIV', 'tv_pairing'];
+  if (stripped !== norm) {
+    topicsToSub.push(`barrooms_trivia/room_${stripped}`);
+  }
+  if (!norm.includes('-') && norm.startsWith('TRIV') && norm.length > 4) {
+    topicsToSub.push(`barrooms_trivia/room_TRIV-${norm.slice(4)}`);
+  }
 
   if (mqttClient && mqttClient.connected) {
     console.log(`[Realtime Engine] Already connected, subscribing to ${topicsToSub.join(', ')}...`);
@@ -1431,11 +1620,14 @@ function initRealtimeEngine() {
 
     mqttClient.on('message', (receivedTopic, message) => {
       const normRoom = currentRoomCode.toUpperCase();
+      const strippedRoom = normRoom.replace(/-/g, '');
       const isAllowed = (
         receivedTopic === topic ||
         receivedTopic === 'barrooms_trivia/room_TRIV' ||
         receivedTopic === 'tv_pairing' ||
-        receivedTopic === `barrooms_trivia/room_${normRoom}`
+        receivedTopic === `barrooms_trivia/room_${normRoom}` ||
+        receivedTopic === `barrooms_trivia/room_${strippedRoom}` ||
+        (!normRoom.includes('-') && normRoom.startsWith('TRIV') && normRoom.length > 4 && receivedTopic === `barrooms_trivia/room_TRIV-${normRoom.slice(4)}`)
       );
       if (!isAllowed) return;
       try {
@@ -1481,7 +1673,7 @@ function initBroadcastChannelListeners() {
     } else if (type === 'STATE_SYNC_RESPONSE') {
       onStateSyncResponse(payload);
     } else if (type === 'QUESTION_START') {
-      onQuestionStart(payload);
+      handleIncomingQuestionStart(payload);
     } else if (type === 'TIMER_EXPIRED') {
       onTimerExpired(payload);
     } else if (type === 'ROUND_SUMMARY') {
@@ -2960,6 +3152,8 @@ window.renderHostAdGallery = renderHostAdGallery;
 window.playSound = playSound;
 window.setSoundEffectsEnabled = setSoundEffectsEnabled;
 window.isSoundEffectsEnabled = () => isSoundEffectsEnabled;
+window.unlockAudioContext = unlockAudioContext;
+window.updateTvAudioUI = updateTvAudioUI;
 window.showNetworkStatus = showNetworkStatus;
 
 function renderHostPlayersRoster() {
@@ -3159,6 +3353,7 @@ async function runNextAutomatedStep() {
       option_b: question.options.B,
       option_c: question.options.C,
       option_d: question.options.D,
+      options: question.options,
       correct_option: question.correct,
     };
 
@@ -3402,10 +3597,36 @@ function clearMockPlayerTimeouts() {
 
 // 5. QUESTION START HANDLER (STARTS TV & PLAYER COUNTDOWN TIMERS IMMEDIATELY)
 function onQuestionStart(payload) {
-  const { questionData, roundNumber, questionNumberInRound, durationSeconds, difficulty } = payload;
+  if (!payload) return;
+  const qObj = payload.questionData || payload.question_data || payload;
+  const opts = qObj.options || payload.options || {};
+  const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
+  const optB = payload.option_b || payload.optionB || qObj.option_b || qObj.option_b || opts.B || opts.b || (Array.isArray(opts) ? opts[1] : 'Option B');
+  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.option_c || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
+  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
+  const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
+
+  const questionData = {
+    id: qObj.id || payload.question_id || payload.id || String(Date.now()),
+    category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
+    difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
+    text: qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || '',
+    options: {
+      A: optA,
+      B: optB,
+      C: optC,
+      D: optD,
+    },
+    correct: correct,
+  };
+
+  const roundNumber = payload.roundNumber || payload.round_number || currentRound || 1;
+  const questionNumberInRound = payload.questionNumberInRound || payload.question_number_in_round || ((currentQuestionIndex % 10) + 1);
+  const durationSeconds = payload.durationSeconds || payload.duration_seconds || payload.time_limit_seconds || selectedQuestionDuration || 20;
+  const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
+
   currentQuestionData = questionData;
-  totalTimerDuration = durationSeconds || selectedQuestionDuration || 20;
-  const activeDifficulty = difficulty || selectedDifficulty || 'Standard';
+  totalTimerDuration = durationSeconds;
   playerChoiceSubmitted = null;
 
   hideResultModal();
@@ -3509,6 +3730,8 @@ function onQuestionStart(payload) {
   if (btnSkip) {
     btnSkip.classList.remove('hidden');
     btnSkip.disabled = false;
+    const skipTxt = document.getElementById('btn-skip-text');
+    if (skipTxt) skipTxt.textContent = 'Skip Q';
   }
 
   // Populate Host Answer Key Grid & Highlight Correct Option
@@ -3540,6 +3763,7 @@ function onQuestionStart(payload) {
   // UNHIDE & START TV COUNTDOWN TIMER IMMEDIATELY
   if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
   startCountdown(totalTimerDuration);
+  playSound('question_start');
 
   // Reset player answer choice state and dismiss previous result modal for new question
   playerChoiceSubmitted = null;
@@ -3562,14 +3786,14 @@ function onQuestionStart(payload) {
   }
   if (playerQuestionText) playerQuestionText.textContent = cleanQText;
 
-  const optA = document.getElementById('p-opt-a');
-  if (optA) optA.textContent = questionData.options.A;
-  const optB = document.getElementById('p-opt-b');
-  if (optB) optB.textContent = questionData.options.B;
-  const optC = document.getElementById('p-opt-c');
-  if (optC) optC.textContent = questionData.options.C;
-  const optD = document.getElementById('p-opt-d');
-  if (optD) optD.textContent = questionData.options.D;
+  const pOptA = document.getElementById('p-opt-a');
+  if (pOptA) pOptA.textContent = questionData.options.A;
+  const pOptB = document.getElementById('p-opt-b');
+  if (pOptB) pOptB.textContent = questionData.options.B;
+  const pOptC = document.getElementById('p-opt-c');
+  if (pOptC) pOptC.textContent = questionData.options.C;
+  const pOptD = document.getElementById('p-opt-d');
+  if (pOptD) pOptD.textContent = questionData.options.D;
 
   if (playerStatusBadge) {
     playerStatusBadge.className = 'status-badge status-active';
@@ -3696,6 +3920,11 @@ function startPlayerReviewCountdown(seconds, targetEpochMs) {
       const rem = updateBadge();
       if (rem <= 0) {
         clearInterval(playerReviewInterval);
+        hideResultModal();
+        if (typeof triggerActiveSessionSync === 'function') {
+          triggerActiveSessionSync();
+        }
+        broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
       }
     }, 500);
   }
@@ -3735,7 +3964,8 @@ function onTimerExpired(payload) {
     hostTimerSecs.textContent = `${reviewSeconds}s`;
   }
   if (btnSkip) {
-    btnSkip.textContent = '⏩ Next Q';
+    const skipTxt = document.getElementById('btn-skip-text');
+    if (skipTxt) skipTxt.textContent = 'Next Q';
     btnSkip.classList.remove('hidden');
   }
 
@@ -3818,12 +4048,18 @@ function onTimerExpired(payload) {
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
-  if (isCorrect) {
+  const activeView = document.body.getAttribute('data-view') || 'tv';
+  if (activeView === 'tv') {
+    // TV Display reveals the correct answer to the room with celebratory chime
     playSound('correct');
-  } else if (playerChoiceSubmitted) {
-    playSound('wrong');
   } else {
-    playSound('buzz');
+    if (isCorrect) {
+      playSound('correct');
+    } else if (playerChoiceSubmitted) {
+      playSound('wrong');
+    } else {
+      playSound('buzz');
+    }
   }
 
   if (isCorrect && currentPlayer) {
@@ -3921,6 +4157,11 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
     if (modalTimerVal) modalTimerVal.textContent = rem;
     if (rem <= 0) {
       clearInterval(modalCountdownInterval);
+      hideResultModal();
+      if (typeof triggerActiveSessionSync === 'function') {
+        triggerActiveSessionSync();
+      }
+      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
     }
   };
 
@@ -3929,8 +4170,14 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   modalCountdownInterval = setInterval(updateModalCountdown, 500);
 
   overlay.classList.remove('hidden');
-  // Stay on screen until the next question is loaded (no tap dismissal, no early timeout)
-  overlay.onclick = null;
+  // Tap-to-dismiss fallback guarantees player is never trapped
+  overlay.onclick = () => {
+    hideResultModal();
+    if (typeof triggerActiveSessionSync === 'function') {
+      triggerActiveSessionSync();
+    }
+    broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+  };
 }
 
 function hideResultModal() {
@@ -4121,10 +4368,14 @@ function initPlayerControls() {
 
     const enteredRoom = (roomInput?.value || '').trim();
     if (enteredRoom) {
-      currentRoomCode = enteredRoom.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      currentRoomCode = enteredRoom.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     }
 
     const rawNick = (nicknameInput?.value || '').trim();
+    if (rawNick && isFictitiousPlayer(rawNick)) {
+      alert('This name is reserved for the Host. Please choose a different nickname to play!');
+      return;
+    }
     const nickname = rawNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
 
     safeStorage.setItem('bar_trivia_player_nickname', nickname);
@@ -4201,43 +4452,75 @@ function initPlayerControls() {
       });
     }
 
-    function checkActiveGameSession() {
+    async function syncSessionFromSupabase() {
       // Periodic player heartbeat ensures TV display maintains sync
       if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
         sendJoinBroadcast();
       }
 
-      supabase.from('game_sessions')
-        .select('*')
-        .or(`room_code.eq.${currentRoomCode},room_code.eq.TRIV`)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            if (data.status === 'pre_game_countdown') {
-              const rem = Math.max(1, Math.ceil((data.starts_at - Date.now()) / 1000));
-              const rNum = data.current_round || data.round_number || currentRound;
-              handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum, genre: data.genre });
-            } else if (data.status === 'question_active' && data.question_data) {
-              const qData = data.question_data;
-              const now = Date.now();
-              const endsAt = data.timer_ends_at || (now + 20000);
-              if ((endsAt - now) > -15000) {
-                if (!currentQuestionData || currentQuestionData.id !== qData.id || currentGameState !== 'QUESTION_ACTIVE') {
-                  const rNum = data.current_round || data.round_number || qData.round_number || qData.roundNumber || currentRound;
-                  handleIncomingQuestionStart({
-                    ...qData,
-                    question_index: data.current_question_index || 1,
-                    round_number: rNum,
-                    roundNumber: rNum,
-                    duration_seconds: data.duration_seconds || 20,
-                    timer_ends_at_epoch_ms: data.timer_ends_at
-                  });
-                }
+      try {
+        const code = (currentRoomCode || 'TRIV').trim().toUpperCase();
+        let { data, error } = await supabase.from('game_sessions')
+          .select('*')
+          .eq('room_code', code)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if ((!data || data.length === 0) && code !== 'TRIV') {
+          const fallbackRes = await supabase.from('game_sessions')
+            .select('*')
+            .eq('room_code', 'TRIV')
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          data = fallbackRes.data;
+        }
+
+        const session = (data && data.length > 0) ? data[0] : null;
+        if (session) {
+          if (session.status === 'pre_game_countdown') {
+            const rem = Math.max(1, Math.ceil((session.starts_at - Date.now()) / 1000));
+            const rNum = session.current_round || session.round_number || currentRound;
+            handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum, genre: session.genre });
+          } else if (session.status === 'question_active' && session.question_data) {
+            const qData = session.question_data;
+            const now = Date.now();
+            const endsAt = session.timer_ends_at || (now + 20000);
+            if ((endsAt - now) > -15000) {
+              const sessionQIdx = session.current_question_index || 0;
+              const curQIdx = currentQuestionIndex || 0;
+              const qText = qData.text || qData.question || '';
+              const curText = currentQuestionData ? (currentQuestionData.text || currentQuestionData.question || '') : '';
+              const isNewQuestion = !currentQuestionData ||
+                (sessionQIdx > 0 && sessionQIdx !== curQIdx) ||
+                (qData.id && currentQuestionData.id && qData.id !== currentQuestionData.id) ||
+                (qText && curText && qText !== curText) ||
+                currentGameState !== 'QUESTION_ACTIVE';
+
+              if (isNewQuestion) {
+                hideResultModal();
+                const rNum = session.current_round || session.round_number || qData.round_number || qData.roundNumber || currentRound;
+                handleIncomingQuestionStart({
+                  ...qData,
+                  question_index: session.current_question_index || 1,
+                  round_number: rNum,
+                  roundNumber: rNum,
+                  duration_seconds: session.duration_seconds || 20,
+                  timer_ends_at_epoch_ms: session.timer_ends_at
+                });
               }
             }
           }
-        }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('[Sync] checkActiveGameSession error:', err);
+      }
     }
+
+    function checkActiveGameSession() {
+      syncSessionFromSupabase();
+    }
+
+    triggerActiveSessionSync = checkActiveGameSession;
     checkActiveGameSession();
     setInterval(checkActiveGameSession, 2000);
   }
@@ -4385,7 +4668,11 @@ function onGameReset() {
   }
   if (hostTimerFill) hostTimerFill.style.width = '100%';
   if (hostTimerSecs) hostTimerSecs.textContent = `${selectedQuestionDuration}s`;
-  if (btnSkip) btnSkip.classList.add('hidden');
+  if (btnSkip) {
+    btnSkip.classList.add('hidden');
+    const skipTxt = document.getElementById('btn-skip-text');
+    if (skipTxt) skipTxt.textContent = 'Skip Q';
+  }
 
   const hostAnswerGrid = document.getElementById('host-live-answer-grid');
   if (hostAnswerGrid) hostAnswerGrid.classList.add('hidden');
