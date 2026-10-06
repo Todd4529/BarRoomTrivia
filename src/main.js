@@ -64,6 +64,8 @@ let lbScrollInterval = null;
 let promoCarouselInterval = null;
 let currentPromoSlideIndex = 1;
 let playerChoiceSubmitted = null;
+let isCurrentQuestionScored = false;
+let lastScoredQuestionKey = null;
 let mockPlayerTimeouts = [];
 let currentRoundQuestions = [];
 
@@ -1269,6 +1271,7 @@ function handleIncomingPreGameCountdown(rawPayload) {
   currentGameState = 'COUNTDOWN';
   currentQuestionData = null;
   playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
 
   const rNum = Number(payload.round_number || payload.roundNumber);
   if (rNum && rNum > 0) {
@@ -3563,6 +3566,7 @@ function handleHostAdvanceAfterRoundSummary() {
   currentRoundQuestions = [];
   currentQuestionData = null;
   playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
 
   const nextRound = Math.floor(currentQuestionIndex / 10) + 1;
   currentRound = nextRound;
@@ -3681,6 +3685,7 @@ function onQuestionStart(payload) {
   currentQuestionData = questionData;
   totalTimerDuration = durationSeconds;
   playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
 
   hideResultModal();
   hideWinnerModals();
@@ -3816,6 +3821,7 @@ function onQuestionStart(payload) {
 
   // Reset player answer choice state and dismiss previous result modal for new question
   playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
   hideResultModal();
   hideWinnerModals();
 
@@ -4090,76 +4096,85 @@ function onTimerExpired(payload) {
   tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
+  const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
-  const activeView = document.body.getAttribute('data-view') || 'tv';
-  if (activeView === 'tv') {
-    // TV Display reveals the correct answer to the room with celebratory chime
-    playSound('correct');
-  } else {
-    if (isCorrect) {
+  if (!isCurrentQuestionScored && lastScoredQuestionKey !== qIdentifier) {
+    isCurrentQuestionScored = true;
+    lastScoredQuestionKey = qIdentifier;
+
+    const activeView = document.body.getAttribute('data-view') || 'tv';
+    if (activeView === 'tv') {
+      // TV Display reveals the correct answer to the room with celebratory chime
       playSound('correct');
-    } else if (playerChoiceSubmitted) {
-      playSound('wrong');
     } else {
-      playSound('buzz');
+      if (isCorrect) {
+        playSound('correct');
+      } else if (playerChoiceSubmitted) {
+        playSound('wrong');
+      } else {
+        playSound('buzz');
+      }
     }
-  }
 
-  if (isCorrect && currentPlayer) {
-    currentPlayer.streak = (currentPlayer.streak || 0) + 1;
-    const pointsEarned = 10;
-    currentPlayer.score += pointsEarned;
-    const scoreVal = document.getElementById('player-score-val');
-    if (scoreVal) scoreVal.textContent = currentPlayer.score;
+    if (isCorrect && currentPlayer) {
+      currentPlayer.streak = (currentPlayer.streak || 0) + 1;
+      const pointsEarned = 10;
+      currentPlayer.score += pointsEarned;
+      const scoreVal = document.getElementById('player-score-val');
+      if (scoreVal) scoreVal.textContent = currentPlayer.score;
 
-    const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
-    if (targetPlayer) {
-      targetPlayer.score = currentPlayer.score;
-      targetPlayer.cumulative_score = currentPlayer.score;
-      targetPlayer.streak = currentPlayer.streak;
-    } else {
-      playersLeaderboard.push({
+      const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+      if (targetPlayer) {
+        targetPlayer.score = currentPlayer.score;
+        targetPlayer.cumulative_score = currentPlayer.score;
+        targetPlayer.streak = currentPlayer.streak;
+      } else {
+        playersLeaderboard.push({
+          nickname: currentPlayer.nickname,
+          score: currentPlayer.score,
+          cumulative_score: currentPlayer.score,
+          streak: currentPlayer.streak
+        });
+      }
+      renderLeaderboard();
+      broadcastRealtimeEvent('leaderboard_updated', {
+        players: playersLeaderboard,
+        leaderboard: playersLeaderboard,
+        room_code: currentRoomCode,
+      });
+      broadcastRealtimeEvent('player_score_updated', {
         nickname: currentPlayer.nickname,
         score: currentPlayer.score,
         cumulative_score: currentPlayer.score,
-        streak: currentPlayer.streak
+        points_earned: pointsEarned,
+        room_code: currentRoomCode,
       });
-    }
-    renderLeaderboard();
-    broadcastRealtimeEvent('leaderboard_updated', {
-      players: playersLeaderboard,
-      leaderboard: playersLeaderboard,
-      room_code: currentRoomCode,
-    });
-    broadcastRealtimeEvent('player_score_updated', {
-      nickname: currentPlayer.nickname,
-      score: currentPlayer.score,
-      cumulative_score: currentPlayer.score,
-      points_earned: pointsEarned,
-      room_code: currentRoomCode,
-    });
 
-    // Also persist directly to Supabase DB so score is preserved
-    try {
-      supabase.from('players').upsert({
-        room_code: currentRoomCode.toUpperCase(),
-        nickname: currentPlayer.nickname,
-        player_uid: currentPlayer.nickname,
-        cumulative_score: currentPlayer.score,
-        is_connected: true
-      }, { onConflict: 'room_code, nickname' });
-    } catch (_) {}
+      // Also persist directly to Supabase DB so score is preserved
+      try {
+        supabase.from('players').upsert({
+          room_code: currentRoomCode.toUpperCase(),
+          nickname: currentPlayer.nickname,
+          player_uid: currentPlayer.nickname,
+          cumulative_score: currentPlayer.score,
+          is_connected: true
+        }, { onConflict: 'room_code, nickname' });
+      } catch (_) {}
 
-    const randomQuote = getRandomItem(funnyCorrectQuotes);
-    showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch);
-    confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
-  } else {
-    if (currentPlayer) {
-      currentPlayer.streak = 0;
+      const randomQuote = getRandomItem(funnyCorrectQuotes);
+      showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch);
+      confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
+    } else {
+      if (currentPlayer) {
+        currentPlayer.streak = 0;
+      }
+      const randomQuote = getRandomItem(funnyWrongQuotes);
+      showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch);
     }
-    const randomQuote = getRandomItem(funnyWrongQuotes);
-    showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch);
+
+    // Clear playerChoiceSubmitted after grading this question
+    playerChoiceSubmitted = null;
   }
 }
 
@@ -4685,6 +4700,9 @@ function onGameReset() {
   updateGenreQueueUI();
   renderLeaderboard();
   currentGameState = 'LOBBY';
+  playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
+  lastScoredQuestionKey = null;
   hideResultModal();
   hideWinnerModals();
 
