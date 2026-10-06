@@ -115,6 +115,9 @@ class GameEngineManager {
         correctOption: question.correctOption,
         nextQuestionStartsAtEpochMs: nextQuestionStartsAtEpochMs,
         gamePlayMode: gamePlayMode,
+        questionId: question.id,
+        questionIndex: currentQuestionIndex,
+        roundNumber: currentRound,
       );
 
       // Check if 10-question round has completed
@@ -255,6 +258,9 @@ class GameEngineManager {
         correctOption: question.correctOption,
         nextQuestionStartsAtEpochMs: nextQuestionStartsAtEpochMs,
         gamePlayMode: gamePlayMode,
+        questionId: question.id,
+        questionIndex: currentQuestionIndex,
+        roundNumber: currentRound,
       );
 
       if (gamePlayMode == 'Auto') {

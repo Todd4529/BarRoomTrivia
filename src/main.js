@@ -72,6 +72,7 @@ let currentRoundQuestions = [];
 let remainingTimerSeconds = 0;
 let totalTimerDuration = 20;
 let timerEndsAtGlobalMs = 0;
+let questionStartTimeLocal = 0;
 let currentQuestionData = null;
 let currentGameState = 'LOBBY';
 
@@ -1264,6 +1265,38 @@ function broadcastRealtimeEvent(event, payload = {}) {
   }
 }
 
+// Deadline fields expressed in the SENDER's clock (TV / host device)
+const SENDER_EPOCH_KEYS = [
+  'timer_ends_at_epoch_ms',
+  'timerEndsAtMs',
+  'starts_at_epoch_ms',
+  'next_question_starts_at_epoch_ms',
+  'nextQuestionStartsAtEpochMs',
+  'next_round_starts_at_epoch_ms',
+  'nextRoundStartsAtEpochMs',
+];
+
+/**
+ * Re-bases absolute deadlines from the sender's clock onto this device's clock.
+ * Phones and Android TV boxes often disagree by many seconds; without this, a
+ * player whose clock runs ahead sees a deadline that is already past and the
+ * question times out after ~1 second. Offsets under 1.5s are normal latency.
+ */
+function normalizeIncomingClockSkew(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const sent = Number(payload.timestamp || payload.sent_at_epoch_ms || 0);
+  if (!sent) return payload;
+  const skew = Date.now() - sent;
+  if (Math.abs(skew) < 1500) return payload;
+  const out = { ...payload };
+  SENDER_EPOCH_KEYS.forEach(key => {
+    const v = Number(out[key]);
+    if (v > 0) out[key] = v + skew;
+  });
+  out.timestamp = sent + skew;
+  return out;
+}
+
 function handleIncomingPreGameCountdown(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing pre_game_countdown:', payload);
@@ -1396,7 +1429,12 @@ function handleIncomingQuestionStart(rawPayload) {
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
   timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || (Date.now() + durationSeconds * 1000);
-  const remainingSecs = Math.max(1, Math.min(durationSeconds, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)));
+  let remainingMs = timerEndsAtGlobalMs - Date.now();
+  if (remainingMs <= 4000) {
+    timerEndsAtGlobalMs = Date.now() + durationSeconds * 1000;
+    remainingMs = durationSeconds * 1000;
+  }
+  const remainingSecs = Math.max(5, Math.min(durationSeconds, Math.ceil(remainingMs / 1000)));
 
   isAutomatedEngineRunning = true;
   updateHostEngineUI('IN PROGRESS');
@@ -1413,6 +1451,20 @@ function handleIncomingQuestionStart(rawPayload) {
 function handleIncomingTimerExpired(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing timer_expired:', payload);
+
+  // Guard against stale timer_expired events:
+  // 1. Ignore if current question started within the last 4 seconds
+  if (currentGameState === 'QUESTION_ACTIVE' && (Date.now() - questionStartTimeLocal) < 4000) {
+    console.warn('[Realtime] Ignoring stale timer_expired received within 4s of question start');
+    return;
+  }
+  // 2. Ignore if payload specifies a question id that doesn't match current question
+  const expiredQId = payload.question_id || payload.questionId || payload.id;
+  if (expiredQId && currentQuestionData?.id && String(expiredQId) !== String(currentQuestionData.id)) {
+    console.warn('[Realtime] Ignoring timer_expired for different question id:', expiredQId, 'vs', currentQuestionData.id);
+    return;
+  }
+
   const nextEpoch = payload.next_question_starts_at_epoch_ms || 
                     payload.nextQuestionStartsAtEpochMs || 
                     (Date.now() + 15000);
@@ -1427,7 +1479,7 @@ function handleIncomingTimerExpired(rawPayload) {
 
 function handleRealtimeIncomingEvent(event, data) {
   const normEvent = (event || '').toLowerCase();
-  const payload = data.payload || data;
+  const payload = normalizeIncomingClockSkew(data.payload || data);
 
   if (normEvent === 'pre_game_countdown') {
     handleIncomingPreGameCountdown(payload);
@@ -1605,7 +1657,9 @@ function initRealtimeEngine() {
             pendingMqttMessages = [];
             queued.forEach(p => {
               try {
-                const jsonStr = JSON.stringify(p);
+                // Re-stamp with the actual send time; deadlines stay absolute so
+                // receivers correctly treat stale queued events as expired.
+                const jsonStr = JSON.stringify({ ...p, timestamp: Date.now() });
                 mqttClient.publish(topic, jsonStr);
                 if (topic !== 'barrooms_trivia/room_TRIV') mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
                 mqttClient.publish('tv_pairing', jsonStr);
@@ -3475,6 +3529,9 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
     questionIndex: currentQuestionIndex,
     roundNumber: currentRound,
     questionNumberInRound: questionInRound,
+    question_id: question.id,
+    id: question.id,
+    timestamp: Date.now(),
     game_play_mode: 'Auto',
   };
 
@@ -3655,6 +3712,7 @@ function clearMockPlayerTimeouts() {
 // 5. QUESTION START HANDLER (STARTS TV & PLAYER COUNTDOWN TIMERS IMMEDIATELY)
 function onQuestionStart(payload) {
   if (!payload) return;
+  questionStartTimeLocal = Date.now();
   const qObj = payload.questionData || payload.question_data || payload;
   const opts = qObj.options || payload.options || {};
   const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
@@ -3865,8 +3923,12 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
-  const initialRem = timerEndsAtGlobalMs > 0 ? Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000)) : seconds;
-  remainingTimerSeconds = Math.min(seconds, initialRem);
+  let initialRem = timerEndsAtGlobalMs > 0 ? Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000) : seconds;
+  if (initialRem <= 4 && seconds > 4) {
+    initialRem = seconds;
+    timerEndsAtGlobalMs = Date.now() + seconds * 1000;
+  }
+  remainingTimerSeconds = Math.min(seconds, Math.max(1, initialRem));
   updateTimerUI();
 
   let lastTickedSecond = -1;

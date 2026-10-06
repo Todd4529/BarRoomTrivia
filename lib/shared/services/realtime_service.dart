@@ -18,6 +18,45 @@ class RealtimeService {
   StreamSubscription<Map<String, dynamic>>? _localSubscription;
   StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
 
+  /// Epoch-millisecond deadline fields that are expressed in the SENDER's clock.
+  static const List<String> _senderEpochKeys = [
+    'timer_ends_at_epoch_ms',
+    'timerEndsAtMs',
+    'starts_at_epoch_ms',
+    'next_question_starts_at_epoch_ms',
+    'nextQuestionStartsAtEpochMs',
+    'next_round_starts_at_epoch_ms',
+    'nextRoundStartsAtEpochMs',
+  ];
+
+  /// Re-bases absolute deadlines from the sender's clock onto this device's clock.
+  ///
+  /// Different devices (Android TV boxes, phones) frequently have clocks that
+  /// disagree by many seconds. Without correction, a player whose clock runs
+  /// ahead of the TV/host sees a deadline that is already (almost) past and the
+  /// question times out after ~1 second. Every broadcast carries the sender's
+  /// `timestamp`, so `now - timestamp` approximates the clock offset (plus a
+  /// small network latency). Offsets under 1.5s are treated as normal latency.
+  static Map<String, dynamic> normalizeClockSkew(Map<String, dynamic> payload) {
+    final sentRaw = payload['timestamp'] ?? payload['sent_at_epoch_ms'];
+    final sent = sentRaw is num ? sentRaw.toInt() : int.tryParse('${sentRaw ?? ''}');
+    if (sent == null || sent <= 0) return payload;
+
+    final skew = DateTime.now().millisecondsSinceEpoch - sent;
+    if (skew.abs() < 1500) return payload;
+
+    final out = Map<String, dynamic>.from(payload);
+    for (final key in _senderEpochKeys) {
+      final v = out[key];
+      if (v is num && v > 0) {
+        out[key] = v.toInt() + skew;
+      }
+    }
+    // Re-stamp so downstream code sees a consistent local-clock payload
+    out['timestamp'] = sent + skew;
+    return out;
+  }
+
   /// Subscribe to a room's broadcast channel
   RealtimeChannel joinRoomChannel({
     required String roomCode,
@@ -33,7 +72,8 @@ class RealtimeService {
   }) {
     void handleEvent(dynamic rawData) {
       if (rawData is Map<String, dynamic>) {
-        final data = rawData;
+        // Convert sender-clock deadlines to this device's clock
+        final data = normalizeClockSkew(rawData);
         final eventRoom = (data['room_code'] as String?)?.toUpperCase();
         final currentRoom = roomCode.toUpperCase();
         
@@ -119,17 +159,17 @@ class RealtimeService {
       ch
           .onBroadcast(
             event: 'question_start',
-            callback: (payload) => onQuestionBroadcast(payload),
+            callback: (payload) => onQuestionBroadcast(normalizeClockSkew(payload)),
           )
           .onBroadcast(
             event: 'timer_expired',
-            callback: (payload) => onTimerExpiredBroadcast(payload),
+            callback: (payload) => onTimerExpiredBroadcast(normalizeClockSkew(payload)),
           )
           .onBroadcast(
             event: 'pre_game_countdown',
             callback: (payload) {
               if (onPreGameCountdownBroadcast != null) {
-                onPreGameCountdownBroadcast(payload);
+                onPreGameCountdownBroadcast(normalizeClockSkew(payload));
               }
             },
           )
@@ -145,7 +185,7 @@ class RealtimeService {
             event: 'game_resuming',
             callback: (payload) {
               if (onGameResumingBroadcast != null) {
-                onGameResumingBroadcast(payload);
+                onGameResumingBroadcast(normalizeClockSkew(payload));
               }
             },
           )
@@ -161,7 +201,7 @@ class RealtimeService {
             event: 'round_completed',
             callback: (payload) {
               if (onRoundCompletedBroadcast != null) {
-                onRoundCompletedBroadcast(payload);
+                onRoundCompletedBroadcast(normalizeClockSkew(payload));
               }
             },
           )
@@ -251,6 +291,7 @@ class RealtimeService {
       'event': 'pre_game_countdown',
       'room_code': roomCode,
       'starts_at_epoch_ms': startsAtEpochMs,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
       if (roundNumber != null) 'round_number': roundNumber,
       if (roundNumber != null) 'roundNumber': roundNumber,
       if (genre != null) 'genre': genre,
@@ -369,6 +410,7 @@ class RealtimeService {
       'id': question.id,
       'duration_seconds': durationSeconds,
       'timer_ends_at_epoch_ms': timerEndsAtEpochMs,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
       'category': question.category,
       'genre': question.category,
       'difficulty': question.difficulty,
@@ -437,6 +479,9 @@ class RealtimeService {
     String? correctOption,
     int? nextQuestionStartsAtEpochMs,
     String gamePlayMode = 'Auto',
+    String? questionId,
+    int? questionIndex,
+    int? roundNumber,
   }) async {
       final targetEpoch = nextQuestionStartsAtEpochMs ?? (DateTime.now().millisecondsSinceEpoch + 15000);
       final payload = {
@@ -447,6 +492,10 @@ class RealtimeService {
         'nextQuestionStartsAtEpochMs': targetEpoch,
         'game_play_mode': gamePlayMode,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        if (questionId != null) 'question_id': questionId,
+        if (questionId != null) 'id': questionId,
+        if (questionIndex != null) 'question_index': questionIndex,
+        if (roundNumber != null) 'round_number': roundNumber,
       };
 
     _localEventBus.add(payload);

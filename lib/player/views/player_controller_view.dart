@@ -33,6 +33,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   // Realtime Question State
   Question? _currentQuestion;
+  DateTime? _questionStartedAt;
+  String? _currentQuestionId;
   String? _selectedOption;
   String? _correctOption;
   bool _inputsLocked = true;
@@ -166,11 +168,25 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
         if (question != null) {
           final nowMs = DateTime.now().millisecondsSinceEpoch;
-          final remainingMs = (timerEndsAtEpochMs ?? (nowMs + 20000)) - nowMs;
-          final durationSec = (remainingMs / 1000).ceil().clamp(0, 180);
+          final fallbackDuration = (payload['duration_seconds'] as num?)?.toInt() ??
+              (payload['durationSeconds'] as num?)?.toInt() ??
+              20;
+          final remainingMs = (timerEndsAtEpochMs ?? (nowMs + fallbackDuration * 1000)) - nowMs;
+          int durationSec = (remainingMs / 1000).ceil().clamp(0, 180);
 
+          // Defensive guard against clock drift or packet lag:
+          // A question should NEVER start with <= 4 seconds remaining.
+          // If clock skew caused remainingMs <= 4000, fallback to configured duration.
+          if (durationSec <= 4) {
+            durationSec = fallbackDuration > 4 ? fallbackDuration : 20;
+          }
+
+          _questionStartedAt = DateTime.now();
+          _currentQuestionId = question.id;
+          _localTimer?.cancel();
           _interQuestionTimer?.cancel();
           _interRoundTimer?.cancel();
+          _resultOverlayTimer?.cancel();
           setState(() {
             _isGamePaused = false;
             _isPreGameCountdown = false;
@@ -190,7 +206,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             if (rFromPayload != null && rFromPayload > 0) {
               _currentRound = max(_currentRound, rFromPayload);
             }
-            _remainingSeconds = durationSec > 0 ? durationSec : 60;
+            _remainingSeconds = durationSec;
             _questionNumberInRound = ((qIndex - 1) % 10) + 1;
           });
 
@@ -198,6 +214,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
       },
       onTimerExpiredBroadcast: (payload) {
+        // Defensive check: Guard against stale timer_expired events.
+        // 1. Ignore if current question started less than 3.5 seconds ago.
+        if (_questionStartedAt != null &&
+            DateTime.now().difference(_questionStartedAt!).inMilliseconds < 3500) {
+          debugPrint('[Player] Ignoring stale timer_expired received within 3.5s of question start');
+          return;
+        }
+
+        // 2. Ignore if expired payload has a question_id that does not match current question.
+        final expiredQId = (payload['question_id'] ?? payload['questionId'] ?? payload['id']) as String?;
+        if (expiredQId != null && _currentQuestionId != null && expiredQId != _currentQuestionId) {
+          debugPrint('[Player] Ignoring timer_expired for mismatching question ID: $expiredQId vs $_currentQuestionId');
+          return;
+        }
+
         _lockInputsAndReveal(payload['correct_option'] as String?);
 
         final mode = payload['game_play_mode'] as String? ?? 'Auto';

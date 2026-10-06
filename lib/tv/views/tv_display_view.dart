@@ -41,6 +41,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _totalQuestionsInRound = 10;
   int _currentRound = 1;
   Timer? _timer;
+  DateTime? _questionStartedAt;
   bool _isGameActive = false;
   bool _isTimerExpired = false;
   bool _isGamePaused = false;
@@ -565,6 +566,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   void _startTimer() {
     _timer?.cancel();
+    _questionStartedAt = DateTime.now();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_remainingSeconds > 0) {
         setState(() {
@@ -578,6 +580,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   void _onTimerEnded([Map<String, dynamic>? payload]) async {
+    // If receiving a remote timer_expired, guard against stale packets from previous questions
+    if (payload != null &&
+        _questionStartedAt != null &&
+        DateTime.now().difference(_questionStartedAt!).inMilliseconds < 3500) {
+      debugPrint('[TV] Ignoring stale timer_expired received within 3.5s of question start');
+      return;
+    }
+
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
@@ -595,6 +605,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         correctOption: _currentQuestion?.correctOption,
         nextQuestionStartsAtEpochMs: nextStartsAt,
         gamePlayMode: mode,
+        questionId: _currentQuestion?.id,
+        questionIndex: _questionIndex,
+        roundNumber: _currentRound,
       );
     }
 
