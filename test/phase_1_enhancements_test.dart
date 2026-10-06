@@ -194,5 +194,27 @@ void main() {
       simulatePlaySound('correct');
       expect(soundPlaysCount, equals(4), reason: 'Sounds resume when enabled');
     });
+
+    test('Player mode displays NEXT ROUND STARTING IN..... and countdown between rounds across Flutter and Web', () {
+      final playerFlutter = File('lib/player/views/player_controller_view.dart').readAsStringSync();
+      final indexHtml = File('index.html').readAsStringSync();
+      final mainJs = File('src/main.js').readAsStringSync();
+
+      // Flutter Player View
+      expect(playerFlutter.contains('NEXT ROUND STARTING IN.....'), isTrue,
+          reason: 'Flutter player controller must display NEXT ROUND STARTING IN.....');
+      expect(playerFlutter.contains('_buildInterRoundCard'), isTrue,
+          reason: 'Flutter player controller must contain _buildInterRoundCard widget');
+      expect(playerFlutter.contains('_isInterRoundPhase'), isTrue,
+          reason: 'Flutter player controller must track _isInterRoundPhase state');
+
+      // Web Player View
+      expect(indexHtml.contains('NEXT ROUND STARTING IN.....'), isTrue,
+          reason: 'index.html player winner overlay must contain NEXT ROUND STARTING IN.....');
+      expect(indexHtml.contains('id="player-winner-next-round-timer"'), isTrue,
+          reason: 'index.html must contain player-winner-next-round-timer countdown element');
+      expect(mainJs.contains('NEXT ROUND STARTING IN.....'), isTrue,
+          reason: 'src/main.js must update player card with NEXT ROUND STARTING IN.....');
+    });
   });
 }

@@ -4374,14 +4374,36 @@ function onRoundWinner(payload) {
 
   let remWinnerSecs = payload?.delaySeconds || 15;
   if (tvNextRoundTimer) tvNextRoundTimer.textContent = remWinnerSecs;
-  if (playerWinnerTimer) playerWinnerTimer.textContent = remWinnerSecs;
+  if (playerWinnerTimer) playerWinnerTimer.textContent = String(remWinnerSecs).padStart(2, '0');
+
+  // Also display NEXT ROUND STARTING IN..... directly on the player question card
+  const playerQuestionText = document.getElementById('player-question-text');
+  const playerCategoryPill = document.getElementById('player-category-pill');
+  const statusText = document.getElementById('status-text');
+  if (playerQuestionText) {
+    playerQuestionText.innerHTML = `
+      <div style="text-align:center; padding: 12px 0;">
+        <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">NEXT ROUND STARTING IN.....</div>
+        <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">0:${String(remWinnerSecs).padStart(2, '0')}</div>
+        <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${currentRound} Complete • Ready for Next Round!</div>
+      </div>
+    `;
+  }
+  if (playerCategoryPill) {
+    playerCategoryPill.textContent = `ROUND ${currentRound} COMPLETE`;
+  }
+  if (statusText) {
+    statusText.textContent = 'INTERMISSION';
+  }
 
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     remWinnerSecs--;
     const currentSecs = Math.max(0, remWinnerSecs);
     if (tvNextRoundTimer) tvNextRoundTimer.textContent = currentSecs;
-    if (playerWinnerTimer) playerWinnerTimer.textContent = currentSecs;
+    if (playerWinnerTimer) playerWinnerTimer.textContent = String(currentSecs).padStart(2, '0');
+    const cardTimer = document.getElementById('player-card-round-timer');
+    if (cardTimer) cardTimer.textContent = `0:${String(currentSecs).padStart(2, '0')}`;
 
     if (remWinnerSecs <= 0) {
       clearInterval(winnerCountdownInterval);

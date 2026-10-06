@@ -56,6 +56,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   bool _isScoredForThisQuestion = false;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
+  bool _isInterRoundPhase = false;
+  int _interRoundSecondsRemaining = 15;
+  Timer? _interRoundTimer;
   bool _showResultOverlay = false;
   Timer? _resultOverlayTimer;
 
@@ -167,10 +170,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           final durationSec = (remainingMs / 1000).ceil().clamp(0, 180);
 
           _interQuestionTimer?.cancel();
+          _interRoundTimer?.cancel();
           setState(() {
             _isGamePaused = false;
             _isPreGameCountdown = false;
             _isInterQuestionPhase = false;
+            _isInterRoundPhase = false;
             _showResultOverlay = false;
             _showRoundWinnersOverlay = false;
             _preGameTimer?.cancel();
@@ -242,9 +247,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _currentRound = max(_currentRound, rFromPayload);
         }
 
+        _interRoundTimer?.cancel();
         setState(() {
           _isGamePaused = false;
           _isPreGameCountdown = true;
+          _isInterRoundPhase = false;
           _showResultOverlay = false;
           _showRoundWinnersOverlay = false;
           _isInterQuestionPhase = false;
@@ -262,10 +269,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _localTimer?.cancel();
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
+        _interRoundTimer?.cancel();
         setState(() {
           _isGamePaused = true;
           _isResumeCountdownActive = false;
           _isPreGameCountdown = false;
+          _isInterRoundPhase = false;
           _showResultOverlay = false;
           _inputsLocked = true;
         });
@@ -312,6 +321,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
         _interQuestionTimer?.cancel();
+        _interRoundTimer?.cancel();
 
         final mode = payload['reset_mode'] as String? ?? 'keep_scores';
 
@@ -323,10 +333,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _inputsLocked = false;
             _isReviewPhase = false;
             _showResultOverlay = false;
+            _showRoundWinnersOverlay = false;
             _isPreGameCountdown = false;
             _isGamePaused = false;
             _isResumeCountdownActive = false;
             _isInterQuestionPhase = false;
+            _isInterRoundPhase = false;
 
             if (mode == 'zero_scores') {
               _myScore = 0;
@@ -350,7 +362,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       },
       onRoundCompletedBroadcast: (payload) {
         if (!mounted) return;
+        _localTimer?.cancel();
         _interQuestionTimer?.cancel();
+        _preGameTimer?.cancel();
+        _resumeTimer?.cancel();
+        _interRoundTimer?.cancel();
 
         List<Map<String, dynamic>> parsedWinners = [];
         try {
@@ -374,7 +390,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
             (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
         final delaySec = nextStartsAt != null
-            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
+            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 60))
             : 15;
         final completedR = (payload['completed_round'] as num?)?.toInt() ??
             (payload['round_number'] as num?)?.toInt() ??
@@ -404,6 +420,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
 
         setState(() {
+          _isInterRoundPhase = true;
+          _interRoundSecondsRemaining = delaySec;
           _top3Winners = parsedWinners;
           _showRoundWinnersOverlay = parsedWinners.isNotEmpty;
           _showResultOverlay = false;
@@ -411,22 +429,29 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _currentQuestion = null;
           _selectedOption = null;
           _correctOption = null;
-          _inputsLocked = false;
+          _inputsLocked = true;
           _isReviewPhase = false;
           _isScoredForThisQuestion = false;
         });
 
-        Future.delayed(Duration(seconds: delaySec), () {
-          if (mounted) {
+        _interRoundTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          if (_interRoundSecondsRemaining > 1) {
             setState(() {
-              _showRoundWinnersOverlay = false;
-              _currentQuestion = null;
-              _selectedOption = null;
-              _correctOption = null;
-              _inputsLocked = false;
-              _isReviewPhase = false;
-              _isScoredForThisQuestion = false;
+              _interRoundSecondsRemaining--;
             });
+          } else {
+            timer.cancel();
+            if (mounted) {
+              setState(() {
+                _interRoundSecondsRemaining = 0;
+                _isInterRoundPhase = false;
+                _showRoundWinnersOverlay = false;
+              });
+            }
           }
         });
       },
@@ -568,6 +593,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   void dispose() {
     _resultOverlayTimer?.cancel();
     _localTimer?.cancel();
+    _interQuestionTimer?.cancel();
+    _interRoundTimer?.cancel();
+    _preGameTimer?.cancel();
+    _resumeTimer?.cancel();
     _nicknameController.dispose();
     _roomCodeController.dispose();
     _realtimeService.leaveChannel();
@@ -700,6 +729,46 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                                 ),
                               );
                             }),
+                            const SizedBox(height: 16),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: AppTheme.darkBackground,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppTheme.neonYellow, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.neonYellow.withOpacity(0.35),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'NEXT ROUND STARTING IN.....',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.neonYellow,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '0:${_interRoundSecondsRemaining.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      letterSpacing: 2.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1046,10 +1115,164 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           const SizedBox(height: 16),
           Expanded(
             child: _currentQuestion == null
-                ? _buildWaitingOrCountdownCard()
+                ? (_isInterRoundPhase
+                    ? _buildInterRoundCard()
+                    : _buildWaitingOrCountdownCard())
                 : _buildQuestionContent(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInterRoundCard() {
+    return Center(
+      child: SingleChildScrollView(
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppTheme.neonYellow,
+              width: 2.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.neonYellow.withOpacity(0.25),
+                blurRadius: 28,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonYellow.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.neonYellow,
+                    width: 2.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.hourglass_top_rounded,
+                  size: 56,
+                  color: AppTheme.neonYellow,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'ROUND COMPLETED!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  color: AppTheme.neonYellow,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Get Ready for Round $_currentRound',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white70,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkBackground,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppTheme.neonYellow, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonYellow.withOpacity(0.35),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'NEXT ROUND STARTING IN.....',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.neonYellow,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '0:${_interRoundSecondsRemaining.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_top3Winners.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                const Text(
+                  'TOP PLAYERS THIS ROUND',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white60,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...List.generate(_top3Winners.length.clamp(0, 3), (idx) {
+                  final w = _top3Winners[idx];
+                  final badges = ['🥇', '🥈', '🥉'];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${badges[idx]} ${(w['nickname'] as String? ?? '').toUpperCase()}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '${w['score']} pts',
+                          style: const TextStyle(
+                            color: AppTheme.neonYellow,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
