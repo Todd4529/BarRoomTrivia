@@ -274,8 +274,12 @@ class GenreQuestionsEngine {
 
         int candIdx = 0;
         for (int wIdx = 0; wIdx < newWrongs.length; wIdx++) {
-          if (prevWrongs.contains(newWrongs[wIdx].toLowerCase()) && candIdx < candidates.length) {
-            newWrongs[wIdx] = candidates[candIdx++];
+          if (prevWrongs.contains(newWrongs[wIdx].toLowerCase())) {
+            if (candIdx < candidates.length) {
+              newWrongs[wIdx] = candidates[candIdx++];
+            } else {
+              newWrongs[wIdx] = '${cleanGenre} Variant ${i + wIdx + 1}';
+            }
           }
         }
 
@@ -341,11 +345,17 @@ class GenreQuestionsEngine {
       ['Sorachi Ace', 'Distinct lemon verbena and dill', 'Japan', 'Dual-Purpose'],
     ];
 
+    final hopNames = hops.map((h) => h[0]).toList();
+    final hopAromas = hops.map((h) => h[1]).toList();
+    final hopOrigins = hops.map((h) => h[2]).toSet().toList();
+    hopOrigins.addAll(['Germany', 'USA', 'New Zealand', 'Australia', 'Czech Republic', 'UK', 'France', 'Slovenia', 'Japan']);
+    final hopTypes = ['Dual-Purpose', 'Aroma', 'Bittering', 'Noble Hop', 'Late Addition'];
+
     for (var h in hops) {
-      addQ('hb_h_aroma_${h[0]}', 'Which hop variety is celebrated in homebrewing for imparting aromas of ${h[1]}?', h[0], 'Cascade', 'Saaz', 'Magnum');
-      addQ('hb_h_orig_${h[0]}', 'In homebrewing craft beer, what country of origin is the famous "${h[0]}" hop originally from?', h[2], 'Germany', 'USA', 'New Zealand');
-      addQ('hb_h_type_${h[0]}', 'What is the primary brewing category designation for the "${h[0]}" hop variety?', h[3], 'Malt Substitute', 'Grain Adjuvant', 'Water Salt');
-      addQ('hb_h_pair_${h[0]}', 'When brewing a modern Pale Ale, adding "${h[0]}" during dry hopping imparts which primary flavor profile?', h[1], 'Sour Green Apple', 'Heavy Butterscotch', 'Burnt Toast');
+      addQ('hb_h_aroma_${h[0]}', 'Which hop variety is celebrated in homebrewing for imparting aromas of ${h[1]}?', h[0], '', '', '', distractorPool: hopNames);
+      addQ('hb_h_orig_${h[0]}', 'In homebrewing craft beer, what country of origin is the famous "${h[0]}" hop originally from?', h[2], '', '', '', distractorPool: hopOrigins);
+      addQ('hb_h_type_${h[0]}', 'What is the primary brewing category designation for the "${h[0]}" hop variety?', h[3], '', '', '', distractorPool: hopTypes);
+      addQ('hb_h_pair_${h[0]}', 'When brewing a modern Pale Ale, adding "${h[0]}" during dry hopping imparts which primary flavor profile?', h[1], '', '', '', distractorPool: hopAromas);
     }
 
     final malts = [
@@ -371,10 +381,14 @@ class GenreQuestionsEngine {
       ['Wheat Malt', 'High-protein grain delivering fluffy white head in German Hefeweizens', 'Base Malt'],
     ];
 
+    final maltNames = malts.map((m) => m[0]).toList();
+    final maltDescs = malts.map((m) => m[1]).toList();
+    final maltCats = ['Base Malt', 'Caramel / Crystal', 'Roasted Malt', 'Adjunct Grain', 'Specialty Malt', 'Roasted Grain'];
+
     for (var m in malts) {
-      addQ('hb_m_desc_${m[0]}', 'In homebrew grain bills, which malted grain is specifically known for "${m[1]}"?', m[0], 'Flaked Corn', 'Dextrose', 'Black Patent');
-      addQ('hb_m_cat_${m[0]}', 'What functional category does "${m[0]}" belong to in homebrew recipe formulation?', m[2], 'Hop Derivative', 'Sanitizing Aid', 'Fining Agent');
-      addQ('hb_m_use_${m[0]}', 'Why would an all-grain homebrewer include "${m[0]}" in their grain bill?', m[1], 'To increase water chlorine', 'To cool the fermenter', 'To kill wild yeast');
+      addQ('hb_m_desc_${m[0]}', 'In homebrew grain bills, which malted grain is specifically known for "${m[1]}"?', m[0], '', '', '', distractorPool: maltNames);
+      addQ('hb_m_cat_${m[0]}', 'What functional category does "${m[0]}" belong to in homebrew recipe formulation?', m[2], '', '', '', distractorPool: maltCats);
+      addQ('hb_m_use_${m[0]}', 'Why would an all-grain homebrewer include "${m[0]}" in their grain bill?', m[1], '', '', '', distractorPool: maltDescs);
     }
 
     final yeasts = [
@@ -395,9 +409,13 @@ class GenreQuestionsEngine {
       ['Irish Ale Yeast (WLP004)', 'Leaves light diacetyl-smoothness and rich maltiness in Irish Red Ales and Dry Stouts', 'Ale Yeast (Top-Fermenting)'],
     ];
 
+    final yeastNames = yeasts.map((y) => y[0]).toList();
+    final yeastCats = yeasts.map((y) => y[2]).toSet().toList();
+    yeastCats.addAll(['Lager Yeast (Bottom-Fermenting)', 'Wheat Beer Yeast', 'Belgian Ale Yeast', 'Farmhouse Ale Yeast', 'Saison Yeast', 'Wild Yeast', 'Hybrid Lager Yeast']);
+
     for (var y in yeasts) {
-      addQ('hb_y_prof_${y[0]}', 'Which brewing yeast strain is characterized by "${y[1]}"?', y[0], 'Bread Baker Yeast', 'Wine Champagne Yeast', 'Distiller Turbo Yeast');
-      addQ('hb_y_type_${y[0]}', 'What classification does the brewing yeast "${y[0]}" represent?', y[2], 'Hop Extract', 'Mash Chemical', 'Water Mineral');
+      addQ('hb_y_prof_${y[0]}', 'Which brewing yeast strain is characterized by "${y[1]}"?', y[0], '', '', '', distractorPool: yeastNames);
+      addQ('hb_y_type_${y[0]}', 'What classification does the brewing yeast "${y[0]}" represent?', y[2], '', '', '', distractorPool: yeastCats);
     }
 
     final bjcpStyles = [
@@ -423,10 +441,15 @@ class GenreQuestionsEngine {
       ['Gose', '5 - 12 IBU', 'Historical German tart wheat ale brewed with ground coriander and sea salt'],
     ];
 
+    final styleNames = bjcpStyles.map((s) => s[0]).toList();
+    final allIbus = bjcpStyles.map((s) => s[1]).toSet().toList();
+    allIbus.addAll(['15 - 25 IBU', '35 - 55 IBU', '70 - 100 IBU', '10 - 20 IBU', '45 - 65 IBU', '5 - 15 IBU', '20 - 30 IBU']);
+    final styleChars = bjcpStyles.map((s) => s[2]).toList();
+
     for (var s in bjcpStyles) {
-      addQ('hb_s_ibu_${s[0]}', 'According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s[0]}"?', s[1], '0 - 5 IBU', '150 - 250 IBU', '500 IBU');
-      addQ('hb_s_char_${s[0]}', 'Which sensory characteristic accurately defines a homebrewed "${s[0]}"?', s[2], 'Extreme Artificial Blue Dye', 'Smoky Ash with Zero Carbonation', 'Zero Yeast Presence');
-      addQ('hb_s_ident_${s[0]}', 'When entering a homebrew competition, which beer style entry requires "${s[2]}"?', s[0], 'Hard Seltzer', 'Apple Cider', 'Gluten-Free Ginger Beer');
+      addQ('hb_s_ibu_${s[0]}', 'According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s[0]}"?', s[1], '', '', '', distractorPool: allIbus);
+      addQ('hb_s_char_${s[0]}', 'Which sensory characteristic accurately defines a homebrewed "${s[0]}"?', s[2], '', '', '', distractorPool: styleChars);
+      addQ('hb_s_ident_${s[0]}', 'When entering a homebrew competition, which beer style entry requires "${s[2]}"?', s[0], '', '', '', distractorPool: styleNames);
     }
 
     final brewingStepsAndChemistry = [
@@ -457,9 +480,11 @@ class GenreQuestionsEngine {
       ['Oxidation / Trans-2-Nonenal', 'Cardboard, stale papery, or sherry off-flavor caused by exposing warm or finished beer to air'],
     ];
 
+    final stepDefs = brewingStepsAndChemistry.map((s) => s[1]).toList();
+
     for (var step in brewingStepsAndChemistry) {
-      addQ('hb_step_def_${step[0]}', 'In all-grain homebrewing, what does "${step[0]}" refer to?', step[1], 'Discarding the brew batch', 'Freezing the grain overnight', 'Burning the boil kettle');
-      addQ('hb_step_goal_${step[0]}', 'What is the primary technical objective of "${step[0]}" during a brew session?', step[1], 'To increase water chlorine levels', 'To ruin yeast cell viability', 'To turn beer cloudy intentionally');
+      addQ('hb_step_def_${step[0]}', 'In all-grain homebrewing, what does "${step[0]}" refer to?', step[1], '', '', '', distractorPool: stepDefs);
+      addQ('hb_step_goal_${step[0]}', 'What is the primary technical objective of "${step[0]}" during a brew session?', step[1], '', '', '', distractorPool: stepDefs);
     }
   }
 
@@ -488,10 +513,20 @@ class GenreQuestionsEngine {
       ['Chartreuse (Green)', 'Complex French liqueur made by Carthusian Monks since 1737 from a secret recipe of 130 plants', 'France'],
     ];
 
+    final spiritDefs = spirits.map((s) => s[1]).toList();
+    spiritDefs.addAll([
+      'Distilled from pure fermented clover honey aged in acacia wood casks',
+      'Aged exclusively in stainless steel tanks without any yeast fermentation',
+      'Distilled from 100% malted oats and filtered through activated volcanic pumice',
+      'Neutral grain spirit infused with botanical aromatics and citrus peel',
+    ]);
+    final spiritOrigins = spirits.map((s) => s[2]).toSet().toList();
+    spiritOrigins.addAll(['Scotland', 'Ireland', 'USA (Kentucky)', 'Mexico', 'France (Cognac)', 'Japan', 'Caribbean', 'Brazil', 'Italy', 'Germany', 'Canada', 'Spain', 'Portugal', 'Netherlands']);
+
     for (var s in spirits) {
-      addQ('bws_sp_req_${s[0]}', 'What legal criteria or production process defines "${s[0]}"?', s[1], 'Distilled only from pure honey', 'Aged in stainless steel without yeast', 'Bottled at exactly 10% ABV');
-      addQ('bws_sp_reg_${s[0]}', 'What geographic country or origin region is historically home to "${s[0]}"?', s[2], 'Australia', 'South Africa', 'Iceland');
-      addQ('bws_sp_main_${s[0]}', 'Which raw agricultural ingredient forms the primary foundation for "${s[0]}"?', s[1], 'Distilled Water Only', 'Concentrated Sugar Syrup', 'Boiled Oak Chips');
+      addQ('bws_sp_req_${s[0]}', 'What legal criteria or production process defines "${s[0]}"?', s[1], '', '', '', distractorPool: spiritDefs);
+      addQ('bws_sp_reg_${s[0]}', 'What geographic country or origin region is historically home to "${s[0]}"?', s[2], '', '', '', distractorPool: spiritOrigins);
+      addQ('bws_sp_main_${s[0]}', 'Which raw agricultural ingredient forms the primary foundation for "${s[0]}"?', s[1], '', '', '', distractorPool: spiritDefs);
     }
 
     final cocktails = [
@@ -517,9 +552,19 @@ class GenreQuestionsEngine {
       ['Cosmopolitan', 'Citron Vodka, Cointreau, Fresh Lime Juice, and Splash of Cranberry Juice', 'Martini Glass'],
     ];
 
+    final cocktailRecipes = cocktails.map((c) => c[1]).toList();
+    cocktailRecipes.addAll([
+      'Dark Jamaican Rum, Cranberry Juice, and Condensed Sweet Milk',
+      'Silver Tequila, Apple Cider, and Spicy Ginger Ale with Cinnamon',
+      'Dry Red Wine, Kentucky Bourbon, Lemon Juice, and Clover Honey',
+      'London Dry Gin, Elderflower Liqueur, Fresh Grapefruit Juice, and Club Soda'
+    ]);
+    final cocktailGlasses = cocktails.map((c) => c[2]).toSet().toList();
+    cocktailGlasses.addAll(['Rocks Glass / Tumbler', 'Coupe / Martini Glass', 'Highball / Collins Glass', 'Copper Mug', 'Old Fashioned Glass', 'Champagne Flute', 'Wine Glass with Ice', 'Tiki / Double Rocks Glass', 'Hurricane Glass', 'Snifter Glass', 'Nick & Nora Glass']);
+
     for (var c in cocktails) {
-      addQ('bws_ck_ing_${c[0]}', 'What ingredients comprise the official IBA recipe for a classic "${c[0]}"?', c[1], 'Dark Rum, Cranberry Juice, and Milk', 'Tequila, Apple Juice, and Ginger Ale', 'Red Wine, Bourbon, and Honey');
-      addQ('bws_ck_glass_${c[0]}', 'In traditional cocktail bartending, which glassware is standard for serving a "${c[0]}"?', c[2], 'Pint Glass', 'Coffee Mug', 'Shooter Glass');
+      addQ('bws_ck_ing_${c[0]}', 'What ingredients comprise the official IBA recipe for a classic "${c[0]}"?', c[1], '', '', '', distractorPool: cocktailRecipes);
+      addQ('bws_ck_glass_${c[0]}', 'In traditional cocktail bartending, which glassware is standard for serving a "${c[0]}"?', c[2], '', '', '', distractorPool: cocktailGlasses);
     }
 
     final wines = [
@@ -540,9 +585,19 @@ class GenreQuestionsEngine {
       ['Sherry', 'Fortified Spanish wine aged under a protective layer of yeast called "Flor" in a dynamic Solera system', 'Spain (Jerez-Xérès-Sherry)'],
     ];
 
+    final wineProfiles = wines.map((w) => w[1]).toList();
+    wineProfiles.addAll([
+      'Crisp bone-dry white wine with high minerality, green apple, and flinty salinity',
+      'Rich oxidative dessert wine aged under flor yeast in fractional blending soleras',
+      'Medium-bodied ruby red wine with lively acidity, red cherry, and rustic herbal earth',
+      'Full-bodied deep black-purple wine displaying blackberry jam, violet florals, and cocoa'
+    ]);
+    final wineRegions = wines.map((w) => w[2]).toSet().toList();
+    wineRegions.addAll(['Bordeaux (Left Bank)', 'Burgundy', 'Napa Valley', 'Mendoza, Argentina', 'Rioja, Spain', 'Tuscany, Italy', 'Mosel, Germany', 'Champagne, France', 'Marlborough, New Zealand', 'Barossa Valley, Australia', 'Piedmont, Italy', 'Douro Valley, Portugal']);
+
     for (var w in wines) {
-      addQ('bws_wn_char_${w[0]}', 'Which tasting profile and varietal characteristic defines the "${w[0]}" grape?', w[1], 'Sweet sugary carbonation with blue raspberry flavor', 'Heavy smoked peat with zero fruit presence', 'Low acid with artificial bubblegum aroma');
-      addQ('bws_wn_reg_${w[0]}', 'What world wine region is internationally iconic for producing world-class "${w[0]}"?', w[2], 'Sahara Desert', 'Amazon Rainforest', 'Siberian Tundra');
+      addQ('bws_wn_char_${w[0]}', 'Which tasting profile and varietal characteristic defines the "${w[0]}" grape?', w[1], '', '', '', distractorPool: wineProfiles);
+      addQ('bws_wn_reg_${w[0]}', 'What world wine region is internationally iconic for producing world-class "${w[0]}"?', w[2], '', '', '', distractorPool: wineRegions);
     }
   }
 
@@ -581,9 +636,18 @@ class GenreQuestionsEngine {
       ['Oort Cloud', 'Vast theoretical spherical shell of icy planetesimals surrounding our solar system out to nearly a light-year'],
     ];
 
+    final bodyNames = celestialBodies.map((b) => b[0]).toList();
+    final bodyDefs = celestialBodies.map((b) => b[1]).toList();
+    bodyDefs.addAll([
+      'A rapidly rotating neutron star emitting periodic electromagnetic pulses',
+      'A vast spherical shell of icy planetesimals surrounding our solar system out to a light-year',
+      'An ancient cratered asteroid in the main belt exhibiting signs of past cryovolcanism',
+      'A supermassive gravitational singularity at the center of a distant elliptical galaxy'
+    ]);
+
     for (var b in celestialBodies) {
-      addQ('ast_body_${b[0]}', 'In astronomy and space exploration, what describes "${b[0]}"?', b[1], 'A comet made of pure molten lava', 'An artificial satellite launched by ancient Rome', 'A star that orbits inside Earth\'s mantle');
-      addQ('ast_ident_${b[0]}', 'Which celestial object or mission is identified as "${b[1]}"?', b[0], 'Halley\'s Comet', 'The North Star', 'Kepler-22b');
+      addQ('ast_body_${b[0]}', 'In astronomy and space exploration, what describes "${b[0]}"?', b[1], '', '', '', distractorPool: bodyDefs);
+      addQ('ast_ident_${b[0]}', 'Which celestial object or mission is identified as "${b[1]}"?', b[0], '', '', '', distractorPool: bodyNames);
     }
 
     final spaceConcepts = [
@@ -599,9 +663,18 @@ class GenreQuestionsEngine {
       ['Solar Wind', 'Stream of charged particles (electrons and protons) released from the upper atmosphere of the Sun across the solar system'],
     ];
 
+    final conceptNames = spaceConcepts.map((c) => c[0]).toList();
+    final conceptDefs = spaceConcepts.map((c) => c[1]).toList();
+    conceptDefs.addAll([
+      'The apparent shift in frequency of electromagnetic waves emitted by a moving celestial body',
+      'The rate of cosmic expansion of the observable universe measured in kilometers per second per megaparsec',
+      'The theoretical boundary where the solar wind is slowed by the interstellar medium',
+      'The point of closest approach in an elliptical orbit around the Sun'
+    ]);
+
     for (var c in spaceConcepts) {
-      addQ('ast_cncpt_${c[0]}', 'What is the precise astronomical definition of "${c[0]}"?', c[1], 'The time it takes for Earth to stop rotating', 'The gravitational pull of the Moon on Mars', 'The highest temperature recorded on Mercury');
-      addQ('ast_term_${c[0]}', 'Which scientific term denotes "${c[1]}"?', c[0], 'Doppler Effect', 'Hubble Constant', 'Fermi Paradox');
+      addQ('ast_cncpt_${c[0]}', 'What is the precise astronomical definition of "${c[0]}"?', c[1], '', '', '', distractorPool: conceptDefs);
+      addQ('ast_term_${c[0]}', 'Which scientific term denotes "${c[1]}"?', c[0], '', '', '', distractorPool: conceptNames);
     }
   }
 
@@ -640,11 +713,17 @@ class GenreQuestionsEngine {
       ['Iceland', 'Reykjavik', 'Europe', 'Blue Lagoon, Gullfoss Waterfall, Golden Circle'],
     ];
 
+    final countryNames = countriesData.map((c) => c[0]).toList();
+    final capitalNames = countriesData.map((c) => c[1]).toList();
+    capitalNames.addAll(['Sydney', 'Rio de Janeiro', 'Zurich', 'Auckland', 'Barcelona', 'Milan', 'Munich', 'Montreal', 'Kyoto', 'Geneva', 'Sao Paulo', 'Frankfurt']);
+    final continentNames = ['Europe', 'Asia', 'Africa', 'North America', 'South America', 'Oceania'];
+    final landmarkList = countriesData.map((c) => c[3]).toList();
+
     for (var c in countriesData) {
-      addQ('geo_cap_${c[0]}', 'What is the official capital city of ${c[0]}?', c[1], 'Sydney', 'Rio de Janeiro', 'Zurich');
-      addQ('geo_cont_${c[0]}', 'On which continent is the sovereign nation of ${c[0]} located?', c[2], 'Antarctica', 'Atlantis', 'Pangea');
-      addQ('geo_lndmk_${c[0]}', 'Which famous world landmarks and geographic wonders are located in ${c[0]}?', c[3], 'Eiffel Tower and Big Ben', 'Statue of Liberty and Golden Gate', 'Mount Everest and Dead Sea');
-      addQ('geo_wh_cap_${c[1]}', '${c[1]} serves as the recognized capital city for which country?', c[0], 'Belgium', 'Austria', 'Denmark');
+      addQ('geo_cap_${c[0]}', 'What is the official capital city of ${c[0]}?', c[1], '', '', '', distractorPool: capitalNames);
+      addQ('geo_cont_${c[0]}', 'On which continent is the sovereign nation of ${c[0]} located?', c[2], '', '', '', distractorPool: continentNames);
+      addQ('geo_lndmk_${c[0]}', 'Which famous world landmarks and geographic wonders are located in ${c[0]}?', c[3], '', '', '', distractorPool: landmarkList);
+      addQ('geo_wh_cap_${c[1]}', '${c[1]} serves as the recognized capital city for which country?', c[0], '', '', '', distractorPool: countryNames);
     }
 
     final physicalGeography = [
@@ -670,9 +749,18 @@ class GenreQuestionsEngine {
       ['Madagascar', 'Fourth-largest island in the world, located off the southeastern coast of Africa with unique endemic wildlife'],
     ];
 
+    final physNames = physicalGeography.map((p) => p[0]).toList();
+    final physDefs = physicalGeography.map((p) => p[1]).toList();
+    physDefs.addAll([
+      'The highest uninterrupted waterfall dropping over 3,200 feet down an isolated tabletop mountain',
+      'The driest non-polar desert in the world situated between the Pacific Ocean and the Andes',
+      'An enormous submerged oceanic trench reaching depths greater than 36,000 feet in the western Pacific',
+      'A vast geological rift valley created by tectonic divergence across eastern Africa'
+    ]);
+
     for (var p in physicalGeography) {
-      addQ('geo_phys_${p[0]}', 'What geographic description identifies "${p[0]}"?', p[1], 'An artificial canal through Antarctica', 'A volcanic island in the center of Lake Michigan', 'A mountain range dividing Germany and France');
-      addQ('geo_wh_phys_${p[0]}', 'Which geographical feature or landmark is characterized as "${p[1]}"?', p[0], 'Dead Sea', 'Grand Canyon', 'Mount Kilimanjaro');
+      addQ('geo_phys_${p[0]}', 'What geographic description identifies "${p[0]}"?', p[1], '', '', '', distractorPool: physDefs);
+      addQ('geo_wh_phys_${p[0]}', 'Which geographical feature or landmark is characterized as "${p[1]}"?', p[0], '', '', '', distractorPool: physNames);
     }
   }
 
@@ -711,9 +799,13 @@ class GenreQuestionsEngine {
       ['Coronation of Charlemagne', '800 AD', 'Pope Leo III crowned the King of the Franks as Emperor of the Romans in Rome'],
     ];
 
+    final eventYears = historicalEvents.map((h) => h[1]).toList();
+    eventYears.addAll(['1066', '1215', '1453', '1492', '1517', '1776', '1789', '1804', '1815', '1848', '1861', '1865', '1914', '1918', '1929', '1939', '1945', '1962', '1969', '1989', '1991']);
+    final eventNames = historicalEvents.map((h) => h[0]).toList();
+
     for (var h in historicalEvents) {
-      addQ('hist_ev_yr_${h[0]}', 'In which historic year did the "${h[0]}" take place?', h[1], '1600', '1999', '1800');
-      addQ('hist_ev_desc_${h[0]}', 'What event in world history is described as: "${h[2]}"?', h[0], 'The Boston Tea Party', 'The Peloponnesian War', 'The Boxer Rebellion');
+      addQ('hist_ev_yr_${h[0]}', 'In which historic year did the "${h[0]}" take place?', h[1], '', '', '', distractorPool: eventYears);
+      addQ('hist_ev_desc_${h[0]}', 'What event in world history is described as: "${h[2]}"?', h[0], '', '', '', distractorPool: eventNames);
     }
 
     final figures = [
@@ -729,9 +821,13 @@ class GenreQuestionsEngine {
       ['Mahatma Gandhi', 'Indian lawyer and political ethicist who led nonviolent resistance against British colonial rule in India'],
     ];
 
+    final figNames = figures.map((f) => f[0]).toList();
+    figNames.addAll(['Attila the Hun', 'King Henry VIII', 'Otto von Bismarck', 'Hammurabi', 'Sun Tzu', 'Saladin', 'Simon Bolivar', 'Augustus Caesar']);
+    final figDefs = figures.map((f) => f[1]).toList();
+
     for (var f in figures) {
-      addQ('hist_fig_${f[0]}', 'Which renowned world historical figure is described as: "${f[1]}"?', f[0], 'Attila the Hun', 'King Henry VIII', 'Otto von Bismarck');
-      addQ('hist_wh_fig_${f[0]}', 'What historical legacy is attributed to "${f[0]}"?', f[1], 'Discovering Antarctica in 1950', 'Building the Great Wall of China alone', 'Inventing the telephone');
+      addQ('hist_fig_${f[0]}', 'Which renowned world historical figure is described as: "${f[1]}"?', f[0], '', '', '', distractorPool: figNames);
+      addQ('hist_wh_fig_${f[0]}', 'What historical legacy is attributed to "${f[0]}"?', f[1], '', '', '', distractorPool: figDefs);
     }
   }
 
@@ -760,10 +856,16 @@ class GenreQuestionsEngine {
       ['Roland Garros', 'The French Open', 'Paris, France', 'Premier clay-court tennis grand slam tournament named after the French aviator'],
     ];
 
+    final teamNames = stadiumData.map((s) => s[1]).toList();
+    teamNames.addAll(['New York Jets', 'Miami Heat', 'Toronto Maple Leafs', 'Golden State Warriors', 'Philadelphia Eagles', 'Liverpool FC', 'Bayern Munich', 'Kansas City Chiefs', 'Boston Celtics']);
+    final locations = stadiumData.map((s) => s[2]).toList();
+    locations.addAll(['Tokyo, Japan', 'Berlin, Germany', 'Sydney, Australia', 'Toronto, Canada', 'Paris, France', 'Miami, FL', 'Philadelphia, PA']);
+    final stadiumFeats = stadiumData.map((s) => s[3]).toList();
+
     for (var s in stadiumData) {
-      addQ('spt_std_team_${s[0]}', 'Which professional sports team or event is based at "${s[0]}"?', s[1], 'New York Jets', 'Miami Heat', 'Toronto Maple Leafs');
-      addQ('spt_std_loc_${s[0]}', 'In which world city or location is "${s[0]}" situated?', s[2], 'Tokyo, Japan', 'Berlin, Germany', 'Sydney, Australia');
-      addQ('spt_std_feat_${s[0]}', 'What iconic architectural feature identifies "${s[0]}"?', s[3], 'A 300-foot ski jump into a swimming pool', 'A glass pitch floating on water', 'A subterranean ice hockey rink');
+      addQ('spt_std_team_${s[0]}', 'Which professional sports team or event is based at "${s[0]}"?', s[1], '', '', '', distractorPool: teamNames);
+      addQ('spt_std_loc_${s[0]}', 'In which world city or location is "${s[0]}" situated?', s[2], '', '', '', distractorPool: locations);
+      addQ('spt_std_feat_${s[0]}', 'What iconic architectural feature identifies "${s[0]}"?', s[3], '', '', '', distractorPool: stadiumFeats);
     }
 
     final sportsRulesAndRecords = [
@@ -784,9 +886,13 @@ class GenreQuestionsEngine {
       ['Cricket World Cup Format (ODI)', '50 Overs per side', 'One Day International cricket tournament organized by the ICC'],
     ];
 
+    final recordNames = sportsRulesAndRecords.map((r) => r[0]).toList();
+    final recordValues = sportsRulesAndRecords.map((r) => r[1]).toList();
+    recordValues.addAll(['100 Points', '90 Minutes', '24 Seconds', '50 Overs', '17-0 Season', '7 Championships', '24 Grand Slams', '2,857 Points', '2,632 Consecutive Games']);
+
     for (var r in sportsRulesAndRecords) {
-      addQ('spt_rec_val_${r[0]}', 'What is the official sports record or metric for "${r[0]}"?', r[1], '100 Hours', '0 Points', '100,000 Meters');
-      addQ('spt_rec_wh_${r[0]}', 'Which sporting rule or historic achievement is defined as: "${r[2]}"?', r[0], 'Tour de France Yellow Jersey', 'Stanley Cup Playoffs', 'Decathlon Event');
+      addQ('spt_rec_val_${r[0]}', 'What is the official sports record or metric for "${r[0]}"?', r[1], '', '', '', distractorPool: recordValues);
+      addQ('spt_rec_wh_${r[0]}', 'Which sporting rule or historic achievement is defined as: "${r[2]}"?', r[0], '', '', '', distractorPool: recordNames);
     }
   }
 
@@ -815,10 +921,17 @@ class GenreQuestionsEngine {
       ['Blade Runner (1982)', 'Ridley Scott', 'Harrison Ford & Rutger Hauer', '"All those moments will be lost in time, like tears in rain."'],
     ];
 
+    final directors = movieData.map((m) => m[1]).toSet().toList();
+    directors.addAll(['Martin Scorsese', 'Stanley Kubrick', 'David Fincher', 'Alfred Hitchcock', 'Peter Jackson', 'Christopher Nolan', 'Ridley Scott', 'Steven Spielberg', 'Quentin Tarantino', 'Francis Ford Coppola', 'James Cameron', 'Denis Villeneuve', 'Joel and Ethan Coen']);
+    final casts = movieData.map((m) => m[2]).toList();
+    casts.addAll(['Will Smith & Kevin Hart', 'Ben Stiller & Owen Wilson', 'Adam Sandler & Chris Rock', 'Tom Cruise & Brad Pitt', 'Robert De Niro & Al Pacino']);
+    final quotes = movieData.map((m) => m[3]).toList();
+    quotes.addAll(['"Show me the money!"', '"There\'s no place like home."', '"Houston, we have a problem."', '"Frankly, my dear, I don\'t give a damn."', '"You talking to me?"']);
+
     for (var m in movieData) {
-      addQ('mov_dir_${m[0]}', 'Who directed the celebrated cinematic masterpiece "${m[0]}"?', m[1], 'Michael Bay', 'M. Night Shyamalan', 'Brett Ratner');
-      addQ('mov_cast_${m[0]}', 'Which actors starred in the lead roles in "${m[0]}"?', m[2], 'Will Smith & Kevin Hart', 'Ben Stiller & Owen Wilson', 'Adam Sandler & Chris Rock');
-      addQ('mov_quote_${m[0]}', 'Which iconic line or premise is famously featured in "${m[0]}"?', m[3], '"Show me the money!"', '"There\'s no place like home."', '"Houston, we have a problem."');
+      addQ('mov_dir_${m[0]}', 'Who directed the celebrated cinematic masterpiece "${m[0]}"?', m[1], '', '', '', distractorPool: directors);
+      addQ('mov_cast_${m[0]}', 'Which actors starred in the lead roles in "${m[0]}"?', m[2], '', '', '', distractorPool: casts);
+      addQ('mov_quote_${m[0]}', 'Which iconic line or premise is famously featured in "${m[0]}"?', m[3], '', '', '', distractorPool: quotes);
     }
   }
 
@@ -842,10 +955,17 @@ class GenreQuestionsEngine {
       ['Metallica', 'James Hetfield, Lars Ulrich, Kirk Hammett, Cliff Burton', 'Enter Sandman, Master of Puppets, One, Nothing Else Matters', 'Master of Puppets (1986)'],
     ];
 
+    final lineups = rockBands.map((b) => b[1]).toList();
+    lineups.addAll(['Bono, The Edge, Adam Clayton, Larry Mullen Jr.', 'Tom Petty, Mike Campbell, Benmont Tench', 'Sting, Andy Summers, Stewart Copeland', 'Axl Rose, Slash, Duff McKagan', 'Freddie Mercury, Brian May, Roger Taylor, John Deacon']);
+    final hits = rockBands.map((b) => b[2]).toList();
+    hits.addAll(['Stayin\' Alive & Night Fever', 'Sweet Home Alabama & Free Bird', 'Billie Jean & Beat It', 'Pour Some Sugar on Me & Photograph', 'More Than a Feeling & Peace of Mind']);
+    final albums = rockBands.map((b) => b[3]).toList();
+    albums.addAll(['Thriller', 'Born in the U.S.A.', 'The Joshua Tree', 'Slippery When Wet', 'Hysteria', 'Synchronicity', 'Boston']);
+
     for (var b in rockBands) {
-      addQ('rck_mem_${b[0]}', 'Which lineup of musicians composed the legendary rock band "${b[0]}"?', b[1], 'Bono, The Edge, Adam Clayton, Larry Mullen Jr.', 'Tom Petty, Mike Campbell, Benmont Tench', 'Sting, Andy Summers, Stewart Copeland');
-      addQ('rck_hits_${b[0]}', 'Which classic rock anthems were recorded by "${b[0]}"?', b[2], 'Stayin\' Alive & Night Fever', 'Sweet Home Alabama & Free Bird', 'Billie Jean & Beat It');
-      addQ('rck_alb_${b[0]}', 'Which landmark multi-platinum studio album was released by "${b[0]}"?', b[3], 'Thriller', 'Born in the U.S.A.', 'The Joshua Tree');
+      addQ('rck_mem_${b[0]}', 'Which lineup of musicians composed the legendary rock band "${b[0]}"?', b[1], '', '', '', distractorPool: lineups);
+      addQ('rck_hits_${b[0]}', 'Which classic rock anthems were recorded by "${b[0]}"?', b[2], '', '', '', distractorPool: hits);
+      addQ('rck_alb_${b[0]}', 'Which landmark multi-platinum studio album was released by "${b[0]}"?', b[3], '', '', '', distractorPool: albums);
     }
   }
 
@@ -864,9 +984,14 @@ class GenreQuestionsEngine {
       ['Lady Gaga', 'Pop visionary known for theatrical avant-garde performances and Oscar-winning songwriting', 'Bad Romance, Poker Face, Shallow, Born This Way'],
     ];
 
+    final popNames = popIcons.map((p) => p[0]).toList();
+    popNames.addAll(['Justin Bieber', 'Ed Sheeran', 'Bruno Mars', 'Ariana Grande', 'Katy Perry', 'Adele', 'Billie Eilish', 'Rihanna', 'Drake', 'Dua Lipa', 'Harry Styles']);
+    final popHits = popIcons.map((p) => p[2]).toList();
+    popHits.addAll(['Old Town Road, Panini, Rodeo', 'Despacito, Echame la Culpa', 'Uptown Funk, 24K Magic', 'Rolling in the Deep, Someone Like You', 'Shape of You, Perfect, Bad Habits', 'Bad Guy, Ocean Eyes, Happier Than Ever']);
+
     for (var p in popIcons) {
-      addQ('pop_icon_prof_${p[0]}', 'Which pop music superstar is celebrated as: "${p[1]}"?', p[0], 'Justin Bieber', 'Ed Sheeran', 'Post Malone');
-      addQ('pop_icon_hits_${p[0]}', 'Which iconic pop singles were written and performed by "${p[0]}"?', p[2], 'Old Town Road', 'Despacito', 'Uptown Funk');
+      addQ('pop_icon_prof_${p[0]}', 'Which pop music superstar is celebrated as: "${p[1]}"?', p[0], '', '', '', distractorPool: popNames);
+      addQ('pop_icon_hits_${p[0]}', 'Which iconic pop singles were written and performed by "${p[0]}"?', p[2], '', '', '', distractorPool: popHits);
     }
   }
 
@@ -885,8 +1010,16 @@ class GenreQuestionsEngine {
       ['Sweet Caroline (Neil Diamond)', '"Hands, touching hands, reaching out, touching me, touching you, Sweet Caroline, good times never seemed so good"'],
     ];
 
+    final songTitles = lyricQuotes.map((l) => l[0]).toList();
+    songTitles.addAll([
+      'Wonderwall (Oasis)', 'Hey Jude (The Beatles)', 'Free Bird (Lynyrd Skynyrd)',
+      'Stairway to Heaven (Led Zeppelin)', 'Comfortably Numb (Pink Floyd)', 'Dream On (Aerosmith)',
+      'Roxanne (The Police)', 'Livin\' on a Prayer (Bon Jovi)', 'Sweet Child O\' Mine (Guns N\' Roses)',
+      'Smells Like Teen Spirit (Nirvana)', 'Every Breath You Take (The Police)', 'Go Your Own Way (Fleetwood Mac)'
+    ]);
+
     for (var l in lyricQuotes) {
-      addQ('lyr_match_${l[0]}', 'Which famous song features the iconic opening lyric: ${l[1]}?', l[0], 'Wonderwall (Oasis)', 'Hey Jude (The Beatles)', 'Free Bird (Lynyrd Skynyrd)');
+      addQ('lyr_match_${l[0]}', 'Which famous song features the iconic opening lyric: ${l[1]}?', l[0], '', '', '', distractorPool: songTitles);
     }
   }
 
@@ -905,8 +1038,11 @@ class GenreQuestionsEngine {
       ['Slap Bracelets', 'Flexible steel spring bands wrapped in fabric that snapped around wrists in the early 1990s'],
     ];
 
+    final fadNames = retroFads.map((f) => f[0]).toList();
+    fadNames.addAll(['LaserDisc', 'Floppy Disks 5.25"', 'Pagers / Beepers', 'Dial-Up Modems', 'Koosh Balls', 'Skip-It', 'Game Boy Color', 'Polly Pocket', 'Giga Pets', 'Magic 8 Ball', 'Rollerblades']);
+
     for (var f in retroFads) {
-      addQ('nos_fad_${f[0]}', 'What iconic 80s/90s craze or nostalgic artifact is described as: "${f[1]}"?', f[0], 'LaserDisc', 'Floppy Disk 5.25"', 'Pagers / Beepers');
+      addQ('nos_fad_${f[0]}', 'What iconic 80s/90s craze or nostalgic artifact is described as: "${f[1]}"?', f[0], '', '', '', distractorPool: fadNames);
     }
   }
 
@@ -925,8 +1061,18 @@ class GenreQuestionsEngine {
       ['First Law of Thermodynamics', 'Law of Conservation of Energy', 'Energy cannot be created or destroyed, only transformed from one form to another'],
     ];
 
+    final sciDefs = scienceData.map((s) => s[1]).toList();
+    sciDefs.addAll([
+      'Noble gas with atomic number 10 (Neon)',
+      'Weak nuclear force mediated by W and Z gauge bosons',
+      'Subatomic particle with zero electric charge residing in atomic nuclei (Neutron)',
+      'Process of cellular division resulting in four genetically distinct haploid gametes (Meiosis)',
+      'Cellular organelle containing hydrolytic acid enzymes for intracellular waste breakdown (Lysosome)',
+      'Theoretical fundamental particle believed to be an excitation of the Higgs field conferring mass'
+    ]);
+
     for (var s in scienceData) {
-      addQ('sci_fact_${s[0]}', 'In physics, chemistry, and biology, what defines "${s[0]}"?', s[1], 'A liquid that burns at zero degrees', 'A synthetic plastic invented in 2010', 'A magnetic rock found only in volcanoes');
+      addQ('sci_fact_${s[0]}', 'In physics, chemistry, and biology, what defines "${s[0]}"?', s[1], '', '', '', distractorPool: sciDefs);
     }
   }
 
@@ -945,10 +1091,16 @@ class GenreQuestionsEngine {
       ['World of Warcraft', 'Blizzard Entertainment', 'Alliance vs. Horde factions', 'Azeroth, Lich King Arthas, Illidan, MMORPG raids'],
     ];
 
+    final devNames = games.map((g) => g[1]).toSet().toList();
+    devNames.addAll(['Square Enix', 'Capcom', 'Konami', 'Ubisoft', 'Bandai Namco', 'Valve Corporation', 'Epic Games', 'BioWare', 'Sega', 'Atari', 'Electronic Arts']);
+    final charLists = games.map((g) => g[2]).toList();
+    charLists.addAll(['Gordon Freeman & Alyx Vance', 'Kratos & Atreus', 'Geralt of Rivia & Ciri', 'Nathan Drake & Victor Sullivan', 'Arthur Morgan & John Marston', 'Joel Miller & Ellie Williams']);
+    final lores = games.map((g) => g[3]).toList();
+
     for (var g in games) {
-      addQ('vg_dev_${g[0]}', 'Which renowned game studio developed the landmark video game franchise "${g[0]}"?', g[1], 'Atari', 'Electronic Arts', 'SEGA');
-      addQ('vg_chars_${g[0]}', 'Which characters and protagonists star in "${g[0]}"?', g[2], 'Gordon Freeman & Alyx Vance', 'Kratos & Atreus', 'Geralt of Rivia');
-      addQ('vg_lore_${g[0]}', 'Which lore elements and signature mechanics belong to "${g[0]}"?', g[3], 'Tetris falling tetrominoes', 'Pac-Man power pellets in a maze', 'Pong bouncing pixel balls');
+      addQ('vg_dev_${g[0]}', 'Which renowned game studio developed the landmark video game franchise "${g[0]}"?', g[1], '', '', '', distractorPool: devNames);
+      addQ('vg_chars_${g[0]}', 'Which characters and protagonists star in "${g[0]}"?', g[2], '', '', '', distractorPool: charLists);
+      addQ('vg_lore_${g[0]}', 'Which lore elements and signature mechanics belong to "${g[0]}"?', g[3], '', '', '', distractorPool: lores);
     }
   }
 
@@ -967,9 +1119,14 @@ class GenreQuestionsEngine {
       ['Don Quixote (1605)', 'Miguel de Cervantes', 'Don Quixote de la Mancha and Sancho Panza', 'Tilting at windmills in pursuit of chivalric ideals'],
     ];
 
+    final authors = books.map((b) => b[1]).toSet().toList();
+    authors.addAll(['Charles Dickens', 'Mark Twain', 'Leo Tolstoy', 'Ernest Hemingway', 'Virginia Woolf', 'Jane Austen', 'Franz Kafka', 'Victor Hugo', 'Oscar Wilde', 'James Joyce', 'Gabriel Garcia Marquez']);
+    final bookChars = books.map((b) => b[2]).toList();
+    bookChars.addAll(['Ebenezer Scrooge and Tiny Tim', 'Huckleberry Finn and Jim', 'Oliver Twist and Fagin', 'Holden Caulfield in New York', 'Jay Gatsby and Daisy Buchanan']);
+
     for (var b in books) {
-      addQ('lit_auth_${b[0]}', 'Who authored the classic literary work "${b[0]}"?', b[1], 'Charles Dickens', 'Mark Twain', 'Leo Tolstoy');
-      addQ('lit_chars_${b[0]}', 'Which characters and plot elements define "${b[0]}"?', b[2], 'Ebenezer Scrooge and Tiny Tim', 'Huckleberry Finn and Jim', 'Oliver Twist and Fagin');
+      addQ('lit_auth_${b[0]}', 'Who authored the classic literary work "${b[0]}"?', b[1], '', '', '', distractorPool: authors);
+      addQ('lit_chars_${b[0]}', 'Which characters and plot elements define "${b[0]}"?', b[2], '', '', '', distractorPool: bookChars);
     }
   }
 
@@ -988,9 +1145,14 @@ class GenreQuestionsEngine {
       ['Black Panther', 'T\'Challa', 'Wakanda (Fictional African nation)', 'Erik Killmonger, Klaw, M\'Baku', 'Marvel Comics (Fantastic Four #52, 1966)'],
     ];
 
+    final alters = heroes.map((h) => h[1]).toList();
+    alters.addAll(['Matt Murdock (Daredevil)', 'Hal Jordan (Green Lantern)', 'Arthur Curry (Aquaman)', 'Barry Allen (The Flash)', 'Stephen Strange (Doctor Strange)', 'Reed Richards (Mister Fantastic)', 'Dick Grayson (Nightwing)', 'Wade Wilson (Deadpool)']);
+    final rogues = heroes.map((h) => h[3]).toList();
+    rogues.addAll(['Darth Vader & Emperor Palpatine', 'Sauron & Saruman', 'Lord Voldemort & Death Eaters', 'Doctor Doom & Magneto', 'Thanos & The Black Order', 'Darkseid & Steppenwolf']);
+
     for (var h in heroes) {
-      addQ('cmc_alter_${h[0]}', 'What is the secret civilian alter-ego identity of "${h[0]}"?', h[1], 'Arthur Dent', 'John Connor', 'Luke Skywalker');
-      addQ('cmc_rogue_${h[0]}', 'Which arch-nemeses and supervillains battle "${h[0]}" in comic lore?', h[3], 'Darth Vader & Emperor Palpatine', 'Sauron & Saruman', 'Voldemort & Death Eaters');
+      addQ('cmc_alter_${h[0]}', 'What is the secret civilian alter-ego identity of "${h[0]}"?', h[1], '', '', '', distractorPool: alters);
+      addQ('cmc_rogue_${h[0]}', 'Which arch-nemeses and supervillains battle "${h[0]}" in comic lore?', h[3], '', '', '', distractorPool: rogues);
     }
   }
 
@@ -1009,9 +1171,14 @@ class GenreQuestionsEngine {
       ['The Scream', 'Edvard Munch', 'Expressionist composition depicting an agonized figure against a blood-red sky', 'National Museum (Oslo, Norway)'],
     ];
 
+    final artists = art.map((a) => a[1]).toSet().toList();
+    artists.addAll(['Claude Monet', 'Rembrandt van Rijn', 'Andy Warhol', 'Johannes Vermeer', 'Edgar Degas', 'Henri Matisse', 'Paul Cézanne', 'Caravaggio', 'Gustav Klimt', 'Georgia O\'Keeffe']);
+    final museums = art.map((a) => a[3]).toList();
+    museums.addAll(['The British Museum (London)', 'The Prado Museum (Madrid)', 'The Hermitage (Saint Petersburg)', 'Rijksmuseum (Amsterdam)', 'Uffizi Gallery (Florence)', 'Metropolitan Museum of Art (Met, New York)']);
+
     for (var a in art) {
-      addQ('art_crtr_${a[0]}', 'Who is the master artist or architect who created "${a[0]}"?', a[1], 'Claude Monet', 'Rembrandt', 'Andy Warhol');
-      addQ('art_loc_${a[0]}', 'Where is the original masterpiece "${a[0]}" permanently housed or located?', a[3], 'The British Museum', 'The Prado Museum', 'The Hermitage');
+      addQ('art_crtr_${a[0]}', 'Who is the master artist or architect who created "${a[0]}"?', a[1], '', '', '', distractorPool: artists);
+      addQ('art_loc_${a[0]}', 'Where is the original masterpiece "${a[0]}" permanently housed or located?', a[3], '', '', '', distractorPool: museums);
     }
   }
 
@@ -1030,9 +1197,13 @@ class GenreQuestionsEngine {
       ['Pyramids of Giza', 'Giza, Egypt', 'Oldest of the Seven Wonders of the Ancient World, built as royal tombs for Pharaohs Khufu, Khafre, Menkaure'],
     ];
 
+    final lmkLocs = landmarks.map((l) => l[1]).toList();
+    lmkLocs.addAll(['Tokyo, Japan', 'Berlin, Germany', 'Sydney, Australia', 'Athens, Greece', 'Barcelona, Spain', 'Moscow, Russia', 'Istanbul, Turkey', 'Kyoto, Japan', 'Venice, Italy', 'Cape Town, South Africa']);
+    final lmkDefs = landmarks.map((l) => l[2]).toList();
+
     for (var l in landmarks) {
-      addQ('lmk_loc_${l[0]}', 'In which world city or country is the famous landmark "${l[0]}" located?', l[1], 'Tokyo, Japan', 'Berlin, Germany', 'Sydney, Australia');
-      addQ('lmk_desc_${l[0]}', 'What historical context identifies "${l[0]}"?', l[2], 'A medieval lighthouse in Norway', 'A wooden palace built in 1990', 'A modern underground train terminal');
+      addQ('lmk_loc_${l[0]}', 'In which world city or country is the famous landmark "${l[0]}" located?', l[1], '', '', '', distractorPool: lmkLocs);
+      addQ('lmk_desc_${l[0]}', 'What historical context identifies "${l[0]}"?', l[2], '', '', '', distractorPool: lmkDefs);
     }
   }
 
@@ -1051,8 +1222,18 @@ class GenreQuestionsEngine {
       ['Fermentation (Culinary)', 'Metabolic conversion of carbohydrates into alcohols or organic acids using yeasts or bacteria (e.g. Kimchi, Sourdough)'],
     ];
 
+    final foodDefs = food.map((f) => f[1]).toList();
+    foodDefs.addAll([
+      'Technique of rapidly searing meat at high temperature to lock in natural juices',
+      'Japanese skewered chicken cooked over binchōtan white charcoal (Yakitori)',
+      'Emulsified warm sauce made from clarified butter, egg yolks, and white wine vinegar (Béarnaise)',
+      'Traditional Italian rice dish cooked with broth until creamy and al dente (Risotto)',
+      'Culinary technique of gently poaching delicate foods in warm liquid just below simmering point',
+      'Cold Spanish soup made of blended raw vegetables including ripe tomatoes, cucumbers, and olive oil (Gazpacho)'
+    ]);
+
     for (var f in food) {
-      addQ('cul_term_${f[0]}', 'What is the definition of "${f[0]}" in culinary arts and gastronomy?', f[1], 'A poisonous mushroom species', 'An artificial zero-calorie sweetener', 'A cooking oil extracted from pine needles');
+      addQ('cul_term_${f[0]}', 'What is the definition of "${f[0]}" in culinary arts and gastronomy?', f[1], '', '', '', distractorPool: foodDefs);
     }
   }
 
@@ -1071,8 +1252,17 @@ class GenreQuestionsEngine {
       ['Vitamin D', 'Fat-soluble vitamin synthesized in skin exposed to sunlight, vital for calcium absorption and bone health'],
     ];
 
+    final hlthDefs = health.map((h) => h[1]).toList();
+    hlthDefs.addAll([
+      'Small auditory bone transmitting sound vibrations to the cochlea in the middle ear (Stapes)',
+      'Specialized digestive enzyme in saliva breaking down complex starches into maltose (Amylase)',
+      'Dense fibrous connective tissue attaching muscle securely to skeletal bone (Tendon)',
+      'Stress hormone synthesized by adrenal glands stimulating fight-or-flight sympathetic response (Epinephrine)',
+      'Primary contractile muscle separating thoracic and abdominal cavities driving pulmonary respiration (Diaphragm)'
+    ]);
+
     for (var h in health) {
-      addQ('hlth_med_${h[0]}', 'In human biology and medicine, what describes "${h[0]}"?', h[1], 'A muscle located inside the earlobe', 'A bone found in the finger tip', 'An artificial chemical used in tooth fillings');
+      addQ('hlth_med_${h[0]}', 'In human biology and medicine, what describes "${h[0]}"?', h[1], '', '', '', distractorPool: hlthDefs);
     }
   }
 
@@ -1111,8 +1301,16 @@ class GenreQuestionsEngine {
       ['Wire Nut (Twist-On Wire Connector)', 'Insulated plastic cap containing a threaded metal spring used to twist together and secure exposed copper conductors inside electrical boxes', 'A crimp-on metal ring terminal for automotive batteries', 'A solder sleeve heated with a butane torch', 'An insulated terminal block with screw clamps'],
     ];
 
+    final repairDefs = repairs.map((r) => r[1]).toList();
+    repairDefs.addAll([
+      'A handheld laser thermometer detecting localized electrical switchboard thermal hotspots',
+      'A self-leveling polyurethane joint sealant engineered for concrete control joints',
+      'A heavy-duty carbide wheel pipe cutter creating burr-free perpendicular cuts on rigid copper',
+      'An adjustable basin wrench designed specifically for tightening mounting nuts behind deep undermount sinks'
+    ]);
+
     for (var r in repairs) {
-      addQ('rep_diy_${r[0]}', 'In home improvement and residential maintenance, what is "${r[0]}"?', r[1], r[2], r[3], r[4]);
+      addQ('rep_diy_${r[0]}', 'In home improvement and residential maintenance, what is "${r[0]}"?', r[1], '', '', '', distractorPool: repairDefs);
     }
   }
 
@@ -1131,8 +1329,16 @@ class GenreQuestionsEngine {
       ['Index Fund', 'Portfolio of stocks or bonds designed to mirror or track the components and performance of a financial market index (e.g. S&P 500)'],
     ];
 
+    final finDefs = finance.map((f) => f[1]).toList();
+    finDefs.addAll([
+      'System of purchasing capital assets and amortizing acquisition costs over useful economic lifecycle',
+      'Metric evaluating investment risk-adjusted excess returns relative to overall volatility (Sharpe Ratio)',
+      'Financial exchange market where newly issued debt and equity securities are underwritten for public sale',
+      'Derivative contract granting the buyer the non-obligatory right to purchase an asset at a predetermined strike price (Call Option)'
+    ]);
+
     for (var f in finance) {
-      addQ('fin_term_${f[0]}', 'In personal finance, banking, and economics, what defines "${f[0]}"?', f[1], 'A guaranteed lottery ticket', 'A physical gold bar stored under a mattress', 'A government fee on ATM receipts');
+      addQ('fin_term_${f[0]}', 'In personal finance, banking, and economics, what defines "${f[0]}"?', f[1], '', '', '', distractorPool: finDefs);
     }
   }
 
@@ -1151,8 +1357,16 @@ class GenreQuestionsEngine {
       ['Disc Brakes vs Drum Brakes', 'Disc brakes use hydraulic calipers to squeeze brake pads against a spinning rotor, providing superior heat dissipation and stopping power'],
     ];
 
+    final autoDefs = auto.map((a) => a[1]).toList();
+    autoDefs.addAll([
+      'Dual-clutch transmission pre-selecting alternating gear ratios for instantaneous seamless torque transfer',
+      'Torsional anti-roll stabilizer bar mitigating vehicle chassis roll during high-speed cornering transitions',
+      'Selective catalytic reduction system dosing diesel exhaust fluid into emissions to neutralize nitrogen oxides',
+      'Multi-channel anti-lock braking system rapidly modulating hydraulic caliper line pressures during threshold braking'
+    ]);
+
     for (var a in auto) {
-      addQ('auto_car_${a[0]}', 'In automotive engineering and motorsport history, what identifies "${a[0]}"?', a[1], 'A toy car battery powered by solar light', 'An electric scooter for airport terminals', 'A diesel engine used only on submarines');
+      addQ('auto_car_${a[0]}', 'In automotive engineering and motorsport history, what identifies "${a[0]}"?', a[1], '', '', '', distractorPool: autoDefs);
     }
   }
 
@@ -1171,8 +1385,16 @@ class GenreQuestionsEngine {
       ['MotoGP', 'Premier class of motorcycle road racing featuring custom prototype 1000cc racing machines producing over 250+ horsepower'],
     ];
 
+    final bikeDefs = bikes.map((b) => b[1]).toList();
+    bikeDefs.addAll([
+      'Slipper clutch mechanism mitigating rear wheel chatter and engine braking lockup during hard aggressive downshifts',
+      'Inverted cartridge front suspension forks maximizing torsional chassis rigidity and tactile feedback during corner entry',
+      'Six-axis inertial measurement unit (IMU) modulating real-time lean-angle sensitive traction control and ABS interventions',
+      'Bi-directional quickshifter allowing clutchless full-throttle gear shifts by instantaneously interrupting ignition pulses'
+    ]);
+
     for (var b in bikes) {
-      addQ('moto_bike_${b[0]}', 'In motorcycling mechanics, culture, and motorsport, what describes "${b[0]}"?', b[1], 'A pedal bicycle with training wheels', 'An electric golf cart engine', 'A three-wheeled delivery truck');
+      addQ('moto_bike_${b[0]}', 'In motorcycling mechanics, culture, and motorsport, what describes "${b[0]}"?', b[1], '', '', '', distractorPool: bikeDefs);
     }
   }
 
@@ -1191,8 +1413,16 @@ class GenreQuestionsEngine {
       ['Bivy Sack (Bivouac)', 'Ultra-lightweight, waterproof single-person shelter slip used as an emergency or minimalist sleeping bag cover'],
     ];
 
+    final campDefs = camping.map((c) => c[1]).toList();
+    campDefs.addAll([
+      'Microfiltration membrane cartridge filtering water down to 0.1 microns to remove 99.9999% of biological protozoa and bacteria',
+      'Freestanding geodesic multi-pole expedition mountaineering tent engineered to shed heavy accumulated snow and gale-force blizzard winds',
+      'High-efficiency canister camping stove featuring internal pressure regulator and micro-burner head operating in sub-freezing temperatures',
+      'Ultralight inflatable backcountry sleeping pad containing reflective heat-trapping thermal film layers achieving an ASTM R-value over 4.5'
+    ]);
+
     for (var c in camping) {
-      addQ('cmp_out_${c[0]}', 'In camping, backpacking, and wilderness survival, what defines "${c[0]}"?', c[1], 'A luxury 5-star hotel room service option', 'A plastic pool float for swimming pools', 'A battery-powered indoor television');
+      addQ('cmp_out_${c[0]}', 'In camping, backpacking, and wilderness survival, what defines "${c[0]}"?', c[1], '', '', '', distractorPool: campDefs);
     }
   }
 
@@ -1211,8 +1441,16 @@ class GenreQuestionsEngine {
       ['Capybara', 'World\'s largest living rodent, a semi-aquatic social mammal native to the savannas and dense forests of South America'],
     ];
 
+    final wildDefs = wildlife.map((w) => w[1]).toList();
+    wildDefs.addAll([
+      'High-frequency biosonar echolocation clicks allowing bats and odontocetes to create mental spatial maps of prey in pitch darkness',
+      'Luciferase catalyzed chemical bioluminescence producing cold blue-green light emission across deep-sea marine fauna and fireflies',
+      'Obligate mutualistic symbiosis wherein clownfish acquire cellular immunity within neurotoxic sea anemone tentacle cnidocytes',
+      'Adaptive heterothermic torpor state drastically down-regulating body temperature and cellular metabolism during scarce resource periods'
+    ]);
+
     for (var w in wildlife) {
-      addQ('wld_nat_${w[0]}', 'In zoology, wildlife ecology, and natural history, what characterizes "${w[0]}"?', w[1], 'A domestic pet breed invented in 2020', 'A fictional animal from mythology', 'An extinct dinosaur that lived on Mars');
+      addQ('wld_nat_${w[0]}', 'In zoology, wildlife ecology, and natural history, what characterizes "${w[0]}"?', w[1], '', '', '', distractorPool: wildDefs);
     }
   }
 
@@ -1231,8 +1469,16 @@ class GenreQuestionsEngine {
       ['Galápagos Islands', 'Volcanic archipelago in the Pacific Ocean belonging to Ecuador, famed for vast endemic species that inspired Charles Darwin'],
     ];
 
+    final travDefs = travel.map((t) => t[1]).toList();
+    travDefs.addAll([
+      'Indigenous double-hulled outrigger voyaging canoes steered using celestial wave-swell navigation across the Polynesian Triangle',
+      'High-speed electrified railway network linking major continental capitals at operational speeds surpassing 190 mph (TGV / Shinkansen)',
+      'Ancient Eurasian transcontinental trade arteries linking East Asian economic centers to Mediterranean coastal emporiums (The Silk Road)',
+      'Pan-American international highway corridor spanning approximately 19,000 continuous miles across North, Central, and South America'
+    ]);
+
     for (var t in travel) {
-      addQ('trv_exp_${t[0]}', 'In world travel, tourism, and historical exploration, what identifies "${t[0]}"?', t[1], 'An underwater submarine ferry between Chicago and Detroit', 'A fictional magic carpet from folklore', 'A commercial flight that orbits the Sun');
+      addQ('trv_exp_${t[0]}', 'In world travel, tourism, and historical exploration, what identifies "${t[0]}"?', t[1], '', '', '', distractorPool: travDefs);
     }
   }
 
@@ -1251,10 +1497,22 @@ class GenreQuestionsEngine {
       ['Dear Evan Hansen', 'Benj Pasek & Justin Paul', 'Tony-winning contemporary musical centered around high school isolation, social media, and a viral letter', 'You Will Be Found, Waving Through a Window, For Forever'],
     ];
 
+    final composers = broadway.map((b) => b[1]).toSet().toList();
+    composers.addAll(['Stephen Sondheim', 'Richard Rodgers & Oscar Hammerstein', 'Alan Menken & Howard Ashman', 'Arthur Sullivan & W.S. Gilbert', 'Cole Porter', 'Irving Berlin', 'Leonard Bernstein']);
+    final premises = broadway.map((b) => b[2]).toList();
+    final songs = broadway.map((b) => b[3]).toList();
+    songs.addAll([
+      'Send in the Clowns, Being Alive, Comedy Tonight',
+      'Oh, What a Beautiful Mornin\', Some Enchanted Evening',
+      'A Whole New World, Under the Sea, Be Our Guest',
+      'Anything Goes, I Get a Kick Out of You',
+      'There\'s No Business Like Show Business, Blue Skies'
+    ]);
+
     for (var b in broadway) {
-      addQ('bwy_mus_${b[0]}', 'Who composed the music or book for the iconic Broadway musical "${b[0]}"?', b[1], 'Andrew Carnegie', 'Walt Disney', 'Johann Sebastian Bach');
-      addQ('bwy_prem_${b[0]}', 'What is the storyline and thematic premise of "${b[0]}"?', b[2], 'A documentary about building steam engines', 'An instructional guide on cooking soup', 'A comedy about ancient Roman tax audits');
-      addQ('bwy_song_${b[0]}', 'Which show-stopping musical numbers were written for "${b[0]}"?', b[3], 'Hound Dog & Jailhouse Rock', 'Smells Like Teen Spirit & Come As You Are', 'Take Me Out to the Ballgame');
+      addQ('bwy_mus_${b[0]}', 'Who composed the music or book for the iconic Broadway musical "${b[0]}"?', b[1], '', '', '', distractorPool: composers);
+      addQ('bwy_prem_${b[0]}', 'What is the storyline and thematic premise of "${b[0]}"?', b[2], '', '', '', distractorPool: premises);
+      addQ('bwy_song_${b[0]}', 'Which show-stopping musical numbers were written for "${b[0]}"?', b[3], '', '', '', distractorPool: songs);
     }
   }
 
@@ -1273,9 +1531,20 @@ class GenreQuestionsEngine {
       ['Sony Group Corporation', 'Masaru Ibuka & Akio Morita', 'Tokyo, Japan (1946)', 'PlayStation gaming consoles, Trinitron color TVs, Walkman portable audio, Columbia Pictures'],
     ];
 
+    final founders = business.map((b) => b[1]).toList();
+    founders.addAll(['Warren Buffett & Charlie Munger', 'Sam Walton & Bud Walton', 'Howard Schultz', 'Henry Ford', 'Walt Disney & Roy Disney', 'Akio Morita & Masaru Ibuka', 'Thomas Watson Jr.']);
+    final products = business.map((b) => b[3]).toList();
+    products.addAll([
+      'Berkshire Hathaway conglomerate holdings and Geico insurance',
+      'Walmart supercenters and global supply chain logistics',
+      'Starbucks espresso roast blends, Frappuccinos, and mobile ordering app',
+      'Model T mass assembly line production and Ford F-Series trucks',
+      'ThinkPad business laptops, mainframe enterprise computing, and Watson AI'
+    ]);
+
     for (var b in business) {
-      addQ('biz_fnd_${b[0]}', 'Who were the pioneering founders behind the global corporate titan "${b[0]}"?', b[1], 'Henry Ford & Thomas Edison', 'Alexander Graham Bell', 'John D. Rockefeller');
-      addQ('biz_prod_${b[0]}', 'Which iconic products, trademarks, and innovations belong to "${b[0]}"?', b[3], 'Steam Locomotives and Coal Mines', 'Typewriters and Carbon Paper', 'Horse Carriage Wheels');
+      addQ('biz_fnd_${b[0]}', 'Who were the pioneering founders behind the global corporate titan "${b[0]}"?', b[1], '', '', '', distractorPool: founders);
+      addQ('biz_prod_${b[0]}', 'Which iconic products, trademarks, and innovations belong to "${b[0]}"?', b[3], '', '', '', distractorPool: products);
     }
   }
 
@@ -1294,8 +1563,16 @@ class GenreQuestionsEngine {
       ['Wikipedia Founded', 'Free crowdsourced online encyclopedia launched on January 15, 2001, by Jimmy Wales and Larry Sanger'],
     ];
 
+    final memeDefs = memes.map((m) => m[1]).toList();
+    memeDefs.addAll([
+      'Viral 1996 3D rendered dancing baby animation distributed via web forum email loops set to "Hooked on a Feeling"',
+      'Empathic 2007 viral video appeal urging web audiences to leave celebrity Britney Spears in peace during media crisis',
+      'Image macro archetype format pairing central expressive stock photos with recurring relatable situation humor captions',
+      'Iconic flash video loop featuring an animated badger parade transitioning into mushrooms and a startled snake'
+    ]);
+
     for (var m in memes) {
-      addQ('mem_cult_${m[0]}', 'In internet history and viral digital culture, what is "${m[0]}"?', m[1], 'A computer virus that destroyed hard drives in 1980', 'A hardware cable used for printers in 1970', 'A government form for registering a domain name');
+      addQ('mem_cult_${m[0]}', 'In internet history and viral digital culture, what is "${m[0]}"?', m[1], '', '', '', distractorPool: memeDefs);
     }
   }
 
@@ -1314,9 +1591,26 @@ class GenreQuestionsEngine {
       ['Succession', 'Jesse Armstrong', 'Logan Roy, Kendall Roy, Shiv Roy, Roman Roy, Tom Wambsgans, Cousin Greg', 'Waystar RoyCo media conglomerate family power struggle, ATN News'],
     ];
 
+    final casts = shows.map((s) => s[2]).toList();
+    casts.addAll([
+      'Ted Danson, Shelley Long, Woody Harrelson, Rhea Perlman',
+      'Steve Carell, Rainn Wilson, John Krasinski, Jenna Fischer',
+      'Bryan Cranston, Aaron Paul, Anna Gunn, Dean Norris',
+      'Ed O\'Neill, Sofia Vergara, Julie Bowen, Ty Burrell',
+      'Andy Samberg, Stephanie Beatriz, Terry Crews, Melissa Fumero'
+    ]);
+    final showLores = shows.map((s) => s[3]).toList();
+    showLores.addAll([
+      'Cozy Boston tavern where regulars Norm and Cliff trade comedic stories with bartender Sam Malone',
+      'Scranton regional paper merchant navigating corporate downsizing, Dundie Awards, and office romance',
+      'High school chemistry educator building a Southwest illicit empire under the pseudonym Heisenberg',
+      'Modern blended suburban family navigating generational quirks and competitive school milestones in LA',
+      'Brooklyn police precinct detectives solving municipal felonies under strict Captain Raymond Holt'
+    ]);
+
     for (var s in shows) {
-      addQ('tv_cast_${s[0]}', 'Which ensemble cast of characters stars in the acclaimed television show "${s[0]}"?', s[2], 'Captain Kirk, Spock, Bones, Uhura', 'Fox Mulder & Dana Scully', 'Don Draper & Peggy Olson');
-      addQ('tv_lore_${s[0]}', 'Which storylines, catchphrases, and iconic settings define "${s[0]}"?', s[3], 'A spaceship orbiting a black hole', 'A pirate ship in the Caribbean', 'A medieval monastery in England');
+      addQ('tv_cast_${s[0]}', 'Which ensemble cast of characters stars in the acclaimed television show "${s[0]}"?', s[2], '', '', '', distractorPool: casts);
+      addQ('tv_lore_${s[0]}', 'Which storylines, catchphrases, and iconic settings define "${s[0]}"?', s[3], '', '', '', distractorPool: showLores);
     }
   }
 
@@ -1335,9 +1629,19 @@ class GenreQuestionsEngine {
       ['Loki', 'Trickster god and shape-shifter in Norse mythology, father of the Fenrir wolf, Jörmungandr serpent, and Hel', 'Norse Mythology'],
     ];
 
+    final deityDefs = myths.map((m) => m[1]).toList();
+    deityDefs.addAll([
+      'Ancient Celtic sun and warrior deity wielding the magical spear Gae Bulg and invincible five-pointed sword',
+      'Hindu preserver deity Vishnu descending to Earth across ten cosmic avatars including Rama and Krishna to restore dharma',
+      'Japanese Shinto solar goddess Amaterasu who emerged from the heavenly rock cave to restore divine light to the world',
+      'Babylonian patron creator god Marduk who defeated chaos dragon Tiamat to fashion the heavens and Earth'
+    ]);
+    final pantheons = myths.map((m) => m[2]).toSet().toList();
+    pantheons.addAll(['Celtic Mythology', 'Hindu Mythology', 'Japanese Shinto', 'Chinese Mythology', 'Babylonian Mythology', 'Persian Mythology', 'Polynesian Legend', 'Slavic Folklore']);
+
     for (var m in myths) {
-      addQ('myth_deity_${m[0]}', 'In ancient world mythology, who is "${m[0]}"?', m[1], 'A Roman emperor who built the Colosseum', 'A legendary knight of King Arthur\'s Round Table', 'A mythical monster with nine stone eyes');
-      addQ('myth_pantheon_${m[0]}', 'Which world mythological pantheon does "${m[0]}" belong to?', m[2], 'Slavic Folklore', 'Polynesian Mythology', 'Mesopotamian Legend');
+      addQ('myth_deity_${m[0]}', 'In ancient world mythology, who is "${m[0]}"?', m[1], '', '', '', distractorPool: deityDefs);
+      addQ('myth_pantheon_${m[0]}', 'Which world mythological pantheon does "${m[0]}" belong to?', m[2], '', '', '', distractorPool: pantheons);
     }
   }
 
@@ -1356,8 +1660,11 @@ class GenreQuestionsEngine {
       ['What gets wetter and wetter the more it dries?', 'A Towel', 'A Sponge', 'A Hairdryer', 'A Cloud'],
     ];
 
+    final riddleAnswers = riddles.map((r) => r[1]).toList();
+    riddleAnswers.addAll(['A Shadow', 'The Future', 'A Coffin', 'Footsteps', 'A Secret', 'A Secret Door', 'A Candle', 'A Book', 'A Breath', 'A River', 'The Wind', 'A Mirror']);
+
     for (var r in riddles) {
-      addQ('mnd_rid_${r[0].hashCode}', r[0], r[1], r[2], r[3], r[4]);
+      addQ('mnd_rid_${r[0].hashCode}', r[0], r[1], '', '', '', distractorPool: riddleAnswers);
     }
   }
 
@@ -1527,10 +1834,48 @@ class GenreQuestionsEngine {
       },
     ];
 
-    final allFillDistractors = <String>[];
-    for (var a in answerSets) {
-      allFillDistractors.addAll(a['distractors'] as List<String>);
-    }
+    final allFillDistractors = <String>[
+      'Relying purely on arbitrary guesswork and improvised estimations',
+      'Bypassing all standard safety thresholds to speed up delivery',
+      'Eliminating all regular inspection intervals completely',
+      'Using unverified speculation without physical measurements',
+      'Assuming all environmental variables remain identical indefinitely',
+      'Replacing calibrated tools with decorative hand ornaments',
+      'Maximizing friction and accelerating structural wear',
+      'Ignoring manufacturer specifications in favor of superstition',
+      'Allowing uncontrolled moisture and heat buildup throughout the assembly',
+      'Applying arbitrary variations on every single iteration',
+      'Omitting critical foundational preparation phases',
+      'Disregarding local building and safety regulations',
+      'Exceeding maximum rated structural load capacities without reinforcement',
+      'Using substandard uncertified substitute materials',
+      'Operating machinery without proper protective equipment',
+      'Postponing all diagnostic evaluation until total equipment breakdown',
+      'Relying solely on visual appearance rather than functional tolerances',
+      'Treating safety documentation as unnecessary paperwork',
+      'Accepting excessive margin of error exceeding fifty percent',
+      'Skipping mandatory joint tightening and fastener torquing',
+      'Using corroded fasteners in high-humidity environments',
+      'Disabling automatic cut-off and pressure release valves',
+      'Storing incompatible chemical compounds in open containers',
+      'Conducting electrical work on live uninsulated circuits',
+      'Submerging sensitive electronic circuits in unpurified tap water',
+      'Operating machinery continuously beyond duty cycle thermal limits',
+      'Bypassing emergency cutoff switches during high-pressure testing',
+      'Substituting lightweight plastic fasteners for structural steel bolts',
+      'Skipping baseline diagnostic scans prior to system overhaul',
+      'Ignoring manufacturer torque specifications during critical fastening',
+      'Painting over active rust corrosion without surface preparation',
+      'Disabling automated warning alarms to reduce ambient noise levels',
+      'Using incorrect thread pitch and forcing cross-threaded connections',
+      'Allowing sediment accumulation in cooling reservoirs indefinitely',
+      'Discarding calibration logs immediately upon completion',
+      'Reversing the sequence of diagnostic procedures at random',
+      'Using expired chemical bonding agents without ventilation',
+      'Doubling electrical current beyond maximum rated load capacity',
+      'Storing volatile compounds directly adjacent to open heating elements',
+      'Neglecting routine lubrications until complete mechanical seizure occurs'
+    ];
     final rand = math.Random();
 
     for (int tIdx = 0; tIdx < topics.length; tIdx++) {
@@ -1539,8 +1884,7 @@ class GenreQuestionsEngine {
         final topic = topics[tIdx];
         final qText = templates[mIdx].replaceAll('{topic}', topic);
         final ans = answerSets[(tIdx * 3 + mIdx) % answerSets.length];
-        final d = pickDistractors(allFillDistractors, ans['correct'] as String, rand, fallback: ans['distractors'] as List<String>);
-        addQ('fill_${genre}_${tIdx}_$mIdx', qText, ans['correct'] as String, d[0], d[1], d[2]);
+        addQ('fill_${genre}_${tIdx}_$mIdx', qText, ans['correct'] as String, '', '', '', distractorPool: allFillDistractors);
       }
     }
   }

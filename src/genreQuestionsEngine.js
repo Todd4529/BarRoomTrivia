@@ -77,7 +77,7 @@ export function sanitizeQuestionsDistractors(questions) {
   const uniqueWrongs = [...new Set(allWrongs)];
   let prevWrongs = new Set();
 
-  questions.forEach(q => {
+  questions.forEach((q, qIdx) => {
     if (!q || !q.options || !q.correct) return;
     const correctLetter = q.correct;
     const correctVal = q.options[correctLetter];
@@ -86,7 +86,7 @@ export function sanitizeQuestionsDistractors(questions) {
       .map(([_, v]) => v);
 
     const hasOverlap = currentWrongs.some(w => prevWrongs.has(w.toLowerCase()));
-    if (hasOverlap && uniqueWrongs.length >= 6) {
+    if (hasOverlap) {
       const currentLower = new Set(currentWrongs.map(w => w.toLowerCase()));
       const candidates = uniqueWrongs.filter(c =>
         c.toLowerCase() !== correctVal.toLowerCase() &&
@@ -98,8 +98,12 @@ export function sanitizeQuestionsDistractors(questions) {
       const newWrongs = [...currentWrongs];
 
       currentWrongs.forEach((w, idx) => {
-        if (prevWrongs.has(w.toLowerCase()) && shuffledCandidates.length > 0) {
-          newWrongs[idx] = shuffledCandidates.shift();
+        if (prevWrongs.has(w.toLowerCase())) {
+          if (shuffledCandidates.length > 0) {
+            newWrongs[idx] = shuffledCandidates.shift();
+          } else {
+            newWrongs[idx] = `${q.category || 'Trivia'} Option ${qIdx * 3 + idx + 1}`;
+          }
         }
       });
 

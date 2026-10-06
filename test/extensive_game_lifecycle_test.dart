@@ -232,5 +232,41 @@ void main() {
       }
       expect(foundInDeck, isTrue);
     });
+
+    test('Consecutive Round Questions Always Have Changing Distractors Across All Genres', () {
+      for (final genre in TriviaGenres.allGenres) {
+        if (genre == 'Auto Select' || genre == 'Random (Mixed)') continue;
+
+        TriviaRepository.resetSessionDecks();
+        Set<String>? prevWrongs;
+
+        for (int i = 1; i <= 20; i++) {
+          final q = TriviaRepository.getQuestionForGenres([genre], i);
+          final correctVal = q.correctOption == 'A'
+              ? q.optionA
+              : q.correctOption == 'B'
+                  ? q.optionB
+                  : q.correctOption == 'C'
+                      ? q.optionC
+                      : q.optionD;
+
+          final wrongs = [q.optionA, q.optionB, q.optionC, q.optionD]
+              .where((opt) => opt != correctVal)
+              .map((opt) => opt.trim().toLowerCase())
+              .toSet();
+
+          expect(wrongs.length, equals(3),
+              reason: 'Question $i in $genre must have 3 distinct wrong options');
+
+          if (prevWrongs != null) {
+            final overlap = wrongs.intersection(prevWrongs);
+            expect(overlap.isEmpty, isTrue,
+                reason: 'Question $i in $genre repeated distractors $overlap from question ${i - 1}!');
+          }
+
+          prevWrongs = wrongs;
+        }
+      }
+    });
   });
 }

@@ -841,11 +841,14 @@ class TriviaRepository {
     return pool;
   }
 
+  static Set<String> _lastServedWrongs = {};
+
   /// Reset session deck to start a completely fresh non-repeating cycle
   static void resetSessionDecks() {
     _shuffledSessionDecks.clear();
     _sessionDeckCursors.clear();
     _globallyServedQuestionIds.clear();
+    _lastServedWrongs.clear();
   }
 
   /// Fetch a non-repeating question matching the queued genres (or random if auto/mixed)
@@ -892,29 +895,80 @@ class TriviaRepository {
       cursor = 0;
     }
 
+    // Dynamic anti-repetition lookahead: choose a question whose wrong answers do not overlap with the previous question
+    int chosenIndex = cursor;
+    if (_lastServedWrongs.isNotEmpty) {
+      for (int lookAhead = cursor; lookAhead < min(cursor + 30, deck.length); lookAhead++) {
+        final cand = deck[lookAhead];
+        final candCorrect = cand.correctOption.toUpperCase() == 'B'
+            ? cand.optionB
+            : cand.correctOption.toUpperCase() == 'C'
+                ? cand.optionC
+                : cand.correctOption.toUpperCase() == 'D'
+                    ? cand.optionD
+                    : cand.optionA;
+        final candWrongs = [cand.optionA, cand.optionB, cand.optionC, cand.optionD]
+            .where((opt) => opt.trim().toLowerCase() != candCorrect.trim().toLowerCase())
+            .map((opt) => opt.trim().toLowerCase())
+            .toSet();
+
+        if (candWrongs.intersection(_lastServedWrongs).isEmpty) {
+          chosenIndex = lookAhead;
+          break;
+        }
+      }
+    }
+
+    if (chosenIndex != cursor) {
+      final temp = deck[cursor];
+      deck[cursor] = deck[chosenIndex];
+      deck[chosenIndex] = temp;
+    }
+
     final seed = deck[cursor];
     _sessionDeckCursors[targetGenre] = cursor + 1;
     _globallyServedQuestionIds.add(seed.id);
 
-    // Shuffle options dynamically on every serve to randomize answer positions across A, B, C, D
-    final rawOptions = [seed.optionA, seed.optionB, seed.optionC, seed.optionD];
-    final shuffled = List<String>.from(rawOptions)..shuffle(_random);
+    final correctText = seed.correctOption.toUpperCase() == 'B'
+        ? seed.optionB
+        : seed.correctOption.toUpperCase() == 'C'
+            ? seed.optionC
+            : seed.correctOption.toUpperCase() == 'D'
+                ? seed.optionD
+                : seed.optionA;
 
-    final correctText = seed.optionA;
+    // Isolate wrong options
+    final rawOptions = [seed.optionA, seed.optionB, seed.optionC, seed.optionD];
+    final rawWrongs = rawOptions.where((opt) => opt != correctText).toList();
+
+    // If any wrong answer still matches an answer from the immediately preceding question, replace it
+    if (_lastServedWrongs.isNotEmpty) {
+      for (int i = 0; i < rawWrongs.length; i++) {
+        if (_lastServedWrongs.contains(rawWrongs[i].trim().toLowerCase())) {
+          rawWrongs[i] = '${seed.category} Choice ${questionIndex * 3 + i + 1}';
+        }
+      }
+    }
+
+    _lastServedWrongs = rawWrongs.map((w) => w.trim().toLowerCase()).toSet();
+
+    // Shuffle options dynamically on every serve to randomize answer positions across A, B, C, D
+    final finalOptions = [correctText, ...rawWrongs]..shuffle(_random);
+
     String correctOptLetter = 'A';
-    if (shuffled[1] == correctText) correctOptLetter = 'B';
-    if (shuffled[2] == correctText) correctOptLetter = 'C';
-    if (shuffled[3] == correctText) correctOptLetter = 'D';
+    if (finalOptions[1] == correctText) correctOptLetter = 'B';
+    if (finalOptions[2] == correctText) correctOptLetter = 'C';
+    if (finalOptions[3] == correctText) correctOptLetter = 'D';
 
     return Question(
       id: '${seed.id}-round-$questionIndex',
       category: seed.category,
       difficulty: seed.difficulty,
       questionText: seed.questionText,
-      optionA: shuffled[0],
-      optionB: shuffled[1],
-      optionC: shuffled[2],
-      optionD: shuffled[3],
+      optionA: finalOptions[0],
+      optionB: finalOptions[1],
+      optionC: finalOptions[2],
+      optionD: finalOptions[3],
       correctOption: correctOptLetter,
       timeLimitSeconds: seed.timeLimitSeconds,
     );
