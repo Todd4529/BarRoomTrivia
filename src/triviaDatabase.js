@@ -6,38 +6,28 @@
 import { generate500HomebrewingQuestions } from './homebrewingDatabase.js';
 import { generateGenreQuestions, sanitizeQuestionsDistractors, deClusterSimilarQuestions } from './genreQuestionsEngine.js';
 
-// All 30 Specific Genres List
+// All 20 Verified Human-Made Specific Genres List
 export const ALL_SPECIFIC_GENRES = [
-  'Homebrewing Beer',
-  'Home Repair',
-  'Finance',
-  'Travel',
-  'Health',
-  'Music Lyrics',
-  'Pop Culture & Music',
-  'Movies & Hollywood',
   '80s & 90s Nostalgia',
-  'Science & Technology',
-  'World History',
-  'World Geography',
-  'Sports & Stadiums',
+  'Art & Architecture',
+  'Automotive & Racing',
   'Beer, Wine & Spirits',
-  'Food & Culinary',
-  'Video Games & Gaming',
   'Classic Literature',
   'Comics & Superheroes',
-  'Art & Architecture',
-  'Wildlife & Nature',
-  'Astronomy & Space',
-  'Mythology & Folklore',
-  'Automotive & Racing',
-  'Rock & Roll Classics',
-  'Sitcoms & TV Dramas',
-  'Internet & Meme Culture',
-  'Famous Landmarks',
+  'Food & Culinary',
+  'Homebrewing Beer',
   'Mind Benders & Riddles',
-  'Business & Brands',
-  'Broadway & Theater'
+  'Movies & Hollywood',
+  'Mythology & Folklore',
+  'Pop Culture & Music',
+  'Rock & Roll Classics',
+  'Science & Technology',
+  'Sitcoms & TV Dramas',
+  'Sports & Stadiums',
+  'Video Games & Gaming',
+  'Wildlife & Nature',
+  'World Geography',
+  'World History'
 ];
 
 // Open Trivia DB Category ID Mapping
@@ -47,7 +37,6 @@ const openTdbCategoryMap = {
   'Sitcoms & TV Dramas': 14,
   'Video Games & Gaming': 15,
   'Science & Technology': 17,
-  'Astronomy & Space': 17,
   'World History': 23,
   'World Geography': 22,
   'Sports & Stadiums': 21,
@@ -55,21 +44,17 @@ const openTdbCategoryMap = {
   'Comics & Superheroes': 29,
   'Art & Architecture': 25,
   'Mythology & Folklore': 20,
-  'Music Lyrics': 12,
   '80s & 90s Nostalgia': 14,
   'Rock & Roll Classics': 12,
-  'Travel': 22,
-  'Famous Landmarks': 22,
-  'Broadway & Theater': 13
+  'Mind Benders & Riddles': 16,
+  'Wildlife & Nature': 27,
+  'Automotive & Racing': 28
 };
 
 // Custom Bar Genres that rely on specialized authentic local datasets
 const customLocalGenres = new Set([
   'Homebrewing Beer',
-  'Beer, Wine & Spirits',
-  'Home Repair',
-  'Finance',
-  'Health'
+  'Beer, Wine & Spirits'
 ]);
 
 // Initialize 500+ Homebrewing Questions dataset
@@ -419,45 +404,6 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
   // Filter out any synthetic/AI filler questions - STRICTLY human-made only
   const humanPool = pool.filter(isHumanMade);
 
-  // If this specific genre has fewer than 50 questions, supplement from related authentic human categories
-  if (humanPool.length < 50) {
-    const targetLower = targetGenre.toLowerCase();
-    const relatedDynamic = dynamicWeeklyPool.filter(q => {
-      if (!isHumanMade(q)) return false;
-      const cat = (q.category || '').toLowerCase();
-      const txt = ((q.text || '') + ' ' + (q.category || '')).toLowerCase();
-
-      if (targetLower === 'health') {
-        return cat.includes('science') || txt.includes('health') || txt.includes('body') || txt.includes('doctor') || txt.includes('medical') || txt.includes('vitamin') || txt.includes('hospital');
-      }
-      if (targetLower === 'home repair') {
-        return cat.includes('architecture') || cat.includes('science') || txt.includes('tool') || txt.includes('wood') || txt.includes('build') || txt.includes('screw') || txt.includes('paint');
-      }
-      if (targetLower === 'finance') {
-        return cat.includes('history') || cat.includes('business') || txt.includes('money') || txt.includes('dollar') || txt.includes('bank') || txt.includes('market') || txt.includes('economy');
-      }
-      if (targetLower === 'travel') {
-        return cat.includes('geography') || cat.includes('landmark') || txt.includes('travel') || txt.includes('city') || txt.includes('flight') || txt.includes('country');
-      }
-      if (targetLower === 'motorcycles') {
-        return cat.includes('automotive') || txt.includes('bike') || txt.includes('motorcycle') || txt.includes('harley') || txt.includes('engine') || txt.includes('speed');
-      }
-      if (targetLower === 'camping') {
-        return cat.includes('nature') || cat.includes('geography') || txt.includes('outdoor') || txt.includes('mountain') || txt.includes('forest') || txt.includes('park') || txt.includes('tent');
-      }
-      return false;
-    });
-
-    for (const rq of relatedDynamic) {
-      if (!humanPool.some(h => (h.text || '').toLowerCase() === (rq.text || '').toLowerCase())) {
-        humanPool.push({
-          ...rq,
-          category: targetGenre
-        });
-      }
-    }
-  }
-
   // Filter out any questions already seen in this session
   const unseen = humanPool.filter(q => !seenQuestionTexts.has((q.text || '').toLowerCase()));
 
@@ -468,13 +414,20 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
     candidatePool = [...humanPool];
   }
 
-  // If still fewer than count, pull general authentic questions from the weekly pool
+  // If still fewer than count, pull matching authentic questions from the weekly pool strictly for this genre
   if (candidatePool.length < count) {
-    const backupRealQuestions = dynamicWeeklyPool
+    const matchingWeekly = dynamicWeeklyPool
       .filter(isHumanMade)
+      .filter(q => q.category && q.category.toLowerCase().includes(targetGenre.toLowerCase()))
       .filter(q => !candidatePool.some(c => (c.text || '').toLowerCase() === (q.text || '').toLowerCase()));
-    const shuffledBackup = [...backupRealQuestions].sort(() => 0.5 - Math.random());
+    const shuffledBackup = [...matchingWeekly].sort(() => 0.5 - Math.random());
     candidatePool.push(...shuffledBackup.slice(0, count - candidatePool.length));
+  }
+
+  // If still fewer than count, recycle from humanPool for this exact genre (guarantees zero genre cross-contamination)
+  if (candidatePool.length < count && humanPool.length > 0) {
+    const recycled = [...humanPool].sort(() => 0.5 - Math.random());
+    candidatePool.push(...recycled.slice(0, count - candidatePool.length));
   }
 
   const shuffledAuth = [...candidatePool].sort(() => 0.5 - Math.random());

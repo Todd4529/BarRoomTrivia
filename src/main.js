@@ -254,6 +254,7 @@ function updateTvAudioUI() {
 }
 
 function playSound(type) {
+  const param = arguments[1];
   if (!isSoundEffectsEnabled) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -263,30 +264,23 @@ function playSound(type) {
       const now = Math.max(ctx.currentTime, 0.005);
 
       if (type === 'tick') {
-        // High-clarity game show countdown tick (dual harmonic punch: 920Hz + 1840Hz, 100ms)
-        const osc1 = ctx.createOscillator();
-        const osc2 = ctx.createOscillator();
+        const remaining = typeof param === 'number' ? param : 5;
+        const freqMap = { 1: 1150, 2: 960, 3: 830, 4: 720, 5: 620 };
+        const tickFreq = freqMap[remaining] || 800;
+
+        const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-
-        osc1.type = 'triangle';
-        osc1.frequency.setValueAtTime(920, now);
-        osc1.frequency.linearRampToValueAtTime(540, now + 0.09);
-
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(1840, now);
-        osc2.frequency.linearRampToValueAtTime(920, now + 0.07);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(tickFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(100, tickFreq * 0.7), now + 0.06);
 
         gain.gain.setValueAtTime(0.40, now);
-        gain.gain.linearRampToValueAtTime(0.0001, now + 0.10);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
 
-        osc1.connect(gain);
-        osc2.connect(gain);
+        osc.connect(gain);
         gain.connect(ctx.destination);
-
-        osc1.start(now);
-        osc2.start(now);
-        osc1.stop(now + 0.10);
-        osc2.stop(now + 0.10);
+        osc.start(now);
+        osc.stop(now + 0.07);
       } else if (type === 'tap') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -300,14 +294,14 @@ function playSound(type) {
         osc.start(now);
         osc.stop(now + 0.06);
       } else if (type === 'question_start' || type === 'start') {
-        // Confident, uplifting 2-tone stinger: C5 (523Hz) -> G5 (784Hz)
-        [ { f: 523.25, t: 0, d: 0.12 }, { f: 783.99, t: 0.10, d: 0.20 } ].forEach(n => {
+        // Uplifting 3-tone game show chord stinger: C5 (523Hz), E5 (659Hz), G5 (784Hz)
+        [ { f: 523.25, t: 0, d: 0.10, g: 0.35 }, { f: 659.25, t: 0.08, d: 0.12, g: 0.38 }, { f: 783.99, t: 0.16, d: 0.28, g: 0.42 } ].forEach(n => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'triangle';
           osc.frequency.setValueAtTime(n.f, now + n.t);
           gain.gain.setValueAtTime(0.0001, now + n.t);
-          gain.gain.linearRampToValueAtTime(0.35, now + n.t + 0.02);
+          gain.gain.linearRampToValueAtTime(n.g, now + n.t + 0.02);
           gain.gain.linearRampToValueAtTime(0.0001, now + n.t + n.d);
           osc.connect(gain);
           gain.connect(ctx.destination);
@@ -315,8 +309,8 @@ function playSound(type) {
           osc.stop(now + n.t + n.d);
         });
       } else if (type === 'correct') {
-        // Cheerful victory arpeggio: D5 (587Hz) -> A5 (880Hz) -> D6 (1175Hz)
-        [ { f: 587.33, t: 0, d: 0.18 }, { f: 880.00, t: 0.10, d: 0.22 }, { f: 1174.66, t: 0.20, d: 0.45 } ].forEach(n => {
+        // Sparkling bell chime arpeggio: G5 (784Hz) -> B5 (988Hz) -> D6 (1175Hz) -> G6 (1568Hz)
+        [ { f: 783.99, t: 0, d: 0.10 }, { f: 987.77, t: 0.08, d: 0.12 }, { f: 1174.66, t: 0.16, d: 0.16 }, { f: 1567.98, t: 0.24, d: 0.40 } ].forEach(n => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sine';
@@ -343,17 +337,19 @@ function playSound(type) {
         osc.start(now);
         osc.stop(now + 0.28);
       } else if (type === 'buzz') {
-        // Deep, authoritative time-expired buzzer (160Hz square with harmonic depth)
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(160, now);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.linearRampToValueAtTime(0.0001, now + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.35);
+        // Authoritative game-show buzzer: dual dissonant sawtooth (150Hz + 158Hz)
+        [150, 158].forEach(freq => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.linearRampToValueAtTime(0.0001, now + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        });
       } else if (type === 'fanfare') {
         // Grand victory fanfare: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> C6 (1046Hz)
         [ { f: 523.25, t: 0, d: 0.16 }, { f: 659.25, t: 0.12, d: 0.18 }, { f: 783.99, t: 0.24, d: 0.22 }, { f: 1046.50, t: 0.36, d: 0.70 } ].forEach(n => {
@@ -700,6 +696,8 @@ function initAuthView() {
       user_id: user.id,
       user_code: targetRoom,
       room_code: targetRoom,
+      is_ad_mode_active: isAdModeActive,
+      isAdModeActive: isAdModeActive,
       user_info: {
         email: user.email || 'Host User',
         display_name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'Host',
@@ -769,12 +767,14 @@ function initAuthView() {
           room_code: 'TRIV',
           host_id: user.id,
           status: 'waiting_for_host',
+          is_ad_mode_active: isAdModeActive,
           updated_at: new Date().toISOString()
         },
         {
           room_code: targetRoom,
           host_id: user.id,
           status: 'waiting_for_host',
+          is_ad_mode_active: isAdModeActive,
           updated_at: new Date().toISOString()
         }
       ], { onConflict: 'room_code' }).catch(() => {});
@@ -785,6 +785,12 @@ function initAuthView() {
     setTimeout(sendAll, 300);
     setTimeout(sendAll, 800);
     setTimeout(sendAll, 1600);
+
+    // If host has ads active before starting game, broadcast ad mode immediately
+    if (isAdModeActive) {
+      broadcastAdModeChange();
+      syncTvSignageDisplay();
+    }
 
     // Immediately show success and transition to Host Panel
     showAlert('TV Connected! Opening Host Controls...', false);
@@ -1431,6 +1437,20 @@ function normalizeIncomingClockSkew(payload) {
   return out;
 }
 
+function updatePlayerHeaderCard(round = currentRound, qNum = null, statusText = '') {
+  const playerDispRoom = document.getElementById('player-disp-room');
+  if (!playerDispRoom) return;
+  const r = round || currentRound || 1;
+  const room = currentRoomCode || 'TRIV';
+  if (qNum) {
+    playerDispRoom.textContent = `ROOM: ${room} • ROUND ${r} (Q${qNum}/10)`;
+  } else if (statusText) {
+    playerDispRoom.textContent = `ROOM: ${room} • ROUND ${r} (${statusText})`;
+  } else {
+    playerDispRoom.textContent = `ROOM: ${room} • ROUND ${r}`;
+  }
+}
+
 function handleIncomingPreGameCountdown(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing pre_game_countdown:', payload);
@@ -1444,6 +1464,7 @@ function handleIncomingPreGameCountdown(rawPayload) {
   if (rNum && rNum > 0) {
     currentRound = Math.max(currentRound, rNum);
   }
+  updatePlayerHeaderCard(currentRound, null, `Starting in ${countdownSecs}s`);
 
   hideResultModal();
   hideWinnerModals();
@@ -1562,8 +1583,8 @@ function handleIncomingQuestionStart(rawPayload) {
   currentQuestionIndex = qIndex;
   const rFromPayload = Number(payload.round_number || payload.roundNumber);
   const roundNum = (rFromPayload && rFromPayload > 0)
-    ? Math.max(currentRound, rFromPayload)
-    : Math.max(currentRound, (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : 1));
+    ? rFromPayload
+    : (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : (currentRound || 1));
   currentRound = roundNum;
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
@@ -1713,6 +1734,13 @@ function handleRealtimeIncomingEvent(event, data) {
     onAdModeToggled(payload);
   } else if (normEvent === 'ad_slides_updated') {
     onAdSlidesUpdated(payload);
+  } else if (normEvent === 'device_authorized') {
+    if (payload && (payload.isAdModeActive !== undefined || payload.is_ad_mode_active !== undefined)) {
+      onAdModeToggled({
+        isAdModeActive: payload.isAdModeActive ?? payload.is_ad_mode_active
+      });
+    }
+    syncTvSignageDisplay();
   } else if (normEvent === 'sound_toggled') {
     if (payload && payload.isSoundEffectsEnabled !== undefined) {
       setSoundEffectsEnabled(Boolean(payload.isSoundEffectsEnabled), false);
@@ -1829,6 +1857,8 @@ function initBroadcastChannelListeners() {
           currentGameState,
           currentQuestionData,
           currentQuestionIndex,
+          currentRound,
+          roundNumber: currentRound,
           selectedDifficulty,
           selectedQuestionDuration,
           currentVenueName,
@@ -1989,6 +2019,32 @@ function initHostControls() {
       renderHostPlayersRoster();
     }
   }
+
+  const statPillTimer = document.getElementById('stat-pill-timer');
+  const statPillDiff = document.getElementById('stat-pill-diff');
+
+  function navigateToSettingsControl(controlId) {
+    switchHostTab('settings');
+    setTimeout(() => {
+      const el = document.getElementById(controlId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('control-pulse-highlight');
+        void el.offsetWidth;
+        el.classList.add('control-pulse-highlight');
+      }
+    }, 120);
+  }
+
+  statPillTimer?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigateToSettingsControl('timer-chips-container');
+  });
+
+  statPillDiff?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigateToSettingsControl('difficulty-chips-container');
+  });
 
   hostTabBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -3855,6 +3911,13 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       broadcastRealtimeEvent('leaderboard_updated', {
         players: playersLeaderboard,
       });
+      broadcastRealtimeEvent('player_score_updated', {
+        room_code: currentRoomCode,
+        nickname: roundWinner.nickname,
+        score: roundWinner.score,
+        cumulative_score: roundWinner.score,
+        points_earned: 20,
+      });
 
       if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === roundWinner.nickname.toLowerCase()) {
         currentPlayer.score = roundWinner.score;
@@ -4012,6 +4075,7 @@ function onQuestionStart(payload) {
   };
 
   const roundNumber = payload.roundNumber || payload.round_number || currentRound || 1;
+  currentRound = Number(roundNumber);
   const questionNumberInRound = payload.questionNumberInRound || payload.question_number_in_round || ((currentQuestionIndex % 10) + 1);
   const durationSeconds = payload.durationSeconds || payload.duration_seconds || payload.time_limit_seconds || selectedQuestionDuration || 20;
   const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
@@ -4031,6 +4095,9 @@ function onQuestionStart(payload) {
   hideInterQuestionCountdown();
   clearInterval(modalCountdownInterval);
   clearInterval(playerReviewInterval);
+
+  const btnTvBack = document.getElementById('btn-tv-back');
+  if (btnTvBack) btnTvBack.classList.add('question-hidden');
 
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
@@ -4174,7 +4241,7 @@ function onQuestionStart(payload) {
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  if (playerDispRoom) playerDispRoom.textContent = `ROOM: ${currentRoomCode} • ROUND ${roundNumber || 1} (Q${questionNumberInRound || 1}/10)`;
+  updatePlayerHeaderCard(roundNumber || currentRound || 1, questionNumberInRound || 1);
   if (playerCategoryPill) playerCategoryPill.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
   if (playerDiffPill) {
     playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
@@ -4224,7 +4291,7 @@ function startCountdown(seconds) {
 
     if (remainingTimerSeconds <= 5 && remainingTimerSeconds > 0 && remainingTimerSeconds !== lastTickedSecond) {
       lastTickedSecond = remainingTimerSeconds;
-      playSound('tick');
+      playSound('tick', remainingTimerSeconds); // playSound('tick')
     }
 
     if (remainingTimerSeconds <= 0) {
@@ -4335,10 +4402,16 @@ function onTimerExpired(payload) {
   const correctOpt = rawCorrect.toUpperCase().trim();
   const correctTextStr = payload?.correctText || `${correctOpt}) ${currentQuestionData?.options?.[correctOpt] || ''}`;
 
+  const btnTvBack = document.getElementById('btn-tv-back');
+  if (btnTvBack) btnTvBack.classList.remove('question-hidden');
+
   clearMockPlayerTimeouts();
 
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
+
+  const curQ = ((currentQuestionIndex - 1) % 10) + 1;
+  updatePlayerHeaderCard(currentRound, curQ, 'Review');
 
   // Calculate review seconds remaining for next question countdown (synchronized 15s)
   const nextEpoch = payload?.next_question_starts_at_epoch_ms || 
@@ -4666,6 +4739,10 @@ function onRoundWinner(payload) {
   if (hostStageQCounter) {
     hostStageQCounter.textContent = `Round ${currentRound} Complete! Next round loading...`;
   }
+  const rNum = Number(payload?.roundNumber || payload?.round_number || currentRound);
+  if (rNum > 0) currentRound = Math.max(currentRound, rNum);
+  updatePlayerHeaderCard(currentRound, null, 'Intermission');
+
   if (btnSkip) btnSkip.classList.add('hidden');
 
   let top3 = [];
@@ -4815,6 +4892,12 @@ function onRoundWinner(payload) {
     statusText.textContent = 'INTERMISSION';
   }
 
+  currentQuestionData = null;
+  hideResultModal();
+  hideInterQuestionCountdown();
+  const btnTvBack = document.getElementById('btn-tv-back');
+  if (btnTvBack) btnTvBack.classList.remove('question-hidden');
+
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     remWinnerSecs--;
@@ -4826,7 +4909,9 @@ function onRoundWinner(payload) {
 
     if (remWinnerSecs <= 0) {
       clearInterval(winnerCountdownInterval);
-      hideWinnerModals();
+      if (tvNextRoundTimer) tvNextRoundTimer.textContent = '0:00';
+      if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
+      if (cardTimer) cardTimer.textContent = '0:00';
     }
   }, 1000);
 
@@ -4884,7 +4969,7 @@ function initPlayerControls() {
 
     currentPlayer = { nickname, score: 0, streak: 0 };
     if (playerDispNickname) playerDispNickname.textContent = nickname.toUpperCase();
-    if (playerDispRoom) playerDispRoom.textContent = `ROOM: ${currentRoomCode} • ROUND 1`;
+    updatePlayerHeaderCard(currentRound, null, 'Ready');
 
     if (playerEntryScreen) {
       playerEntryScreen.classList.add('hidden');
@@ -4978,10 +5063,13 @@ function initPlayerControls() {
 
         const session = (data && data.length > 0) ? data[0] : null;
         if (session) {
+          const rNum = Number(session.current_round || session.round_number || 0);
+          if (rNum > 0) {
+            currentRound = Math.max(currentRound, rNum);
+          }
           if (session.status === 'pre_game_countdown') {
             const rem = Math.max(1, Math.ceil((session.starts_at - Date.now()) / 1000));
-            const rNum = session.current_round || session.round_number || currentRound;
-            handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum, genre: session.genre });
+            handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum || currentRound, genre: session.genre });
           } else if (session.status === 'question_active' && session.question_data) {
             const qData = session.question_data;
             const now = Date.now();
@@ -4999,17 +5087,22 @@ function initPlayerControls() {
 
               if (isNewQuestion) {
                 hideResultModal();
-                const rNum = session.current_round || session.round_number || qData.round_number || qData.roundNumber || currentRound;
+                const sessionRound = session.current_round || session.round_number || qData.round_number || qData.roundNumber || currentRound;
                 handleIncomingQuestionStart({
                   ...qData,
                   question_index: session.current_question_index || 1,
-                  round_number: rNum,
-                  roundNumber: rNum,
+                  round_number: sessionRound,
+                  roundNumber: sessionRound,
                   duration_seconds: session.duration_seconds || 20,
                   timer_ends_at_epoch_ms: session.timer_ends_at
                 });
+              } else {
+                const qNum = ((session.current_question_index - 1) % 10) + 1;
+                updatePlayerHeaderCard(currentRound, qNum);
               }
             }
+          } else if (session.status === 'round_summary' || session.status === 'inter_round') {
+            updatePlayerHeaderCard(currentRound, null, 'Intermission');
           }
         }
       } catch (err) {
@@ -5253,6 +5346,8 @@ function onGameReset() {
   hideResultModal();
   hideWinnerModals();
   hideInterQuestionCountdown();
+  const btnTvBack = document.getElementById('btn-tv-back');
+  if (btnTvBack) btnTvBack.classList.remove('question-hidden');
 
   // Reset Host Mobile Stage Card
   const hostStageBadge = document.getElementById('host-stage-badge');

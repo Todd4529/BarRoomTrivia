@@ -434,13 +434,8 @@
 
       <!-- Player 4-Button Controller Screen with Questions & Answers -->
       <div id="player-controller-screen" class="controller-container hidden">
-        <!-- STICKY TOP SECTION: BAR ROOMS TRIVIA BRAND & STICKER CARD -->
+        <!-- STICKY TOP SECTION: PLAYER STICKER CARD -->
         <div id="player-sticky-top-wrap" class="player-sticky-top-wrap">
-          <div class="player-brand-bar">
-            <img src="./assets/images/app_logo.png" alt="Bar Rooms Trivia" class="player-brand-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';">
-            <span class="player-brand-title-text">BAR ROOMS TRIVIA</span>
-          </div>
-
           <!-- TOP STICKER CARD (NAME, COUNTER, POINTS) -->
           <div id="player-sticker-card" class="controller-header sticker-card">
             <div class="player-info">
@@ -604,11 +599,11 @@
               <span class="metric-lbl">ROUND</span>
               <strong id="stat-round">1</strong>
             </div>
-            <div class="metric-pill">
+            <div class="metric-pill clickable-metric-pill" id="stat-pill-timer" style="cursor: pointer;" title="Configure Question Timer Duration">
               <span class="metric-lbl">TIMER</span>
               <strong id="stat-active-timer">20s</strong>
             </div>
-            <div class="metric-pill">
+            <div class="metric-pill clickable-metric-pill" id="stat-pill-diff" style="cursor: pointer;" title="Configure Difficulty Level">
               <span class="metric-lbl">DIFF</span>
               <strong id="stat-difficulty">Standard</strong>
             </div>
@@ -747,21 +742,20 @@
               <div class="genre-search-section">
                 <div class="genre-search-bar">
                   <span class="search-ico">🔍</span>
-                  <input type="text" id="host-genre-search-input" placeholder="Search 30 genres (e.g. Sports, Rock, Beer)..." autocomplete="off" spellcheck="false">
+                  <input type="text" id="host-genre-search-input" placeholder="Search 20 human-made genres (e.g. Sports, Rock, Beer)..." autocomplete="off" spellcheck="false">
                   <button type="button" id="btn-clear-genre-search" class="search-clear-btn hidden" title="Clear Search">✕</button>
                 </div>
 
                 <div class="genre-category-filter-chips">
-                  <button type="button" class="genre-cat-pill active" data-cat="all">All (32)</button>
+                  <button type="button" class="genre-cat-pill active" data-cat="all">All (22)</button>
                   <button type="button" class="genre-cat-pill" data-cat="bar">🍺 Bar Life</button>
                   <button type="button" class="genre-cat-pill" data-cat="ent">🎬 Entertainment</button>
                   <button type="button" class="genre-cat-pill" data-cat="brain">🧠 Knowledge</button>
                   <button type="button" class="genre-cat-pill" data-cat="world">🌍 World & Sports</button>
-                  <button type="button" class="genre-cat-pill" data-cat="life">💼 Lifestyle</button>
                 </div>
               </div>
 
-              <!-- 32 Touchable Genre Chips Grid -->
+              <!-- 20 Human-Made Touchable Genre Chips Grid -->
               <div class="genre-chips-scroll-stage">
                 <div class="genre-chips-grid" id="genre-chips-container">
                   <button type="button" class="genre-chip" data-genre="Auto Select" data-cat="all">⚡ Auto Select</button>
@@ -772,30 +766,20 @@
                   <button type="button" class="genre-chip" data-genre="Movies & Hollywood" data-cat="ent">🎬 Movies & Hollywood</button>
                   <button type="button" class="genre-chip" data-genre="Pop Culture & Music" data-cat="ent">🎵 Pop Culture & Music</button>
                   <button type="button" class="genre-chip" data-genre="Rock & Roll Classics" data-cat="ent">🎸 Rock & Roll Classics</button>
-                  <button type="button" class="genre-chip" data-genre="Music Lyrics" data-cat="ent">🎶 Music Lyrics</button>
                   <button type="button" class="genre-chip" data-genre="80s & 90s Nostalgia" data-cat="ent">📺 80s & 90s Nostalgia</button>
                   <button type="button" class="genre-chip" data-genre="Sitcoms & TV Dramas" data-cat="ent">📺 Sitcoms & TV Dramas</button>
                   <button type="button" class="genre-chip" data-genre="Video Games & Gaming" data-cat="ent">🎮 Video Games & Gaming</button>
                   <button type="button" class="genre-chip" data-genre="Comics & Superheroes" data-cat="ent">🦸 Comics & Superheroes</button>
-                  <button type="button" class="genre-chip" data-genre="Broadway & Theater" data-cat="ent">🎭 Broadway & Theater</button>
                   <button type="button" class="genre-chip" data-genre="Science & Technology" data-cat="brain">🧪 Science & Technology</button>
-                  <button type="button" class="genre-chip" data-genre="Astronomy & Space" data-cat="brain">🚀 Astronomy & Space</button>
                   <button type="button" class="genre-chip" data-genre="Mind Benders & Riddles" data-cat="brain">🧠 Mind Benders & Riddles</button>
                   <button type="button" class="genre-chip" data-genre="Classic Literature" data-cat="brain">📚 Classic Literature</button>
                   <button type="button" class="genre-chip" data-genre="Art & Architecture" data-cat="brain">🎨 Art & Architecture</button>
                   <button type="button" class="genre-chip" data-genre="Sports & Stadiums" data-cat="world">⚽ Sports & Stadiums</button>
                   <button type="button" class="genre-chip" data-genre="World History" data-cat="world">📜 World History</button>
                   <button type="button" class="genre-chip" data-genre="World Geography" data-cat="world">🌍 World Geography</button>
-                  <button type="button" class="genre-chip" data-genre="Famous Landmarks" data-cat="world">🏙️ Famous Landmarks</button>
-                  <button type="button" class="genre-chip" data-genre="Travel" data-cat="world">✈️ Travel</button>
                   <button type="button" class="genre-chip" data-genre="Automotive & Racing" data-cat="world">🏎️ Automotive & Racing</button>
                   <button type="button" class="genre-chip" data-genre="Wildlife & Nature" data-cat="world">🦁 Wildlife & Nature</button>
                   <button type="button" class="genre-chip" data-genre="Mythology & Folklore" data-cat="world">🏛️ Mythology & Folklore</button>
-                  <button type="button" class="genre-chip" data-genre="Finance" data-cat="life">💵 Finance</button>
-                  <button type="button" class="genre-chip" data-genre="Home Repair" data-cat="life">🛠️ Home Repair</button>
-                  <button type="button" class="genre-chip" data-genre="Health" data-cat="life">🩺 Health</button>
-                  <button type="button" class="genre-chip" data-genre="Business & Brands" data-cat="life">💼 Business & Brands</button>
-                  <button type="button" class="genre-chip" data-genre="Internet & Meme Culture" data-cat="life">🌐 Internet & Meme Culture</button>
                 </div>
               </div>
             </div>

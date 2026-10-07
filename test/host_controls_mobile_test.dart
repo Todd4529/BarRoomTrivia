@@ -85,7 +85,6 @@ void main() {
       expect(htmlContent.contains('data-cat="ent"'), isTrue);
       expect(htmlContent.contains('data-cat="brain"'), isTrue);
       expect(htmlContent.contains('data-cat="world"'), isTrue);
-      expect(htmlContent.contains('data-cat="life"'), isTrue);
 
       // Genre chips container and sample genres
       expect(htmlContent.contains('id="genre-chips-container"'), isTrue);

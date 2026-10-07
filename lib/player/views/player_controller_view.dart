@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../../shared/config/supabase_config.dart';
 import '../../shared/models/game_session.dart';
 import '../../shared/models/player.dart';
 import '../../shared/models/question.dart';
@@ -64,6 +65,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   Timer? _interRoundTimer;
   bool _showResultOverlay = false;
   Timer? _resultOverlayTimer;
+  Timer? _playerSessionPollingTimer;
 
   @override
   void initState() {
@@ -127,10 +129,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               );
           _player = player;
           _myScore = player.cumulativeScore;
+          if (session != null) {
+            _currentRound = session.currentRound;
+          }
           _isAuthenticating = false;
         });
 
         _listenToGameEvents(roomCode);
+        _startPlayerSessionPolling();
+        _realtimeService.broadcastSyncRequest(roomCode: roomCode);
       }
     } catch (e) {
       if (mounted) {
@@ -194,15 +201,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   (_currentQuestion!.questionText.isNotEmpty &&
                       _currentQuestion!.questionText == question.questionText));
 
+          final qNumInRound = (payload['question_number_in_round'] as num?)?.toInt() ??
+              (payload['questionNumberInRound'] as num?)?.toInt() ??
+              (((qIndex - 1) % 10) + 1);
+
           if (isSameQuestion && _selectedOption != null) {
             // Player already locked in their answer! Keep their answer and locked inputs intact.
             setState(() {
               _remainingSeconds = durationSec;
               final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
-                  (payload['roundNumber'] as num?)?.toInt();
+                  (payload['roundNumber'] as num?)?.toInt() ??
+                  (payload['current_round'] as num?)?.toInt();
               if (rFromPayload != null && rFromPayload > 0) {
-                _currentRound = max(_currentRound, rFromPayload);
+                _currentRound = rFromPayload;
               }
+              _questionNumberInRound = qNumInRound;
             });
             return;
           }
@@ -228,12 +241,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _isReviewPhase = false;
             _isScoredForThisQuestion = false;
             final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
-                (payload['roundNumber'] as num?)?.toInt();
+                (payload['roundNumber'] as num?)?.toInt() ??
+                (payload['current_round'] as num?)?.toInt();
             if (rFromPayload != null && rFromPayload > 0) {
-              _currentRound = max(_currentRound, rFromPayload);
+              _currentRound = rFromPayload;
             }
             _remainingSeconds = durationSec;
-            _questionNumberInRound = ((qIndex - 1) % 10) + 1;
+            _questionNumberInRound = qNumInRound;
           });
 
           _startLocalCountdown();
@@ -290,9 +304,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final diffMs = startsAt - now;
         final remainingSec = (diffMs / 1000).ceil().clamp(1, 30);
         final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
-            (payload['roundNumber'] as num?)?.toInt();
+            (payload['roundNumber'] as num?)?.toInt() ??
+            (payload['current_round'] as num?)?.toInt();
         if (rFromPayload != null && rFromPayload > 0) {
-          _currentRound = max(_currentRound, rFromPayload);
+          _currentRound = rFromPayload;
         }
 
         _interRoundTimer?.cancel();
@@ -310,6 +325,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _isReviewPhase = false;
           _isScoredForThisQuestion = false;
           _preGameSecondsRemaining = remainingSec;
+          _questionNumberInRound = 1;
         });
         _startPreGameTimer();
       },
@@ -447,31 +463,41 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final nextR = (payload['next_round'] as num?)?.toInt() ??
             (payload['nextRound'] as num?)?.toInt() ??
             (completedR + 1);
-        _currentRound = max(_currentRound, nextR);
+        _currentRound = nextR;
 
-        if (parsedWinners.isNotEmpty && _player != null) {
-          final winnerName = parsedWinners.first['nickname']?.toString().toLowerCase();
-          if (winnerName == _player!.nickname.toLowerCase()) {
-            final winnerScore = (parsedWinners.first['score'] as num?)?.toInt() ?? (_myScore + 20);
-            if (winnerScore > _myScore) {
-              _myScore = winnerScore;
-              _player = Player(
-                id: _player!.id,
-                roomCode: _player!.roomCode,
-                playerUid: _player!.playerUid,
-                nickname: _player!.nickname,
-                cumulativeScore: _myScore,
-                isConnected: true,
-              );
+        if (parsedWinners.isNotEmpty) {
+          final myNick = (_player?.nickname ?? _nicknameController.text.trim()).toLowerCase();
+          for (final w in parsedWinners) {
+            final wNick = (w['nickname'] ?? w['name'] ?? '').toString().toLowerCase();
+            if (wNick == myNick) {
+              final wScore = (w['score'] as num?)?.toInt() ?? (w['cumulative_score'] as num?)?.toInt();
+              if (wScore != null && wScore > _myScore) {
+                _myScore = wScore;
+                if (_player != null) {
+                  _player = _player!.copyWith(cumulativeScore: _myScore);
+                }
+                final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
+                final nick = _player?.nickname ?? _nicknameController.text.trim();
+                if (room.isNotEmpty && nick.isNotEmpty) {
+                  _supabaseService.updateLocalPlayerScore(
+                    roomCode: room,
+                    nickname: nick,
+                    score: _myScore,
+                  );
+                }
+              }
+              break;
             }
           }
         }
 
         setState(() {
+          _currentRound = nextR;
+          _questionNumberInRound = 1;
           _isInterRoundPhase = true;
           _interRoundSecondsRemaining = delaySec;
           _top3Winners = parsedWinners;
-          _showRoundWinnersOverlay = parsedWinners.isNotEmpty;
+          _showRoundWinnersOverlay = true;
           _showResultOverlay = false;
           _isInterQuestionPhase = false;
           _currentQuestion = null;
@@ -496,17 +522,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             if (mounted) {
               setState(() {
                 _interRoundSecondsRemaining = 0;
-                _isInterRoundPhase = false;
-                _showRoundWinnersOverlay = false;
+                // Keep transition popup active until onQuestionBroadcast starts the next round!
               });
             }
           }
         });
       },
       onLeaderboardUpdatedBroadcast: (payload) {
-        if (_player != null) {
-          final myNick = _player!.nickname.toLowerCase();
-
+        final myNick = (_player?.nickname ?? _nicknameController.text.trim()).toLowerCase();
+        if (myNick.isNotEmpty) {
           // 1. Check if payload contains a list of players
           final rawList = payload['players'] ?? payload['leaderboard'];
           if (rawList is List && rawList.isNotEmpty) {
@@ -519,10 +543,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                       ? rawScore.toInt()
                       : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
                   final syncedScore = max(_myScore, incomingScore);
-                  if (mounted && (_myScore != syncedScore || _player!.cumulativeScore != syncedScore)) {
+                  if (mounted && (_myScore != syncedScore || _player?.cumulativeScore != syncedScore)) {
                     setState(() {
                       _myScore = syncedScore;
-                      _player = _player!.copyWith(cumulativeScore: syncedScore);
+                      if (_player != null) {
+                        _player = _player!.copyWith(cumulativeScore: syncedScore);
+                      }
                     });
                   }
                   return;
@@ -539,10 +565,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 ? rawScore.toInt()
                 : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
             final syncedScore = max(_myScore, incomingScore);
-            if (mounted && (_myScore != syncedScore || _player!.cumulativeScore != syncedScore)) {
+            if (mounted && (_myScore != syncedScore || _player?.cumulativeScore != syncedScore)) {
               setState(() {
                 _myScore = syncedScore;
-                _player = _player!.copyWith(cumulativeScore: syncedScore);
+                if (_player != null) {
+                  _player = _player!.copyWith(cumulativeScore: syncedScore);
+                }
               });
             }
           }
@@ -558,6 +586,102 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
       },
     );
+  }
+
+  void _startPlayerSessionPolling() {
+    _playerSessionPollingTimer?.cancel();
+    _playerSessionPollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (!mounted || _player == null) return;
+      try {
+        final roomCode = _player!.roomCode;
+        final res = await SupabaseConfig.client
+            .from('game_sessions')
+            .select()
+            .eq('room_code', roomCode)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 1));
+
+        if (res != null && mounted) {
+          final status = res['status'] as String?;
+          final rNum = (res['current_round'] as num?)?.toInt() ??
+              (res['round_number'] as num?)?.toInt();
+          final qIdx = (res['current_question_index'] as num?)?.toInt() ??
+              (res['question_index'] as num?)?.toInt() ?? 1;
+          final calcQNum = ((qIdx - 1) % 10) + 1;
+
+          if (rNum != null && rNum > 0 && rNum != _currentRound) {
+            setState(() {
+              _currentRound = rNum;
+            });
+          }
+
+          if (status == 'question_active') {
+            final timerEndsAt = (res['timer_ends_at'] as num?)?.toInt();
+            final now = DateTime.now().millisecondsSinceEpoch;
+            // Only sync active question if timer is not heavily expired
+            if (timerEndsAt != null && (now - timerEndsAt) > 60000) {
+              return;
+            }
+            final qData = res['question_data'] as Map<String, dynamic>?;
+            if (qData != null) {
+              final q = Question.fromJson(qData);
+              final isNewQuestion = _currentQuestion == null ||
+                  (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText);
+
+              if (isNewQuestion) {
+                final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
+                final targetEndsAt = (timerEndsAt != null && timerEndsAt > now)
+                    ? timerEndsAt
+                    : (now + dur * 1000);
+                final remainingMs = targetEndsAt - now;
+                final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+                _targetTimerEndsAtMs = targetEndsAt;
+
+                _interQuestionTimer?.cancel();
+                _interRoundTimer?.cancel();
+                _resultOverlayTimer?.cancel();
+                setState(() {
+                  _isGamePaused = false;
+                  _isPreGameCountdown = false;
+                  _isInterQuestionPhase = false;
+                  _isInterRoundPhase = false;
+                  _showResultOverlay = false;
+                  _showRoundWinnersOverlay = false;
+                  _currentQuestion = q;
+                  _currentQuestionId = q.id;
+                  _selectedOption = null;
+                  _correctOption = null;
+                  _inputsLocked = false;
+                  _isReviewPhase = false;
+                  _isScoredForThisQuestion = false;
+                  if (rNum != null && rNum > 0) _currentRound = rNum;
+                  _questionNumberInRound = calcQNum;
+                  _remainingSeconds = durationSec;
+                });
+                _startLocalCountdown();
+              } else {
+                if (_questionNumberInRound != calcQNum || (rNum != null && rNum > 0 && _currentRound != rNum)) {
+                  setState(() {
+                    if (rNum != null && rNum > 0) _currentRound = rNum;
+                    _questionNumberInRound = calcQNum;
+                  });
+                }
+              }
+            }
+          } else if (status == 'round_summary' || status == 'inter_round') {
+            if (!_isInterRoundPhase && !_showRoundWinnersOverlay) {
+              setState(() {
+                _isInterRoundPhase = true;
+                if (rNum != null && rNum > 0) _currentRound = rNum;
+                _questionNumberInRound = 1;
+                _showRoundWinnersOverlay = true;
+                _inputsLocked = true;
+              });
+            }
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _startLocalCountdown() {
@@ -617,7 +741,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   void _lockInputsAndReveal(String? serverCorrectOption) {
     if (mounted) {
       final correct = serverCorrectOption ?? _currentQuestion?.correctOption;
-      final wasCorrect = _selectedOption != null && _selectedOption == correct;
+      final wasCorrect = _selectedOption != null &&
+          correct != null &&
+          _selectedOption!.trim().toUpperCase() == correct.trim().toUpperCase();
 
       setState(() {
         _inputsLocked = true;
@@ -628,13 +754,36 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
           _myScore += 10;
-          if (_player != null) {
-            _player = _player!.copyWith(cumulativeScore: _myScore);
+          final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
+          final nick = _player?.nickname ?? _nicknameController.text.trim();
+          if (room.isNotEmpty && nick.isNotEmpty) {
+            if (_player != null) {
+              _player = _player!.copyWith(cumulativeScore: _myScore);
+            } else {
+              _player = Player(
+                id: 'p-$nick',
+                playerUid: 'uid-${nick.toLowerCase()}',
+                roomCode: room,
+                nickname: nick,
+                cumulativeScore: _myScore,
+                isConnected: true,
+              );
+            }
             _supabaseService.updateLocalPlayerScore(
-              roomCode: _player!.roomCode,
-              nickname: _player!.nickname,
+              roomCode: room,
+              nickname: nick,
               score: _myScore,
               pointsToAdd: 10,
+            );
+            _realtimeService.broadcastPlayerScoreUpdated(
+              roomCode: room,
+              nickname: nick,
+              score: _myScore,
+              pointsEarned: 10,
+            );
+            _realtimeService.broadcastLeaderboardUpdated(
+              roomCode: room,
+              players: SupabaseService.getLocalPlayersJson(room),
             );
           }
         }
@@ -679,6 +828,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   @override
   void dispose() {
+    _playerSessionPollingTimer?.cancel();
     _resultOverlayTimer?.cancel();
     _localTimer?.cancel();
     _interQuestionTimer?.cancel();
@@ -722,12 +872,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 if (_showResultOverlay && _currentQuestion != null)
                   _buildResultOverlay(),
 
-                if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
+                if (_showRoundWinnersOverlay)
                   Positioned.fill(
                     child: Container(
                       color: Colors.black.withOpacity(0.88),
                       alignment: Alignment.center,
-                      padding: const EdgeInsets.only(top: 126, left: 20, right: 20, bottom: 20),
+                      padding: const EdgeInsets.only(top: 86, left: 20, right: 20, bottom: 20),
                       child: SingleChildScrollView(
                         child: Container(
                           constraints: const BoxConstraints(maxWidth: 420),
@@ -759,16 +909,18 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              const Text(
-                                'TOP 3 WINNERS OF THE ROUND',
-                                style: TextStyle(
+                              Text(
+                                _top3Winners.isNotEmpty
+                                    ? 'TOP 3 WINNERS OF THE ROUND'
+                                    : 'Get Ready for Round $_currentRound',
+                                style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.0,
                                   color: Colors.white70,
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 18),
                               ...List.generate(_top3Winners.length, (idx) {
                                 final w = _top3Winners[idx];
                                 final badges = ['🥇 1ST PLACE (+20 BONUS)', '🥈 2ND PLACE', '🥉 3RD PLACE'];
@@ -1149,37 +1301,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       key: const Key('sticky-player-top-header'),
       color: AppTheme.darkBackground,
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.asset(
-                  'assets/images/app_logo.png',
-                  width: 30,
-                  height: 30,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildStickyPlayerHeaderCard(),
-        ],
-      ),
+      child: _buildStickyPlayerHeaderCard(),
     );
   }
 
@@ -1239,19 +1361,40 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _currentQuestion != null
-                            ? 'Round $_currentRound • Question $_questionNumberInRound of 10'
-                            : 'Player Ready',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: _currentQuestion != null
-                              ? Colors.white70
-                              : AppTheme.neonGreen,
-                          letterSpacing: 0.5,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          String statusSubtitle;
+                          Color statusColor;
+                          if (_isGamePaused) {
+                            statusSubtitle = 'Round $_currentRound • Paused';
+                            statusColor = AppTheme.neonYellow;
+                          } else if (_isPreGameCountdown) {
+                            statusSubtitle = 'Round $_currentRound • Starting in ${_preGameSecondsRemaining}s';
+                            statusColor = AppTheme.neonCyan;
+                          } else if (_isInterRoundPhase || _showRoundWinnersOverlay) {
+                            statusSubtitle = _interRoundSecondsRemaining > 0
+                                ? 'Round $_currentRound • Next Round in ${_interRoundSecondsRemaining}s'
+                                : 'Round $_currentRound • Next Round Starting...';
+                            statusColor = AppTheme.neonYellow;
+                          } else if (_currentQuestion != null || _isInterQuestionPhase) {
+                            statusSubtitle = 'Round $_currentRound • Question $_questionNumberInRound of 10';
+                            statusColor = Colors.white70;
+                          } else {
+                            statusSubtitle = 'Round $_currentRound • Waiting for Question';
+                            statusColor = AppTheme.neonGreen;
+                          }
+
+                          return Text(
+                            statusSubtitle,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                              letterSpacing: 0.5,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -1290,7 +1433,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   Widget _buildActivePlayerScreen() {
     return Padding(
-      padding: const EdgeInsets.only(top: 126, left: 16, right: 16, bottom: 16),
+      padding: const EdgeInsets.only(top: 86, left: 16, right: 16, bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

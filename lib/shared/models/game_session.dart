@@ -5,6 +5,7 @@ class GameSession {
   final String status;
   final String? currentQuestionId;
   final int questionIndex;
+  final int currentRound;
   final DateTime? timerEndsAt;
   final DateTime createdAt;
 
@@ -15,22 +16,34 @@ class GameSession {
     required this.status,
     this.currentQuestionId,
     this.questionIndex = 0,
+    this.currentRound = 1,
     this.timerEndsAt,
     required this.createdAt,
   });
 
   factory GameSession.fromJson(Map<String, dynamic> json) {
     return GameSession(
-      id: json['id'] as String,
-      roomCode: json['room_code'] as String,
-      hostId: json['host_id'] as String?,
-      status: json['status'] as String? ?? 'lobby',
-      currentQuestionId: json['current_question_id'] as String?,
-      questionIndex: json['question_index'] as int? ?? 0,
+      id: json['id']?.toString() ?? 'dev-session-id',
+      roomCode: json['room_code']?.toString() ?? '',
+      hostId: json['host_id']?.toString(),
+      status: json['status']?.toString() ?? 'lobby',
+      currentQuestionId: json['current_question_id']?.toString(),
+      questionIndex: (json['question_index'] as num?)?.toInt() ??
+          (json['current_question_index'] as num?)?.toInt() ??
+          0,
+      currentRound: (json['current_round'] as num?)?.toInt() ??
+          (json['round_number'] as num?)?.toInt() ??
+          1,
       timerEndsAt: json['timer_ends_at'] != null
-          ? DateTime.parse(json['timer_ends_at'] as String)
+          ? (json['timer_ends_at'] is num
+              ? DateTime.fromMillisecondsSinceEpoch((json['timer_ends_at'] as num).toInt())
+              : DateTime.tryParse(json['timer_ends_at'].toString()))
           : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null
+          ? (json['created_at'] is num
+              ? DateTime.fromMillisecondsSinceEpoch((json['created_at'] as num).toInt())
+              : (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()))
+          : DateTime.now(),
     );
   }
 
@@ -42,6 +55,7 @@ class GameSession {
       'status': status,
       'current_question_id': currentQuestionId,
       'question_index': questionIndex,
+      'current_round': currentRound,
       'timer_ends_at': timerEndsAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };

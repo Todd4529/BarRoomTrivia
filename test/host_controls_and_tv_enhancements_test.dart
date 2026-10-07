@@ -201,10 +201,16 @@ void main() {
 
     test('16. TV display sound engine features bulletproof unlock, countdown ticks, and timer expiry alert', () {
       // Flutter verification
-      expect(tvDisplayContent.contains('SystemSound.play(SystemSoundType.click)'), isTrue,
-          reason: 'Flutter TV display must trigger click sound on question start and countdown ticks');
-      expect(tvDisplayContent.contains('SystemSound.play(SystemSoundType.alert)'), isTrue,
-          reason: 'Flutter TV display must trigger alert sound when timer expires');
+      expect(
+          tvDisplayContent.contains("SoundService.playSound('tick'") ||
+              tvDisplayContent.contains('SystemSound.play(SystemSoundType.click)'),
+          isTrue,
+          reason: 'Flutter TV display must trigger tailored or click sound on countdown ticks');
+      expect(
+          tvDisplayContent.contains("SoundService.playSound('buzz')") ||
+              tvDisplayContent.contains('SystemSound.play(SystemSoundType.alert)'),
+          isTrue,
+          reason: 'Flutter TV display must trigger buzzer sound when timer expires');
       expect(tvDisplayContent.contains('_lastTickedSecond'), isTrue,
           reason: 'Flutter TV display must track last ticked second to prevent multiple ticks');
 

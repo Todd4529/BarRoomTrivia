@@ -7,7 +7,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
-import '../shared/services/supabase_service.dart';
 import '../shared/services/mqtt_service.dart';
 import '../shared/theme/app_theme.dart';
 
@@ -266,6 +265,9 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     if (_isExitDialogOpen) return;
     setState(() => _isExitDialogOpen = true);
 
+    bool isCancelFocused = false;
+    bool isYesFocused = false;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -284,27 +286,73 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           ),
           actionsAlignment: MainAxisAlignment.end,
           actions: [
-            TextButton(
-              onPressed: () {
-                if (mounted) setState(() => _isExitDialogOpen = false);
-                Navigator.of(dialogContext).pop();
+            StatefulBuilder(
+              builder: (ctx, setBtnState) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Focus(
+                      onFocusChange: (hasF) => setBtnState(() => isCancelFocused = hasF),
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
+                          foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
+                          side: BorderSide(
+                            color: isCancelFocused ? AppTheme.neonCyan : Colors.white24,
+                            width: isCancelFocused ? 2.0 : 1.0,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: isCancelFocused ? 6 : 0,
+                        ),
+                        onPressed: () {
+                          if (mounted) setState(() => _isExitDialogOpen = false);
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: isCancelFocused ? Colors.black : Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Focus(
+                      autofocus: true,
+                      onFocusChange: (hasF) => setBtnState(() => isYesFocused = hasF),
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: isYesFocused ? AppTheme.neonCyan : Colors.transparent,
+                          foregroundColor: isYesFocused ? Colors.black : Colors.white70,
+                          side: BorderSide(
+                            color: isYesFocused ? AppTheme.neonCyan : Colors.white24,
+                            width: isYesFocused ? 2.0 : 1.0,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: isYesFocused ? 6 : 0,
+                        ),
+                        onPressed: () {
+                          if (mounted) setState(() => _isExitDialogOpen = false);
+                          Navigator.of(dialogContext).pop();
+                          SystemNavigator.pop();
+                        },
+                        child: Text(
+                          'Yes',
+                          style: TextStyle(
+                            color: isYesFocused ? Colors.black : Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
               },
-              child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 16)),
-            ),
-            ElevatedButton(
-              autofocus: true,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonCyan,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                if (mounted) setState(() => _isExitDialogOpen = false);
-                Navigator.of(dialogContext).pop();
-                SystemNavigator.pop();
-              },
-              child: const Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ],
         ),

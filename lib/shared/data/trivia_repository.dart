@@ -44,65 +44,6 @@ class TriviaRepository {
         correctOption: 'A',
       ),
     ],
-    'Home Repair': [
-      Question(
-        id: 'hr-01',
-        category: 'Home Repair',
-        difficulty: 'Standard',
-        questionText: 'What type of electrical outlet is required near sinks and outdoors to prevent shock?',
-        optionA: 'GFCI (Ground Fault Circuit Interrupter)',
-        optionB: 'Standard 3-Prong',
-        optionC: 'AFCI Breaker',
-        optionD: '240V Outlet',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'hr-02',
-        category: 'Home Repair',
-        difficulty: 'Standard',
-        questionText: 'What is the actual dimensional size of a standard 2x4 wooden stud?',
-        optionA: '1.5 inches by 3.5 inches',
-        optionB: '2.0 inches by 4.0 inches',
-        optionC: '1.75 inches by 3.75 inches',
-        optionD: '1.25 inches by 3.25 inches',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'hr-03',
-        category: 'Home Repair',
-        difficulty: 'Standard',
-        questionText: 'What plumbing fixture prevents sewer gas from leaking up through household drains?',
-        optionA: 'P-Trap',
-        optionB: 'Cleanout Plug',
-        optionC: 'Check Valve',
-        optionD: 'Flapper Valve',
-        correctOption: 'A',
-      ),
-    ],
-    'Finance': [
-      Question(
-        id: 'fin-01',
-        category: 'Finance',
-        difficulty: 'Standard',
-        questionText: 'What is the current standard FDIC insurance coverage limit per depositor per bank?',
-        optionA: '\$250,000',
-        optionB: '\$100,000',
-        optionC: '\$500,000',
-        optionD: '\$1,000,000',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'fin-02',
-        category: 'Finance',
-        difficulty: 'Standard',
-        questionText: 'Which financial term describes earning interest on both your principal and accumulated interest?',
-        optionA: 'Compound Interest',
-        optionB: 'Simple Interest',
-        optionC: 'Amortization',
-        optionD: 'Capital Gain',
-        correctOption: 'A',
-      ),
-    ],
     'Movies & Hollywood': [
       Question(
         id: 'mov-01',
@@ -367,19 +308,6 @@ class TriviaRepository {
         correctOption: 'A',
       ),
     ],
-    'Astronomy & Space': [
-      Question(
-        id: 'as-01',
-        category: 'Astronomy & Space',
-        difficulty: 'Standard',
-        questionText: 'Which planet in our solar system is known as the "Red Planet"?',
-        optionA: 'Mars',
-        optionB: 'Venus',
-        optionC: 'Jupiter',
-        optionD: 'Mercury',
-        correctOption: 'A',
-      ),
-    ],
     'Automotive & Racing': [
       Question(
         id: 'ar-01',
@@ -419,328 +347,7 @@ class TriviaRepository {
         correctOption: 'A',
       ),
     ],
-    'Famous Landmarks': [
-      Question(
-        id: 'fl-01',
-        category: 'Famous Landmarks',
-        difficulty: 'Standard',
-        questionText: 'In which city can you find the famous ancient amphitheater known as the Colosseum?',
-        optionA: 'Rome',
-        optionB: 'Athens',
-        optionC: 'Cairo',
-        optionD: 'Istanbul',
-        correctOption: 'A',
-      ),
-    ],
-    'Business & Brands': [
-      Question(
-        id: 'bb-01',
-        category: 'Business & Brands',
-        difficulty: 'Standard',
-        questionText: 'Which global company was originally named "Cadabra" when founded in 1994?',
-        optionA: 'Amazon',
-        optionB: 'eBay',
-        optionC: 'Alibaba',
-        optionD: 'Shopify',
-        correctOption: 'A',
-      ),
-    ],
-    'Broadway & Theater': _generateBroadwayQuestions(),
-    'Motorcycles': _generateMotorcycleQuestions(),
-    'Camping': _generateCampingQuestions(),
   };
-
-  static List<Question> _generateMotorcycleQuestions() {
-    final list = <Question>[
-      Question(
-        id: 'moto-01',
-        category: 'Motorcycles',
-        difficulty: 'Standard',
-        questionText: "What was Harley-Davidson's first production V-Twin engine configuration introduced in 1909?",
-        optionA: '45-Degree V-Twin',
-        optionB: '90-Degree L-Twin',
-        optionC: 'Parallel Twin',
-        optionD: 'Transverse V-Twin',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'moto-02',
-        category: 'Motorcycles',
-        difficulty: 'Standard',
-        questionText: 'What does the acronym "ATGATT" stand for in motorcycle riding safety culture?',
-        optionA: 'All The Gear, All The Time',
-        optionB: 'Always Throttle Ground And Turn Together',
-        optionC: 'Anti-Torque Gas And Transmission Technology',
-        optionD: 'Auto-Tension Gear And Traction Control',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'moto-03',
-        category: 'Motorcycles',
-        difficulty: 'Standard',
-        questionText: 'Which Japanese manufacturer produces the legendary "Hayabusa" hyper-sport motorcycle?',
-        optionA: 'Suzuki',
-        optionB: 'Honda',
-        optionC: 'Kawasaki',
-        optionD: 'Yamaha',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'moto-04',
-        category: 'Motorcycles',
-        difficulty: 'Standard',
-        questionText: 'What type of valve actuation system is famous for being used exclusively in Ducati engines?',
-        optionA: 'Desmodromic Valve System',
-        optionB: 'Pneumatic Valve Actuation',
-        optionC: 'Pushrod Overhead Valve',
-        optionD: 'Variable Valve Timing (VVT)',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'moto-05',
-        category: 'Motorcycles',
-        difficulty: 'Standard',
-        questionText: 'Which motorcycle race takes place on a 37.73-mile public road course on an island in the Irish Sea?',
-        optionA: 'Isle of Man TT',
-        optionB: 'Daytona 200',
-        optionC: 'Grand Prix of Japan',
-        optionD: 'Baja 1000',
-        correctOption: 'A',
-      ),
-    ];
-
-    final brands = ['Harley-Davidson', 'Honda', 'Yamaha', 'Kawasaki', 'Suzuki', 'Ducati', 'BMW', 'Triumph', 'Indian', 'KTM', 'Royal Enfield', 'Moto Guzzi', 'Husqvarna', 'Aprilia', 'MV Agusta'];
-    final displacements = [125, 250, 300, 400, 500, 600, 650, 750, 850, 900, 1000, 1100, 1200, 1300, 1800, 2500];
-    final components = [
-      {'part': 'Slipper Clutch', 'desc': 'prevents rear-wheel hop during aggressive downshifting'},
-      {'part': 'Inverted Telescopic Forks', 'desc': 'reduces unsprung weight and increases front-end rigidity'},
-      {'part': 'Steering Damper', 'desc': 'suppresses high-speed handlebar oscillations and tank slappers'},
-      {'part': 'Quickshifter', 'desc': 'allows clutchless upshifts by momentarily cutting ignition'},
-      {'part': 'Shaft Drive', 'desc': 'provides low-maintenance power transfer enclosed in a sealed swingarm'},
-      {'part': 'Belt Drive', 'desc': 'offers clean, quiet power delivery with no regular lubrication required'},
-      {'part': 'Cornering ABS', 'desc': 'uses a 6-axis IMU to adjust braking pressure based on lean angle'},
-      {'part': 'Traction Control System (TCS)', 'desc': 'monitors wheel speed differential to prevent rear tire spin'},
-      {'part': 'Dry Sump Oil System', 'desc': 'stores engine oil in a separate remote reservoir tank'},
-      {'part': 'Desmodromic Valve Train', 'desc': 'uses mechanical cams to open AND close valves without springs'}
-    ];
-
-    for (int i = 0; i < 495; i++) {
-      final brand = brands[i % brands.length];
-      final cc = displacements[i % displacements.length];
-      final comp = components[i % components.length];
-
-      list.add(
-        Question(
-          id: 'moto-gen-$i',
-          category: 'Motorcycles',
-          difficulty: i % 3 == 0 ? 'Advanced' : (i % 2 == 0 ? 'Standard' : 'Beginner'),
-          questionText: 'In motorcycle engineering, what is the primary function of a ${comp['part']} on a $cc cc $brand motorcycle?',
-          optionA: 'It ${comp['desc']}',
-          optionB: 'It increases peak exhaust noise levels above 120 dB',
-          optionC: 'It recharges the starter battery using braking heat',
-          optionD: 'It automatically shifts the gearbox at redline',
-          correctOption: 'A',
-        ),
-      );
-    }
-    return list;
-  }
-
-  static List<Question> _generateCampingQuestions() {
-    final list = <Question>[
-      Question(
-        id: 'camp-01',
-        category: 'Camping',
-        difficulty: 'Standard',
-        questionText: 'According to Leave No Trace (LNT) principles, how far away from water sources should you pitch your tent?',
-        optionA: 'At least 200 feet (60 meters)',
-        optionB: 'At least 50 feet (15 meters)',
-        optionC: 'At least 500 feet (150 meters)',
-        optionD: 'Directly on the water bank',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'camp-02',
-        category: 'Camping',
-        difficulty: 'Standard',
-        questionText: 'What does the "R-value" measure on a camping sleeping pad?',
-        optionA: 'Thermal insulation resistance to ground cold',
-        optionB: 'Rain and waterproof rating in millimeters',
-        optionC: 'Ripstop fabric tensile strength',
-        optionD: 'Roll-up compactness ratio',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'camp-03',
-        category: 'Camping',
-        difficulty: 'Standard',
-        questionText: 'Which knot is known as the "King of Knots" for creating a secure fixed loop on camping guylines?',
-        optionA: 'Bowline Knot',
-        optionB: 'Square Knot',
-        optionC: 'Granny Knot',
-        optionD: 'Slip Knot',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'camp-04',
-        category: 'Camping',
-        difficulty: 'Standard',
-        questionText: 'What fuel type works best for camping stoves in extreme below-freezing sub-zero temperatures?',
-        optionA: 'Liquid White Gas (Coleman Fuel)',
-        optionB: 'Isobutane / Propane Canister',
-        optionC: 'Pure Kerosene',
-        optionD: 'Sterno Alcohol Gel',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'camp-05',
-        category: 'Camping',
-        difficulty: 'Standard',
-        questionText: 'How deep should a cathole be dug for disposing of human waste when wilderness camping?',
-        optionA: '6 to 8 inches deep',
-        optionB: '2 to 3 inches deep',
-        optionC: '14 to 18 inches deep',
-        optionD: '24 inches deep',
-        correctOption: 'A',
-      ),
-    ];
-
-    final trailNames = [
-      'Appalachian Trail (AT)',
-      'Pacific Crest Trail (PCT)',
-      'Continental Divide Trail (CDT)',
-      'John Muir Trail (JMT)',
-      'Colorado Trail',
-      'Long Trail',
-      'Superior Hiking Trail',
-      'Tahoe Rim Trail',
-      'Arizona Trail',
-      'Ice Age Trail'
-    ];
-    final gearTopics = [
-      {'item': 'Silnylon Rainfly', 'use': 'provides waterproof shelter protection with siliconized ripstop nylon'},
-      {'item': 'SteriPEN UV Purifier', 'use': 'destroys 99.9% of protozoa, bacteria, and viruses using ultraviolet light'},
-      {'item': 'Hollow-Fiber Membrane Filter', 'use': 'physically traps micro-contaminants down to 0.1 microns'},
-      {'item': 'Bear Canister', 'use': 'prevents bears and rodents from acquiring human food in backcountries'},
-      {'item': 'Taut-Line Hitch Knot', 'use': 'creates an adjustable tension loop on tent guy lines'},
-      {'item': 'Closed-Cell Foam Pad', 'use': 'provides durable, puncture-proof insulation underneath sleeping bags'},
-      {'item': 'Dutch Oven', 'use': 'bakes and stews outdoor meals using hot coals placed on top and bottom'},
-      {'item': 'Titanium Spork', 'use': 'delivers ultralight strength for camp kitchen dining'},
-      {'item': 'Headlamp with Red LED', 'use': 'preserves night vision while illuminating campsite tasks'},
-      {'item': 'Birch Bark Tinder', 'use': 'ignites quickly even when damp due to natural flammable oils'}
-    ];
-
-    for (int i = 0; i < 495; i++) {
-      final trail = trailNames[i % trailNames.length];
-      final gear = gearTopics[i % gearTopics.length];
-
-      list.add(
-        Question(
-          id: 'camp-gen-$i',
-          category: 'Camping',
-          difficulty: i % 3 == 0 ? 'Advanced' : (i % 2 == 0 ? 'Standard' : 'Beginner'),
-          questionText: 'When backpacking on the $trail, why is a ${gear['item']} recommended for wilderness survival?',
-          optionA: 'Because it ${gear['use']}',
-          optionB: 'Because it generates free electricity for cellular devices',
-          optionC: 'Because it repels all mosquitoes within a 50-foot radius',
-          optionD: 'Because it doubles as a bear-proof defensive shield',
-          correctOption: 'A',
-        ),
-      );
-    }
-    return list;
-  }
-
-  static List<Question> _generateBroadwayQuestions() {
-    final List<Question> list = [
-      Question(
-        id: 'bway-01',
-        category: 'Broadway & Theater',
-        difficulty: 'Standard',
-        questionText: 'Which Andrew Lloyd Webber musical features the famous song "Memory"?',
-        optionA: 'Cats',
-        optionB: 'Phantom of the Opera',
-        optionC: 'Evita',
-        optionD: 'Sunset Boulevard',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'bway-02',
-        category: 'Broadway & Theater',
-        difficulty: 'Standard',
-        questionText: 'Who wrote the music and lyrics for the Broadway sensation "Hamilton"?',
-        optionA: 'Lin-Manuel Miranda',
-        optionB: 'Stephen Sondheim',
-        optionC: 'Benj Pasek',
-        optionD: 'Jonathan Larson',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'bway-03',
-        category: 'Broadway & Theater',
-        difficulty: 'Standard',
-        questionText: 'Which musical holds the record for the longest-running show in Broadway history?',
-        optionA: 'The Phantom of the Opera',
-        optionB: 'Chicago',
-        optionC: 'The Lion King',
-        optionD: 'Les Misérables',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'bway-04',
-        category: 'Broadway & Theater',
-        difficulty: 'Standard',
-        questionText: 'In the musical "Wicked", what is the name of the Wicked Witch of the West?',
-        optionA: 'Elphaba',
-        optionB: 'Glinda',
-        optionC: 'Nessarose',
-        optionD: 'Madame Morrible',
-        correctOption: 'A',
-      ),
-      Question(
-        id: 'bway-05',
-        category: 'Broadway & Theater',
-        difficulty: 'Standard',
-        questionText: 'Which Broadway musical is based on the 1926 play by Maurine Dallas Watkins and features "Cell Block Tango"?',
-        optionA: 'Chicago',
-        optionB: 'Cabaret',
-        optionC: 'Guys and Dolls',
-        optionD: 'Anything Goes',
-        correctOption: 'A',
-      ),
-    ];
-
-    final shows = [
-      {'title': 'Wicked', 'composer': 'Stephen Schwartz', 'lead': 'Elphaba', 'song': 'Defying Gravity'},
-      {'title': 'Hamilton', 'composer': 'Lin-Manuel Miranda', 'lead': 'Alexander Hamilton', 'song': 'My Shot'},
-      {'title': 'The Phantom of the Opera', 'composer': 'Andrew Lloyd Webber', 'lead': 'Christine Daaé', 'song': 'Music of the Night'},
-      {'title': 'Les Misérables', 'composer': 'Claude-Michel Schönberg', 'lead': 'Jean Valjean', 'song': 'I Dreamed a Dream'},
-      {'title': 'RENT', 'composer': 'Jonathan Larson', 'lead': 'Mark Cohen', 'song': 'Seasons of Love'},
-      {'title': 'Dear Evan Hansen', 'composer': 'Benj Pasek and Justin Paul', 'lead': 'Evan Hansen', 'song': 'You Will Be Found'},
-      {'title': 'Sweeney Todd', 'composer': 'Stephen Sondheim', 'lead': 'Sweeney Todd', 'song': 'The Ballad of Sweeney Todd'},
-      {'title': 'The Book of Mormon', 'composer': 'Trey Parker, Matt Stone, and Robert Lopez', 'lead': 'Elder Price', 'song': 'Hello!'},
-      {'title': 'Hairspray', 'composer': 'Marc Shaiman', 'lead': 'Tracy Turnblad', 'song': 'You Can\'t Stop the Beat'},
-      {'title': 'The Lion King', 'composer': 'Elton John and Tim Rice', 'lead': 'Simba', 'song': 'Circle of Life'},
-    ];
-
-    for (int i = 0; i < 495; i++) {
-      final item = shows[i % shows.length];
-      list.add(
-        Question(
-          id: 'bway-gen-$i',
-          category: 'Broadway & Theater',
-          difficulty: i % 3 == 0 ? 'Advanced' : (i % 2 == 0 ? 'Standard' : 'Beginner'),
-          questionText: 'Which legendary Broadway musical created by ${item['composer']} features the iconic song "${item['song']}"?',
-          optionA: item['title']!,
-          optionB: 'Fiddler on the Roof',
-          optionC: 'West Side Story',
-          optionD: 'Oklahoma!',
-          correctOption: 'A',
-        ),
-      );
-    }
-    return list;
-  }
 
   static final Map<String, List<Question>> _dynamicWeeklyQuestions = {};
   static final Map<String, List<Question>> _categoryCache = {};
@@ -869,12 +476,10 @@ class TriviaRepository {
     // Retrieve or initialize the randomized non-repeating deck for this genre
     if (!_shuffledSessionDecks.containsKey(targetGenre) || _shuffledSessionDecks[targetGenre]!.isEmpty) {
       final fullPool = getQuestionsForCategory(targetGenre);
-      // Partition authentic handcrafted domain questions from synthetic filler
+      // Strictly 100% human-made authentic questions
       final authenticQuestions = fullPool.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(_random);
-      final fillerQuestions = fullPool.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(_random);
 
-      // Shuffled deck ALWAYS places authentic questions first
-      final shuffledDeck = <Question>[...authenticQuestions, ...fillerQuestions];
+      final shuffledDeck = <Question>[...authenticQuestions];
 
       // Prioritize freshly ingested weekly questions by placing them at the very front of the active session deck
       for (final entry in _dynamicWeeklyQuestions.entries) {
@@ -894,13 +499,12 @@ class TriviaRepository {
     final deck = _shuffledSessionDecks[targetGenre]!;
     int cursor = _sessionDeckCursors[targetGenre] ?? 0;
 
-    // Reshuffle deck only when all 500+ questions have been exhausted
+    // Reshuffle deck only when all questions have been exhausted
     if (cursor >= deck.length) {
       final auth = deck.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(_random);
-      final fill = deck.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(_random);
       deck
         ..clear()
-        ..addAll([...auth, ...fill]);
+        ..addAll(auth);
       cursor = 0;
     }
 

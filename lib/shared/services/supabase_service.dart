@@ -431,13 +431,21 @@ class SupabaseService {
 
   void _syncPlayerScoreToDbInBackground(String normRoom, String nickname, int newScore) async {
     try {
-      await _client.from('players').upsert({
-        'room_code': normRoom,
-        'nickname': nickname,
-        'player_uid': 'uid-${nickname.toLowerCase()}',
-        'cumulative_score': newScore,
-        'is_connected': true,
-      }, onConflict: 'room_code, player_uid').timeout(const Duration(milliseconds: 800));
+      final user = _client.auth.currentUser;
+      if (user != null) {
+        await _client.from('players').upsert({
+          'room_code': normRoom,
+          'nickname': nickname,
+          'player_uid': user.id,
+          'cumulative_score': newScore,
+          'is_connected': true,
+        }, onConflict: 'room_code, player_uid').timeout(const Duration(milliseconds: 1000));
+      } else {
+        await _client.from('players').update({
+          'cumulative_score': newScore,
+          'is_connected': true,
+        }).eq('room_code', normRoom).ilike('nickname', nickname).timeout(const Duration(milliseconds: 1000));
+      }
     } catch (_) {}
   }
 
@@ -558,7 +566,7 @@ class SupabaseService {
           .select()
           .eq('room_code', roomCode)
           .maybeSingle()
-          .timeout(const Duration(milliseconds: 500));
+          .timeout(const Duration(milliseconds: 1500));
 
       if (response == null) {
         return GameSession(
@@ -608,7 +616,27 @@ class SupabaseService {
   Future<List<Player>> getLeaderboard(String roomCode) async {
     final normRoom = roomCode.toUpperCase();
 
-    // 1. Check local in-memory players first for instantaneous response
+    // 1. Fetch remote Supabase DB for registered players and merge into local state
+    try {
+      final res = await _client
+          .from('players')
+          .select()
+          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
+          .order('cumulative_score', ascending: false)
+          .timeout(const Duration(milliseconds: 350));
+      if (res.isNotEmpty) {
+        for (final item in res) {
+          try {
+            final p = Player.fromJson(item);
+            if (!isMockNickname(p.nickname)) {
+              registerIncomingPlayer(normRoom, p.nickname, p.cumulativeScore);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    // 2. Return sorted local in-memory players
     final localList = List<Player>.from(_localPlayersMap[normRoom] ?? [])
         .where((p) => !isMockNickname(p.nickname))
         .toList();
@@ -627,31 +655,7 @@ class SupabaseService {
       }
     }
 
-    // 2. Query remote Supabase DB for registered players if local is empty
-    try {
-      final res = await _client
-          .from('players')
-          .select()
-          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
-          .order('cumulative_score', ascending: false)
-          .timeout(const Duration(milliseconds: 300));
-      if (res.isNotEmpty) {
-        for (final item in res) {
-          try {
-            final p = Player.fromJson(item);
-            if (!isMockNickname(p.nickname)) {
-              registerIncomingPlayer(normRoom, p.nickname, p.cumulativeScore);
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
-    final finalList = List<Player>.from(_localPlayersMap[normRoom] ?? [])
-        .where((p) => !isMockNickname(p.nickname))
-        .toList();
-    finalList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    return finalList;
+    return [];
   }
 
   /// Host: Create new room session with Dev Fallback

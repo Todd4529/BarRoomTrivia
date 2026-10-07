@@ -15,6 +15,14 @@ class RealtimeService {
   static final StreamController<Map<String, dynamic>> _localEventBus =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  // Cache of active, subscribed Supabase channels by room code
+  static final Map<String, RealtimeChannel> _activeChannels = {};
+
+  RealtimeChannel _getChannel(String roomCode) {
+    final normRoom = roomCode.toUpperCase().trim();
+    return _channel ?? _activeChannels[normRoom] ?? SupabaseConfig.client.channel('room_$normRoom');
+  }
+
   StreamSubscription<Map<String, dynamic>>? _localSubscription;
   StreamSubscription<Map<String, dynamic>>? _mqttSubscription;
 
@@ -265,16 +273,20 @@ class RealtimeService {
 
     // 3. Subscribe to Supabase Realtime channels
     try {
-      _channel = SupabaseConfig.client.channel('room_$roomCode');
+      final norm = roomCode.toUpperCase().trim();
+      _channel = SupabaseConfig.client.channel('room_$norm');
       attachListeners(_channel!);
+      _activeChannels[norm] = _channel!;
 
-      if (roomCode.toUpperCase() != 'TRIV') {
+      if (norm != 'TRIV') {
         _defaultChannel = SupabaseConfig.client.channel('room_TRIV');
         attachListeners(_defaultChannel!);
+        _activeChannels['TRIV'] = _defaultChannel!;
       }
 
       _globalChannel = SupabaseConfig.client.channel('room_GLOBAL');
       attachListeners(_globalChannel!);
+      _activeChannels['GLOBAL'] = _globalChannel!;
     } catch (_) {}
 
     return _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -304,7 +316,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'pre_game_countdown',
@@ -347,7 +359,7 @@ class RealtimeService {
     _publishMqtt(normRoom, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$normRoom');
+      final ch = _getChannel(normRoom);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'player_joined',
@@ -378,7 +390,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'request_state_sync',
@@ -449,7 +461,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'question_start',
@@ -503,7 +515,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'timer_expired',
@@ -525,7 +537,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'game_paused',
@@ -553,7 +565,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'game_resuming',
@@ -579,7 +591,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'leaderboard_updated',
@@ -610,7 +622,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'player_score_updated',
@@ -640,7 +652,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'answer_submitted',
@@ -666,7 +678,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'game_reset',
@@ -705,7 +717,7 @@ class RealtimeService {
     _publishMqtt(roomCode, payload);
 
     try {
-      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      final ch = _getChannel(roomCode);
       ch.subscribe();
       await ch.sendBroadcastMessage(
         event: 'round_completed',

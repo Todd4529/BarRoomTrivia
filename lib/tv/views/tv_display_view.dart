@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/config/supabase_config.dart';
@@ -12,6 +11,7 @@ import '../../shared/data/homebrewing_database.dart';
 import '../../shared/data/genre_questions_engine.dart';
 import '../../shared/data/trivia_genres.dart';
 import '../../shared/services/realtime_service.dart';
+import '../../shared/services/sound_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../widgets/leaderboard_widget.dart';
@@ -68,7 +68,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   bool _isExitDialogOpen = false;
-  Set<String> _previousWrongOptions = {};
+  final Set<String> _previousWrongOptions = {};
   static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
   @override
@@ -418,30 +418,39 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 660))
             : (payload['delaySeconds'] as num?)?.toInt() ?? 60;
 
-        if (mounted && winners != null) {
+        if (mounted) {
           _timer?.cancel();
           _interQuestionTimer?.cancel();
+          _preGameTimer?.cancel();
           final parsed = <Map<String, dynamic>>[];
-          for (var item in winners) {
-            if (item is Map) parsed.add(Map<String, dynamic>.from(item));
+          if (winners != null) {
+            for (var item in winners) {
+              if (item is Map) parsed.add(Map<String, dynamic>.from(item));
+            }
           }
+          final completedR = (payload['completed_round'] as num?)?.toInt() ??
+              (payload['round_number'] as num?)?.toInt() ??
+              (payload['roundNumber'] as num?)?.toInt() ??
+              _currentRound;
+          final nextR = (payload['next_round'] as num?)?.toInt() ??
+              (payload['nextRound'] as num?)?.toInt() ??
+              (completedR + 1);
           setState(() {
+            _isGameActive = false;
             _currentQuestion = null;
             _previousWrongOptions.clear();
             _isTimerExpired = false;
             _isInterQuestionPhase = false;
-            _top3Winners = parsed;
-            _showRoundWinnersOverlay = true;
             _interQuestionSecondsRemaining = 0;
-            final completedR = (payload['completed_round'] as num?)?.toInt() ??
-                (payload['round_number'] as num?)?.toInt() ??
-                (payload['roundNumber'] as num?)?.toInt() ??
-                _currentRound;
-            final nextR = (payload['next_round'] as num?)?.toInt() ??
-                (payload['nextRound'] as num?)?.toInt() ??
-                (completedR + 1);
-            _currentRound = max(_currentRound, nextR);
+            _top3Winners = parsed;
+            _showRoundWinnersOverlay = parsed.isNotEmpty;
+            _currentRound = nextR;
           });
+
+          if (parsed.isNotEmpty) {
+            SoundService.playSound('fanfare');
+          }
+
           Future.delayed(Duration(seconds: delaySec), () {
             if (mounted && _showRoundWinnersOverlay) {
               setState(() {
@@ -507,7 +516,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _loadLeaderboard();
       },
       onRequestStateSyncBroadcast: (payload) {
-        if (mounted && _isGameActive && _currentQuestion != null && !_isTimerExpired) {
+        if (!mounted) return;
+        if (_showRoundWinnersOverlay) {
+          _realtimeService.broadcastRoundCompleted(
+            roomCode: _displayRoomCode,
+            roundNumber: _currentRound > 1 ? _currentRound - 1 : 1,
+            nextRound: _currentRound,
+            top3Winners: SupabaseService.getTop3RoundWinners(_displayRoomCode),
+            nextRoundStartsAtEpochMs: DateTime.now().millisecondsSinceEpoch + 15000,
+          );
+        } else if (_isPreGameCountdown) {
+          _realtimeService.broadcastGameStarting(
+            roomCode: _displayRoomCode,
+            startsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_preGameSeconds > 0 ? _preGameSeconds : 10) * 1000),
+            roundNumber: _currentRound,
+            genre: _activeGenre,
+          );
+        } else if (_isGameActive && _currentQuestion != null) {
           final targetEndsAt = _targetTimerEndsAtMs ??
               (DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000));
           _realtimeService.broadcastQuestion(
@@ -519,6 +544,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             roundNumber: _currentRound,
             totalQuestions: _totalQuestionsInRound,
           );
+          if (_isTimerExpired || _isInterQuestionPhase) {
+            _realtimeService.broadcastTimerExpired(
+              roomCode: _displayRoomCode,
+              correctOption: _currentQuestion!.correctOption,
+              nextQuestionStartsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_interQuestionSecondsRemaining > 0 ? _interQuestionSecondsRemaining : 15) * 1000),
+            );
+          }
         }
         // Broadcast current active leaderboard to newly joined players so their screens sync instantly
         final currentPlayersJson = SupabaseService.getLocalPlayersJson(_displayRoomCode);
@@ -605,7 +637,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final players = await _supabaseService.getLeaderboard(_displayRoomCode);
     if (mounted) {
       setState(() {
-        _leaderboard = players;
+        _leaderboard = SupabaseService.mergeLocalPlayers(_displayRoomCode, players);
       });
     }
   }
@@ -614,7 +646,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _timer?.cancel();
     _questionStartedAt = DateTime.now();
     _lastTickedSecond = -1;
-    SystemSound.play(SystemSoundType.click);
+    SoundService.playSound('question_start');
     _timer = Timer.periodic(const Duration(milliseconds: 250), (t) {
       if (!mounted) {
         t.cancel();
@@ -631,7 +663,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             });
             if (rem <= 5 && _lastTickedSecond != rem) {
               _lastTickedSecond = rem;
-              SystemSound.play(SystemSoundType.click);
+              SoundService.playSound('tick', rem);
             }
           }
         } else {
@@ -648,7 +680,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           });
           if (_remainingSeconds <= 5 && _remainingSeconds > 0 && _lastTickedSecond != _remainingSeconds) {
             _lastTickedSecond = _remainingSeconds;
-            SystemSound.play(SystemSoundType.click);
+            SoundService.playSound('tick', _remainingSeconds);
           }
         } else {
           t.cancel();
@@ -667,7 +699,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       return;
     }
 
-    SystemSound.play(SystemSoundType.alert);
+    SoundService.playSound('buzz');
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
@@ -712,6 +744,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             setState(() {
               _interQuestionSecondsRemaining = rem;
             });
+            if (rem % 2 == 0) {
+              _loadLeaderboard();
+            }
           }
         } else {
           _interQuestionTimer?.cancel();
@@ -734,6 +769,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
 
     await _loadLeaderboard();
+
+    // Re-check leaderboard at staggered intervals so answers submitted at timer expiry appear
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _loadLeaderboard();
+    });
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (mounted) _loadLeaderboard();
+    });
+    Future.delayed(const Duration(milliseconds: 4000), () {
+      if (mounted) _loadLeaderboard();
+    });
   }
 
   void _completeRoundAutonomously() async {
@@ -754,6 +800,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         nickname: winner.nickname,
         score: newScore,
       );
+      _supabaseService.updateLocalPlayerScore(
+        roomCode: _displayRoomCode,
+        nickname: winner.nickname,
+        score: newScore,
+        pointsToAdd: 20,
+      );
       final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
       if (wIdx >= 0) {
         sorted[wIdx] = Player(
@@ -768,6 +820,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       sorted.sort((a, b) => b.score.compareTo(a.score));
       _leaderboard = sorted;
 
+      _realtimeService.broadcastPlayerScoreUpdated(
+        roomCode: _displayRoomCode,
+        nickname: winner.nickname,
+        score: newScore,
+        pointsEarned: 20,
+      );
       _realtimeService.broadcastLeaderboardUpdated(
         roomCode: _displayRoomCode,
         players: SupabaseService.getLocalPlayersJson(_displayRoomCode),
@@ -836,7 +894,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   void _advanceNextQuestionAutonomously() async {
-    if (!mounted || !_isGameActive || _showRoundWinnersOverlay) return;
+    if (!mounted || !_isGameActive || _showRoundWinnersOverlay || _currentQuestion == null) return;
 
     if (_questionIndex > 0 && _questionIndex % _totalQuestionsInRound == 0) {
       _completeRoundAutonomously();
@@ -909,6 +967,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   void _showExitApplicationDialog() {
     if (_isExitDialogOpen) return;
     setState(() => _isExitDialogOpen = true);
+
+    bool isCancelFocused = false;
+    bool isYesFocused = false;
 
     showDialog(
       context: context,
@@ -1028,54 +1089,86 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   },
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                StatefulBuilder(
+                  builder: (context, setBtnState) {
+                    return FocusTraversalGroup(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Focus(
+                              onFocusChange: (f) => setBtnState(() => isCancelFocused = f),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
+                                  foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
+                                  side: BorderSide(
+                                    color: isCancelFocused ? AppTheme.neonCyan : Colors.white.withOpacity(0.2),
+                                    width: isCancelFocused ? 2.0 : 1.0,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: isCancelFocused ? 6 : 0,
+                                ),
+                                onPressed: () {
+                                  if (mounted) setState(() => _isExitDialogOpen = false);
+                                  Navigator.of(dialogContext).pop();
+                                },
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: isCancelFocused ? Colors.black : Colors.white70,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        onPressed: () {
-                          if (mounted) setState(() => _isExitDialogOpen = false);
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent.withOpacity(0.2),
-                          foregroundColor: Colors.redAccent,
-                          side: const BorderSide(color: Colors.redAccent, width: 1.5),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Focus(
+                              onFocusChange: (f) => setBtnState(() => isYesFocused = f),
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isYesFocused ? AppTheme.neonCyan : Colors.redAccent.withOpacity(0.2),
+                                  foregroundColor: isYesFocused ? Colors.black : Colors.redAccent,
+                                  side: BorderSide(
+                                    color: isYesFocused ? AppTheme.neonCyan : Colors.redAccent,
+                                    width: isYesFocused ? 2.0 : 1.5,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: isYesFocused ? 6 : 0,
+                                ),
+                                icon: Icon(
+                                  Icons.power_settings_new_rounded,
+                                  size: 18,
+                                  color: isYesFocused ? Colors.black : Colors.redAccent,
+                                ),
+                                label: Text(
+                                  'Yes',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: isYesFocused ? Colors.black : Colors.redAccent,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  if (mounted) setState(() => _isExitDialogOpen = false);
+                                  Navigator.of(dialogContext).pop();
+                                  SystemNavigator.pop();
+                                },
+                              ),
+                            ),
                           ),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.power_settings_new_rounded, size: 18),
-                        label: const Text(
-                          'Yes',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          if (mounted) setState(() => _isExitDialogOpen = false);
-                          Navigator.of(dialogContext).pop();
-                          SystemNavigator.pop();
-                        },
+                        ],
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1169,10 +1262,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   child: const Text('👑', style: TextStyle(fontSize: 26)),
                 ),
                 const SizedBox(width: 14),
-                Column(
+                const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'HOST CONTROLS RECOVERY',
                       style: TextStyle(
                         color: AppTheme.neonYellow,
@@ -1181,8 +1274,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         letterSpacing: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    const Text(
+                    SizedBox(height: 2),
+                    Text(
                       'Current Game Host QR Code',
                       style: TextStyle(
                         color: Colors.white,
@@ -1470,12 +1563,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
-                          tooltip: 'Exit Application',
-                          onPressed: _showExitApplicationDialog,
+                        Opacity(
+                          opacity: (_currentQuestion != null && !_isInterQuestionPhase) ? 0.0 : 1.0,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
+                            tooltip: 'Exit Application',
+                            onPressed: _showExitApplicationDialog,
+                          ),
                         ),
                         Row(
                           mainAxisSize: MainAxisSize.min,

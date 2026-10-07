@@ -174,7 +174,7 @@ class GenreQuestionsEngine {
       _generateFoodCulinary(addQ);
     }
     // 19. HEALTH & MEDICINE
-    else if (gLower.contains('health')) {
+    else if (gLower.contains('health') || gLower.contains('medicine')) {
       _generateHealth(addQ);
     }
     // 20. HOME REPAIR
@@ -229,19 +229,16 @@ class GenreQuestionsEngine {
     else if (gLower.contains('mind bender') || gLower.contains('riddle')) {
       _generateMindBenders(addQ);
     }
-    // Fallback rich generator for custom genres
+    // Fallback for general categories
     else {
-      _generateUniversalGenre(genre, addQ);
+      _generateScience(addQ);
+      _generateHistory(addQ);
+      _generateSports(addQ);
+      _generateMovies(addQ);
     }
 
-    // Guarantee minimum 500 unique questions
-    if (questions.length < 500) {
-      _fillTo500(cleanGenre, questions, seenTexts, addQ);
-    }
-
-    // 1. Separate authentic handcrafted domain questions from synthetic filler
+    // 1. Filter strictly authentic handcrafted human questions (ZERO synthetic/AI filler)
     final authentic = questions.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(random);
-    final filler = questions.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(random);
 
     // 2. Anti-Similarity Declustering Pass: Guarantees no back-to-back similar questions
     String getQuestionStem(String text) {
@@ -308,8 +305,8 @@ class GenreQuestionsEngine {
       return declustered;
     }
 
-    // Authentic questions are ALWAYS served first to players; filler acts as late-round fallback
-    questions = [...declusterList(authentic), ...declusterList(filler)];
+    // Only authentic human-made questions are kept
+    questions = declusterList(authentic);
 
     // 3. Comprehensive Anti-Repetition Sanitization Pass:
     // Ensures that no two consecutive questions ever share identical wrong answers!
@@ -347,7 +344,7 @@ class GenreQuestionsEngine {
             if (candIdx < candidates.length) {
               newWrongs[wIdx] = candidates[candIdx++];
             } else {
-              newWrongs[wIdx] = '${cleanGenre} Variant ${i + wIdx + 1}';
+              newWrongs[wIdx] = '$cleanGenre Variant ${i + wIdx + 1}';
             }
           }
         }
@@ -1380,6 +1377,7 @@ class GenreQuestionsEngine {
       ['Universal Blood Donor Type', 'Type O-Negative (O-)', 'Lacks A, B, and Rh antigens, making it safe for emergency transfusion into any recipient'],
       ['Universal Blood Recipient Type', 'Type AB-Positive (AB+)', 'Contains A, B, and Rh antigens, allowing safe receipt of red blood cells from any blood type'],
       ['Femur', 'The longest, strongest, and heaviest bone in the human body, located in the thigh'],
+      ['Stapes (Stirrup)', 'The smallest and lightest bone in the human body, located inside the middle ear'],
       ['Insulin', 'Hormone produced by the beta cells of the pancreas that regulates blood glucose levels'],
       ['Discovery of Penicillin', 'Sir Alexander Fleming in 1928', 'First true antibiotic discovered from Penicillium notatum mold'],
       ['Hypertension', 'Medical condition characterized by chronically elevated arterial blood pressure (typically 130/80 mmHg or higher)'],
@@ -1387,6 +1385,56 @@ class GenreQuestionsEngine {
       ['Alveoli', 'Tiny microscopic air sacs in the lungs where oxygen and carbon dioxide gas exchange occurs'],
       ['Vitamin C (Ascorbic Acid)', 'Water-soluble vitamin essential for collagen synthesis; deficiency causes scurvy'],
       ['Vitamin D', 'Fat-soluble vitamin synthesized in skin exposed to sunlight, vital for calcium absorption and bone health'],
+      ['Hemoglobin', 'Iron-containing metalloprotein in red blood cells that transports oxygen from the lungs to tissues'],
+      ['Aorta', 'The largest artery in the human body, originating directly from the left ventricle of the heart'],
+      ['Vena Cava', 'The largest vein in the human body returning deoxygenated blood from the body to the right atrium'],
+      ['Sinoatrial (SA) Node', 'The natural physiological pacemaker of the human heart that generates electrical impulses'],
+      ['Liver', 'The largest internal organ and gland in the human body, performing over 500 vital metabolic functions'],
+      ['Nephron', 'The microscopic structural and functional filtering unit of the kidney'],
+      ['Gluteus Maximus', 'The largest and heaviest single muscle in the human body, responsible for hip extension'],
+      ['Masseter', 'The strongest muscle in the human body based on force exerted relative to weight, powering the jaw'],
+      ['Enamel', 'The hardest and most mineralized substance in the human body, covering the anatomical crown of teeth'],
+      ['Cornea', 'The transparent front part of the eye that has no blood vessels and receives oxygen directly from the air'],
+      ['Retina', 'The light-sensitive sensory membrane lining the inner back surface of the eye containing rods and cones'],
+      ['Cochlea', 'The spiral snail shell-shaped fluid-filled sensory structure in the inner ear converting acoustic vibrations into nerve impulses'],
+      ['Platelets (Thrombocytes)', 'Disc-shaped cell fragments in blood crucial for clotting and stopping bleeding'],
+      ['White Blood Cells (Leukocytes)', 'Cells of the immune system involved in defending the body against infectious disease and foreign invaders'],
+      ['Thyroid Gland', 'Butterfly-shaped endocrine gland in the neck producing hormones that regulate basal metabolic rate'],
+      ['Pituitary Gland', 'Often called the "Master Gland" of the endocrine system, located at the base of the skull below the brain'],
+      ['Medulla Oblongata', 'Brainstem structure regulating essential autonomic involuntary functions including breathing, heart rate, and blood pressure'],
+      ['Hypothalamus', 'Brain region coordinating the autonomic nervous system and pituitary gland, controlling hunger, thirst, and body temperature'],
+      ['Adult Human Bone Count', '206 articulated bones in the typical adult human skeleton'],
+      ['Average Human Blood Volume', 'Approximately 5 liters (about 1.3 gallons) in a healthy adult'],
+      ['Normal Body Temperature', '98.6°F (37.0°C) as the standard physiological baseline core body temperature'],
+      ['Typical Adult Resting Heart Rate', '60 to 100 beats per minute (BPM) under calm resting conditions'],
+      ['First Smallpox Vaccine', 'Edward Jenner in 1796 using cowpox blister fluid to confer immunity'],
+      ['Polio Vaccine Developer', 'Dr. Jonas Salk, who developed the first successful inactivated polio vaccine in 1953'],
+      ['Invention of the Stethoscope', 'René Laennec in 1816 in Paris, France'],
+      ['Father of Modern Medicine', 'Hippocrates of Kos, ancient Greek physician credited with the Hippocratic Oath'],
+      ['Scurvy', 'Nutritional deficiency disease caused by prolonged lack of Vitamin C'],
+      ['Rickets', 'Childhood bone softening and deformation caused by severe Vitamin D and calcium deficiency'],
+      ['Iron Deficiency Anemia', 'Condition characterized by insufficient healthy red blood cells due to lack of dietary iron'],
+      ['Cardiopulmonary Resuscitation (CPR) Compression Rate', '100 to 120 chest compressions per minute (matching the tempo of "Stayin\' Alive")'],
+      ['Heimlich Maneuver', 'Emergency abdominal thrust procedure developed by Henry Heimlich in 1974 to dislodge airway obstructions'],
+      ['Cranial Nerves Count', '12 pairs of cranial nerves emerging directly from the brain and brainstem'],
+      ['Small Intestine Segments', 'Duodenum, Jejunum, and Ileum in sequential order from stomach to large intestine'],
+      ['Largest Human Cell', 'Female ovum (egg cell), measuring approximately 120 micrometers in diameter visible without magnification'],
+      ['Smallest Human Cell', 'Male spermatozoon (sperm cell), measuring about 5 micrometers across the cell head'],
+      ['Primary Respiratory Pigment', 'Hemoglobin, carrying up to four oxygen molecules per protein molecule'],
+      ['Normal Fasting Blood Glucose Level', '70 to 99 mg/dL in a healthy non-diabetic individual'],
+      ['Blood Pressure Systolic vs Diastolic', 'Systolic measures peak arterial pressure during contraction; diastolic measures resting arterial pressure between beats'],
+      ['Primary Mucosal Antibody', 'Immunoglobulin A (IgA), providing mucosal immunity in saliva, tears, and breast milk'],
+      ['Gallbladder Primary Function', 'Stores and concentrates digestive bile produced by the liver until needed for fat emulsification'],
+      ['Primary Neurotransmitter at Neuromuscular Junctions', 'Acetylcholine (ACh), initiating muscle fiber contraction across motor endplates'],
+      ['Tendons vs Ligaments', 'Tendons connect muscle to bone; ligaments connect bone to bone across synovial joints'],
+      ['Melanin', 'Complex biological polymer pigment protecting epidermal skin cells from harmful ultraviolet radiation'],
+      ['Islets of Langerhans', 'Clusters of endocrine cells in the pancreas producing insulin, glucagon, and somatostatin'],
+      ['Appendicitis', 'Acute inflammation of the vermiform appendix located at the junction of the cecum in the lower right abdomen'],
+      ['Vitamin B12 (Cobalamin)', 'Essential water-soluble vitamin required for DNA synthesis, red blood cell formation, and neurological function'],
+      ['Keratin', 'Fibrous structural protein forming the primary constituent of human hair, nails, and the outer skin layer'],
+      ['Spleen Primary Immune Function', 'Filters circulating blood, recycles senescent red blood cells, and stores platelets and immune cells'],
+      ['Cardiac Muscle Characteristics', 'Involuntary, striated muscle with branched fibers and intercalated discs found exclusively in the myocardium'],
+      ['Human Diploid Chromosome Count', '46 chromosomes arranged in 23 homologous pairs (including 22 autosome pairs and 1 sex chromosome pair)']
     ];
 
     final hlthDefs = health.map((h) => h[1]).toList();
@@ -1395,7 +1443,9 @@ class GenreQuestionsEngine {
       'Specialized digestive enzyme in saliva breaking down complex starches into maltose (Amylase)',
       'Dense fibrous connective tissue attaching muscle securely to skeletal bone (Tendon)',
       'Stress hormone synthesized by adrenal glands stimulating fight-or-flight sympathetic response (Epinephrine)',
-      'Primary contractile muscle separating thoracic and abdominal cavities driving pulmonary respiration (Diaphragm)'
+      'Primary contractile muscle separating thoracic and abdominal cavities driving pulmonary respiration (Diaphragm)',
+      'A fibrous connective band joining bone to bone across synovial joints (Ligament)',
+      'Specialized fluid lubricating joint articulations throughout the body (Synovial Fluid)'
     ]);
 
     for (var h in health) {
@@ -1802,190 +1852,6 @@ class GenreQuestionsEngine {
 
     for (var r in riddles) {
       addQ('mnd_rid_${r[0].hashCode}', r[0], r[1], '', '', '', distractorPool: riddleAnswers);
-    }
-  }
-
-  // --- UNIVERSAL FALLBACK GENERATOR ---
-  static void _generateUniversalGenre(String genre, Function addQ) {
-    final gLow = genre.toLowerCase();
-    if (gLow.contains('general') || gLow == 'universal' || gLow.isEmpty) {
-      _generateScience(addQ);
-      _generateHistory(addQ);
-      _generateGeography(addQ);
-      _generateSports(addQ);
-      _generateMovies(addQ);
-      _generatePopCulture(addQ);
-      _generateRockClassics(addQ);
-      _generateAstronomy(addQ);
-      return;
-    }
-
-    final eras = ['Early Era', 'Golden Age', 'Mid-Century Modern', 'Pop Culture Renaissance', 'Contemporary Era'];
-    final facets = ['Classic Heritage', 'Signature Masterwork', 'Breakthrough Moment', 'Landmark Legacy', 'Pioneering Vision'];
-    final rand = math.Random();
-    final universalDistractors = [
-      'Through a random coincidence during an unrelated event',
-      'By an unverified rumor that was never substantiated',
-      'As a temporary publicity stunt that was quickly dropped',
-      'Through an improvised novelty that faded in days',
-      'By a minor footnote with no audience reception',
-      'As an accidental gimmick never recorded in lore',
-      'Through an unreleased prototype that never surfaced',
-      'By an anonymous draft discarded without notice'
-    ];
-
-    for (var era in eras) {
-      for (var facet in facets) {
-        final d = pickDistractors(universalDistractors, 'Through creative brilliance, cultural storytelling, and popular acclaim', rand);
-        addQ('gen_${genre}_${era}_$facet', 'In the history and trivia of $genre, how is the "$facet" remembered from the $era?', 'Through creative brilliance, cultural storytelling, and popular acclaim', d[0], d[1], d[2]);
-      }
-    }
-  }
-
-  // --- ENSURE 500+ DIVERSE QUESTIONS PER GENRE WITHOUT OVERLAP OR NUMBER TAGS ---
-  static void _fillTo500(String genre, List<Question> list, Set<String> seenTexts, Function addQ) {
-    final topics = [
-      'Historic Golden Age Productions',
-      'Pioneering Creative Breakthroughs',
-      'Signature Styles and Traditions',
-      'Timeless Masterpieces and Classics',
-      'Iconic Legends and Pioneers',
-      'Celebrated Historic Milestones',
-      'Famous Fan Traditions and Lore',
-      'World-Renowned Highlights and Records',
-      'Classic Storytelling and Artistry',
-      'Enduring Cultural Influences',
-      'Fascinating Trivia and Fun Facts',
-      'Famous Premieres and Debuts',
-      'Beloved Fan Favorites and Tributes',
-      'Groundbreaking Original Releases',
-      'Defining Turning Points and Eras',
-      'Critically Acclaimed Masterworks',
-      'Timeless Legacies and Heritage',
-      'Iconic Character and Design Hallmarks',
-      'Celebrated Global Honors and Awards',
-      'Generational Hits and Crossovers',
-      'Historic Moments and Memorable Debuts',
-      'Legendary Collaborations and Teams',
-      'Enduring Pop Culture Tributes',
-      'Signature Creative Visions',
-      'Artistic Milestones and Innovations',
-      'World-Famous Showcases and Events',
-      'Greatest Historical Highlights',
-      'Treasured Vintage Classics',
-      'Cult Classics and Fan Lore',
-      'Defining Decades and Movements',
-      'Treasured Archival Gems',
-      'Audience Favorites and Encores',
-      'Iconic Quotes and Memorable Lore',
-      'Distinctive Creative Techniques',
-      'Trailblazing Visionaries',
-      'Modern Re-imaginings and Adaptations',
-    ];
-
-    final templates = [
-      'In $genre trivia, what is widely regarded as an iconic hallmark of "{topic}"?',
-      'Which classic milestone is famously celebrated in connection with "{topic}" in $genre?',
-      'Among fans and enthusiasts of $genre, what makes "{topic}" an enduring classic?',
-      'In the rich history of $genre, what major achievement is best remembered for "{topic}"?',
-      'Which creative legacy was established by "{topic}" across the golden age of $genre?',
-      'In popular culture, what standout element defines the lasting appeal of "{topic}" in $genre?',
-      'Which celebrated tradition helped define the golden standard of "{topic}" in $genre?',
-      'When looking back at greatest moments in $genre, what legacy was shaped by "{topic}"?',
-      'In classic $genre lore, what primary contribution is attributed to "{topic}"?',
-      'Which cultural distinction is most famously associated with "{topic}" in $genre?',
-      'In $genre history, what memorable era is celebrated for "{topic}"?',
-      'What iconic distinction helped popularize "{topic}" across generations of $genre?',
-      'Which timeless attribute is most admired about "{topic}" within $genre?',
-      'In the lore of $genre, what signature quality helped define "{topic}"?',
-      'What celebrated creative achievement is linked to "{topic}" in $genre?',
-      'Why does "{topic}" hold a legendary reputation among followers of $genre?',
-    ];
-
-    final answerSets = [
-      {
-        'correct': 'Pioneering original works that defined a golden generation',
-        'distractors': [
-          'A fleeting one-week gimmick forgotten almost immediately',
-          'An accidental footnote with no audience or cultural recognition',
-          'A rejected draft that was never officially performed or produced'
-        ]
-      },
-      {
-        'correct': 'Setting a beloved standard celebrated by fans and historians worldwide',
-        'distractors': [
-          'An unverified urban legend with zero historical record',
-          'A superficial novelty abandoned after a single trial',
-          'A purely derivative copy lacking any creative distinction'
-        ]
-      },
-      {
-        'correct': 'Fostering creative brilliance, authentic storytelling, and timeless admiration',
-        'distractors': [
-          'A temporary seasonal stunt that left no lasting impression',
-          'A forgotten prototype discarded before public debut',
-          'An unauthorized counterfeit rejected by the community'
-        ]
-      },
-      {
-        'correct': 'Demonstrating masterful artistry and memorable original execution',
-        'distractors': [
-          'A short-lived passing fad forgotten within a week',
-          'An accidental novelty never repeated in history',
-          'A minor footnote with no lasting impact or audience'
-        ]
-      },
-      {
-        'correct': 'Inspiring future generations with unforgettable classic productions',
-        'distractors': [
-          'Relying exclusively on untested rumors without creative effort',
-          'Completely abandoning all original style and storytelling',
-          'An unreleased concept that never reached the public'
-        ]
-      },
-      {
-        'correct': 'Captivating worldwide audiences through enduring excellence and charm',
-        'distractors': [
-          'A purely mechanical repetition with zero creative expression',
-          'An arbitrary rumor with no verified historical record',
-          'A failed experiment immediately withdrawn from circulation'
-        ]
-      },
-    ];
-
-    final allFillDistractors = <String>[
-      'A fleeting one-week gimmick forgotten almost immediately',
-      'An accidental footnote with no audience or cultural recognition',
-      'A rejected draft that was never officially performed or produced',
-      'An unverified urban legend with zero historical record',
-      'A superficial novelty abandoned after a single trial',
-      'A purely derivative copy lacking any creative distinction',
-      'A temporary seasonal stunt that left no lasting impression',
-      'A forgotten prototype discarded before public debut',
-      'An unauthorized counterfeit rejected by the community',
-      'A short-lived passing fad forgotten within a week',
-      'An accidental novelty never repeated in history',
-      'A minor footnote with no lasting impact or audience',
-      'Relying exclusively on untested rumors without creative effort',
-      'Completely abandoning all original style and storytelling',
-      'An unreleased concept that never reached the public',
-      'A purely mechanical repetition with zero creative expression',
-      'An arbitrary rumor with no verified historical record',
-      'A failed experiment immediately withdrawn from circulation',
-      'A generic placeholder with no artistic merit',
-      'An obscure private rehearsal never heard by audiences',
-      'A transient social media rumor with no foundation',
-      'An unintended blooper discarded from final release'
-    ];
-
-    for (int tIdx = 0; tIdx < topics.length; tIdx++) {
-      for (int mIdx = 0; mIdx < templates.length; mIdx++) {
-        if (list.length >= 520) return;
-        final topic = topics[tIdx];
-        final qText = templates[mIdx].replaceAll('{topic}', topic);
-        final ans = answerSets[(tIdx * 3 + mIdx) % answerSets.length];
-        addQ('fill_${genre}_${tIdx}_$mIdx', qText, ans['correct'] as String, '', '', '', distractorPool: allFillDistractors);
-      }
     }
   }
 }

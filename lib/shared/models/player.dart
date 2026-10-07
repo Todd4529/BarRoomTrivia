@@ -67,6 +67,7 @@ class Player {
       'player_uid': playerUid,
       'room_code': roomCode,
       'nickname': nickname,
+      'score': cumulativeScore,
       'cumulative_score': cumulativeScore,
       'is_connected': isConnected,
     };

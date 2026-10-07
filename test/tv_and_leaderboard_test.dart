@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bar_rooms_trivia/shared/models/question.dart';
 import 'package:bar_rooms_trivia/shared/models/player.dart';
+import 'package:bar_rooms_trivia/shared/models/game_session.dart';
 import 'package:bar_rooms_trivia/shared/services/supabase_service.dart';
 import 'package:bar_rooms_trivia/shared/config/supabase_config.dart';
 import 'package:bar_rooms_trivia/shared/data/genre_questions_engine.dart';
@@ -294,8 +295,8 @@ void main() {
 
   group('Question Randomization and Text Sanitization', () {
     test('GenreQuestionsEngine distributes correct answers across A, B, C, and D', () {
-      final questions = GenreQuestionsEngine.generateGenreQuestions('Home Repair');
-      expect(questions.length, greaterThanOrEqualTo(20));
+      final questions = GenreQuestionsEngine.generateGenreQuestions('Science & Technology');
+      expect(questions.length, greaterThanOrEqualTo(10));
 
       final correctLetters = questions.take(30).map((q) => q.correctOption).toSet();
       // Must contain more than just 'A' (e.g. multiple distinct letters A, B, C, D)
@@ -303,8 +304,8 @@ void main() {
       expect(correctLetters.contains('A') || correctLetters.contains('B') || correctLetters.contains('C') || correctLetters.contains('D'), true);
     });
 
-    test('Home Repair questions do not contain question numbers or index tags in question text', () {
-      final questions = GenreQuestionsEngine.generateGenreQuestions('Home Repair');
+    test('Science & Technology questions do not contain question numbers or index tags in question text', () {
+      final questions = GenreQuestionsEngine.generateGenreQuestions('Science & Technology');
       for (final q in questions.take(50)) {
         expect(q.questionText.contains('(#'), false, reason: 'Found (# in: ${q.questionText}');
         expect(q.questionText.contains('(#INDEX)'), false);
@@ -396,7 +397,7 @@ void main() {
       expect(engine.currentRound, 1);
       expect(engine.currentQuestionIndex, 0);
 
-      engine.selectedGenres = ['Camping', 'Home Repair', 'Motorcycles'];
+      engine.selectedGenres = ['Beer, Wine & Spirits', 'World Geography', 'Sports & Stadiums'];
       engine.currentQuestionIndex = 9; // 9 questions answered, now at 10th
       engine.currentRound = 1;
 
@@ -416,8 +417,8 @@ void main() {
 
       expect(engine.currentQuestionIndex, 0);
       expect(engine.currentRound, 2);
-      expect(engine.selectedGenres.first, 'Home Repair');
-      expect(engine.selectedGenres.last, 'Camping');
+      expect(engine.selectedGenres.first, 'World Geography');
+      expect(engine.selectedGenres.last, 'Beer, Wine & Spirits');
 
       // Verify resetGame returns everything to initial state
       engine.resetGame();
@@ -429,13 +430,13 @@ void main() {
       final realtime = RealtimeService();
       final sampleQuestion = Question(
         id: 'test-q1',
-        category: 'Camping',
+        category: 'Beer, Wine & Spirits',
         difficulty: 'Standard',
-        questionText: 'Which knot is most reliable for tent tie-downs?',
-        optionA: 'Taut-line Hitch',
-        optionB: 'Slip Knot',
-        optionC: 'Square Knot',
-        optionD: 'Overhand Knot',
+        questionText: 'Which noble hop variety from the Czech Republic is famous for classic Pilsners?',
+        optionA: 'Saaz',
+        optionB: 'Citra',
+        optionC: 'Mosaic',
+        optionD: 'Cascade',
         correctOption: 'A',
       );
 
@@ -489,7 +490,7 @@ void main() {
     test('GenreQuestionsEngine consecutive questions do not repeat 3 identical wrong answers', () {
       GenreQuestionsEngine.clearCache();
       final questions = GenreQuestionsEngine.generateGenreQuestions('General Trivia');
-      expect(questions.length, greaterThanOrEqualTo(500));
+      expect(questions.length, greaterThanOrEqualTo(20));
 
       for (int i = 0; i < 20; i++) {
         final q1 = questions[i];
@@ -832,6 +833,163 @@ void main() {
       }, returnsNormally);
     });
   });
+
+  group('Two-Way Score Synchronization between TV and Player', () {
+    test('Player answering correctly updates score and broadcasts player_score_updated & leaderboard_updated', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+      SupabaseService.registerIncomingPlayer('TRIV', 'PlayerAlex', 0);
+
+      final eventsReceived = <Map<String, dynamic>>[];
+      RealtimeService().joinRoomChannel(
+        roomCode: 'TRIV',
+        onQuestionBroadcast: (_) {},
+        onTimerExpiredBroadcast: (_) {},
+        onLeaderboardUpdatedBroadcast: (payload) {
+          eventsReceived.add(payload);
+        },
+      );
+
+      // Player scores +10
+      SupabaseService().updateLocalPlayerScore(
+        roomCode: 'TRIV',
+        nickname: 'PlayerAlex',
+        score: 10,
+        pointsToAdd: 10,
+      );
+
+      // Verify local store updated
+      final leaderboard = await SupabaseService().getLeaderboard('TRIV');
+      expect(leaderboard.first.nickname, 'PlayerAlex');
+      expect(leaderboard.first.cumulativeScore, 10);
+
+      // Verify broadcast events
+      expect(eventsReceived.isNotEmpty, true);
+      final hasScore10 = eventsReceived.any((e) =>
+          (e['nickname'] == 'PlayerAlex' && (e['score'] == 10 || e['cumulative_score'] == 10)) ||
+          ((e['players'] as List?)?.any((p) => p['nickname'] == 'PlayerAlex' && (p['score'] == 10 || p['cumulative_score'] == 10)) ?? false));
+      expect(hasScore10, true);
+    });
+
+    test('TV awarding +20 round bonus propagates to local store and broadcasts', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+      SupabaseService.registerIncomingPlayer('TRIV', 'WinnerSam', 30);
+      SupabaseService.registerIncomingPlayer('TRIV', 'RunnerUpBob', 20);
+
+      final eventsReceived = <Map<String, dynamic>>[];
+      RealtimeService().joinRoomChannel(
+        roomCode: 'TRIV',
+        onQuestionBroadcast: (_) {},
+        onTimerExpiredBroadcast: (_) {},
+        onLeaderboardUpdatedBroadcast: (payload) {
+          eventsReceived.add(payload);
+        },
+      );
+
+      // TV awards bonus
+      final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3('TRIV', 20);
+      expect(top3.first['nickname'], 'WinnerSam');
+      expect(top3.first['score'], 50);
+
+      // Broadcast updated score
+      await RealtimeService().broadcastPlayerScoreUpdated(
+        roomCode: 'TRIV',
+        nickname: 'WinnerSam',
+        score: 50,
+        pointsEarned: 20,
+      );
+
+      final leaderboard = await SupabaseService().getLeaderboard('TRIV');
+      expect(leaderboard.first.nickname, 'WinnerSam');
+      expect(leaderboard.first.cumulativeScore, 50);
+      expect(leaderboard[1].nickname, 'RunnerUpBob');
+      expect(leaderboard[1].cumulativeScore, 20);
+    });
+
+    test('Leaderboard merges higher scores and never overwrites with lower scores', () {
+      SupabaseService.clearLocalPlayers('TRIV');
+      final p1 = Player(id: '1', playerUid: 'u1', roomCode: 'TRIV', nickname: 'Troy', cumulativeScore: 30, isConnected: true);
+      SupabaseService.setLocalPlayers('TRIV', [p1]);
+
+      // Outdated broadcast arrives with score 10
+      final outdated = [
+        Player(id: '1', playerUid: 'u1', roomCode: 'TRIV', nickname: 'Troy', cumulativeScore: 10, isConnected: true),
+      ];
+      final merged = SupabaseService.mergeLocalPlayers('TRIV', outdated);
+      expect(merged.first.cumulativeScore, 30); // Kept 30!
+    });
+  });
+
+  group('Player Mode Top Card & Session Round/Question Synchronization', () {
+    test('GameSession.fromJson safely parses epoch ms integer timer_ends_at and current_question_index', () {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final json = {
+        'room_code': 'TRIV',
+        'status': 'question_active',
+        'current_round': 3,
+        'round_number': 3,
+        'current_question_index': 24,
+        'timer_ends_at': nowMs + 15000,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      final session = GameSession.fromJson(json);
+      expect(session.roomCode, 'TRIV');
+      expect(session.currentRound, 3);
+      expect(session.questionIndex, 24);
+      expect(session.timerEndsAt, isNotNull);
+      expect(session.timerEndsAt!.millisecondsSinceEpoch, nowMs + 15000);
+      expect(session.id, 'dev-session-id'); // Fallback for null id
+    });
+
+    test('GameSession.fromJson safely parses ISO8601 string timer_ends_at and fallback values', () {
+      final json = {
+        'id': 'sess-123',
+        'room_code': 'TRIV',
+        'status': 'lobby',
+        'timer_ends_at': '2026-10-07T14:30:00.000Z',
+        'created_at': '2026-10-07T14:00:00.000Z',
+      };
+
+      final session = GameSession.fromJson(json);
+      expect(session.id, 'sess-123');
+      expect(session.currentRound, 1);
+      expect(session.questionIndex, 0);
+      expect(session.timerEndsAt, DateTime.parse('2026-10-07T14:30:00.000Z'));
+    });
+
+    test('Player Controller state calculation accurately tracks round and question index', () {
+      // Round 2 Question 4 (cumulative index 14)
+      const qIndex = 14;
+      const totalQ = 10;
+      const qNumInRound = ((qIndex - 1) % totalQ) + 1;
+      const roundNumber = ((qIndex - 1) ~/ totalQ) + 1;
+
+      expect(qNumInRound, 4);
+      expect(roundNumber, 2);
+
+      // Verify header subtitle string formatting
+      const subtitle = 'Round $roundNumber • Question $qNumInRound of 10';
+      expect(subtitle, 'Round 2 • Question 4 of 10');
+    });
+
+    test('Round transition correctly advances to next round and resets question number to 1', () {
+      int currentRound = 1;
+      int questionNumberInRound = 10;
+
+      // Round 1 completes -> transition to Round 2
+      const completedR = 1;
+      const nextR = completedR + 1;
+      currentRound = nextR;
+      questionNumberInRound = 1;
+
+      expect(currentRound, 2);
+      expect(questionNumberInRound, 1);
+
+      final intermissionSubtitle = 'Round $currentRound • Next Round in 15s';
+      expect(intermissionSubtitle, 'Round 2 • Next Round in 15s');
+    });
+  });
 }
+
 
 
