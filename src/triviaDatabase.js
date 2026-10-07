@@ -4,7 +4,7 @@
  */
 
 import { generate500HomebrewingQuestions } from './homebrewingDatabase.js';
-import { generateGenreQuestions, sanitizeQuestionsDistractors } from './genreQuestionsEngine.js';
+import { generateGenreQuestions, sanitizeQuestionsDistractors, deClusterSimilarQuestions } from './genreQuestionsEngine.js';
 
 // All 30 Specific Genres List
 export const ALL_SPECIFIC_GENRES = [
@@ -151,7 +151,8 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
     result = await fetchSingleGenreQuestions(genre, difficulty, count);
   }
 
-  return sanitizeQuestionsDistractors(result);
+  const declustered = deClusterSimilarQuestions(result, 4);
+  return sanitizeQuestionsDistractors(declustered);
 }
 
 // Helper to fetch for a single specific genre
@@ -303,37 +304,28 @@ const dynamicWeeklyPool = [];
 // Automatic background sync for weekly trivia in Web
 export async function syncWeeklyTriviaInBackground() {
   try {
-    // 1. Immediately load any previously cached weekly trivia from localStorage
+    const seenHashes = new Set(dynamicWeeklyPool.map(q => (q.text || '').toLowerCase().trim()));
+
+    // 1. Load any cached weekly trivia from localStorage
     const cached = localStorage.getItem('cached_weekly_trivia_pack');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          dynamicWeeklyPool.push(...parsed);
-          console.log(`[WeeklyTrivia] Loaded ${parsed.length} cached weekly questions into memory.`);
+          for (const q of parsed) {
+            const t = (q.text || '').toLowerCase().trim();
+            if (t && !seenHashes.has(t)) {
+              seenHashes.add(t);
+              dynamicWeeklyPool.push(q);
+            }
+          }
+          console.log(`[WeeklyTrivia] Loaded ${dynamicWeeklyPool.length} cached questions into memory.`);
         }
       } catch (_) {}
     }
 
-    // 2. Check if sync is due (> 7 days)
-    const lastSync = localStorage.getItem('last_weekly_trivia_sync_time');
-    let isDue = true;
-    if (lastSync) {
-      const diffMs = Date.now() - new Date(lastSync).getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-      if (diffDays < 7) {
-        isDue = false;
-      }
-    }
-
-    if (!isDue) {
-      return;
-    }
-
-    console.log('[WeeklyTrivia] Checking background update for weekly trivia questions...');
-
+    // 2. Fetch the full bundled pack of 3,400+ real questions
     let fresh = [];
-    // 3. Try fetching from bundled / hosted weekly pack
     try {
       const res = await fetch('./data/weekly_trivia_pack.json', { cache: 'no-cache' });
       if (res.ok) {
@@ -358,32 +350,54 @@ export async function syncWeeklyTriviaInBackground() {
     }
 
     if (fresh.length > 0) {
-      const normalized = fresh.map(item => ({
-        id: item.id || `weekly_${Date.now()}_${Math.random()}`,
-        category: item.category || 'Pop Culture & Music',
-        difficulty: item.difficulty || 'Standard',
-        text: item.question_text || item.text,
-        options: {
-          A: item.option_a || item.options?.A || 'Option A',
-          B: item.option_b || item.options?.B || 'Option B',
-          C: item.option_c || item.options?.C || 'Option C',
-          D: item.option_d || item.options?.D || 'Option D'
-        },
-        correct: item.correct_option || item.correct || 'A',
-        duration_seconds: item.time_limit_seconds || 20
-      }));
+      let newlyAdded = 0;
+      for (const item of fresh) {
+        const qText = item.question_text || item.text || '';
+        const t = qText.toLowerCase().trim();
+        if (!t || seenHashes.has(t)) continue;
+        seenHashes.add(t);
 
-      // Ingest into in-memory pool
-      dynamicWeeklyPool.unshift(...normalized);
-      localStorage.setItem('cached_weekly_trivia_pack', JSON.stringify(normalized.slice(0, 500)));
+        dynamicWeeklyPool.unshift({
+          id: item.id || `weekly_${Date.now()}_${Math.random()}`,
+          category: item.category || 'Pop Culture & Music',
+          difficulty: item.difficulty || 'Standard',
+          text: qText,
+          options: {
+            A: item.option_a || item.options?.A || 'Option A',
+            B: item.option_b || item.options?.B || 'Option B',
+            C: item.option_c || item.options?.C || 'Option C',
+            D: item.option_d || item.options?.D || 'Option D'
+          },
+          correct: item.correct_option || item.correct || 'A',
+          duration_seconds: item.time_limit_seconds || 20
+        });
+        newlyAdded++;
+      }
+
+      localStorage.setItem('cached_weekly_trivia_pack', JSON.stringify(dynamicWeeklyPool.slice(0, 1000)));
       localStorage.setItem('last_weekly_trivia_sync_time', new Date().toISOString());
-      console.log(`[WeeklyTrivia] Background sync completed: +${normalized.length} questions available.`);
-    } else {
-      localStorage.setItem('last_weekly_trivia_sync_time', new Date().toISOString());
+      console.log(`[WeeklyTrivia] Full real question bank loaded: +${newlyAdded} questions (Total in memory: ${dynamicWeeklyPool.length}).`);
     }
   } catch (err) {
-    console.warn('[WeeklyTrivia] Background sync skipped:', err);
+    console.warn('[WeeklyTrivia] Background sync note:', err);
   }
+}
+
+// Helper to strictly guarantee questions are human-made (no AI/synthetic templates)
+export function isHumanMade(q) {
+  if (!q) return false;
+  const id = String(q.id || '');
+  if (id.startsWith('univ_') || id.startsWith('fill_') || id.startsWith('gen_')) return false;
+  const text = String(q.text || q.question_text || q.question || '');
+  if (
+    text.includes('signature achievement or core definition') ||
+    text.includes('authoritative retrospectives') ||
+    text.includes('fundamental fact is recognized about') ||
+    text.includes('In classic universal knowledge')
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
@@ -393,7 +407,7 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
     targetGenre = valid[Math.floor(Math.random() * valid.length)];
   }
 
-  // Generate or retrieve guaranteed 500+ pool for this genre
+  // Generate or retrieve pool for this genre
   const basePool = generateGenreQuestions(targetGenre);
 
   // Prepend any dynamic weekly questions matching this genre
@@ -402,23 +416,73 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
   );
   const pool = [...matchingDynamic, ...basePool];
 
+  // Filter out any synthetic/AI filler questions - STRICTLY human-made only
+  const humanPool = pool.filter(isHumanMade);
+
+  // If this specific genre has fewer than 50 questions, supplement from related authentic human categories
+  if (humanPool.length < 50) {
+    const targetLower = targetGenre.toLowerCase();
+    const relatedDynamic = dynamicWeeklyPool.filter(q => {
+      if (!isHumanMade(q)) return false;
+      const cat = (q.category || '').toLowerCase();
+      const txt = ((q.text || '') + ' ' + (q.category || '')).toLowerCase();
+
+      if (targetLower === 'health') {
+        return cat.includes('science') || txt.includes('health') || txt.includes('body') || txt.includes('doctor') || txt.includes('medical') || txt.includes('vitamin') || txt.includes('hospital');
+      }
+      if (targetLower === 'home repair') {
+        return cat.includes('architecture') || cat.includes('science') || txt.includes('tool') || txt.includes('wood') || txt.includes('build') || txt.includes('screw') || txt.includes('paint');
+      }
+      if (targetLower === 'finance') {
+        return cat.includes('history') || cat.includes('business') || txt.includes('money') || txt.includes('dollar') || txt.includes('bank') || txt.includes('market') || txt.includes('economy');
+      }
+      if (targetLower === 'travel') {
+        return cat.includes('geography') || cat.includes('landmark') || txt.includes('travel') || txt.includes('city') || txt.includes('flight') || txt.includes('country');
+      }
+      if (targetLower === 'motorcycles') {
+        return cat.includes('automotive') || txt.includes('bike') || txt.includes('motorcycle') || txt.includes('harley') || txt.includes('engine') || txt.includes('speed');
+      }
+      if (targetLower === 'camping') {
+        return cat.includes('nature') || cat.includes('geography') || txt.includes('outdoor') || txt.includes('mountain') || txt.includes('forest') || txt.includes('park') || txt.includes('tent');
+      }
+      return false;
+    });
+
+    for (const rq of relatedDynamic) {
+      if (!humanPool.some(h => (h.text || '').toLowerCase() === (rq.text || '').toLowerCase())) {
+        humanPool.push({
+          ...rq,
+          category: targetGenre
+        });
+      }
+    }
+  }
+
   // Filter out any questions already seen in this session
-  const unseen = pool.filter(q => !seenQuestionTexts.has(q.text.toLowerCase()));
+  const unseen = humanPool.filter(q => !seenQuestionTexts.has((q.text || '').toLowerCase()));
 
   let candidatePool = unseen;
   // If session has consumed almost all questions, reset session tracker
   if (candidatePool.length < count) {
     seenQuestionTexts.clear();
-    candidatePool = [...pool];
+    candidatePool = [...humanPool];
   }
 
-  // Shuffle candidate pool
-  const shuffled = [...candidatePool].sort(() => 0.5 - Math.random());
+  // If still fewer than count, pull general authentic questions from the weekly pool
+  if (candidatePool.length < count) {
+    const backupRealQuestions = dynamicWeeklyPool
+      .filter(isHumanMade)
+      .filter(q => !candidatePool.some(c => (c.text || '').toLowerCase() === (q.text || '').toLowerCase()));
+    const shuffledBackup = [...backupRealQuestions].sort(() => 0.5 - Math.random());
+    candidatePool.push(...shuffledBackup.slice(0, count - candidatePool.length));
+  }
+
+  const shuffledAuth = [...candidatePool].sort(() => 0.5 - Math.random());
   const selected = [];
 
-  for (const q of shuffled) {
+  for (const q of shuffledAuth) {
     if (selected.length >= count) break;
-    seenQuestionTexts.add(q.text.toLowerCase());
+    seenQuestionTexts.add((q.text || '').toLowerCase());
     selected.push({
       ...q,
       id: q.id || `offline_${Date.now()}_${Math.random()}`,
@@ -427,10 +491,10 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
     });
   }
 
-  // Absolute guarantee: if somehow selected is empty, fall back to first questions
-  if (selected.length === 0 && pool.length > 0) {
-    for (let i = 0; i < Math.min(count, pool.length); i++) {
-      const q = pool[i];
+  // Absolute guarantee: if somehow selected is empty, fall back to first human-made questions
+  if (selected.length === 0 && humanPool.length > 0) {
+    for (let i = 0; i < Math.min(count, humanPool.length); i++) {
+      const q = humanPool[i];
       selected.push({
         ...q,
         id: q.id || `offline_fallback_${Date.now()}_${i}`,
@@ -440,5 +504,6 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
     }
   }
 
-  return sanitizeQuestionsDistractors(selected);
+  const declustered = deClusterSimilarQuestions(selected, 4);
+  return sanitizeQuestionsDistractors(declustered);
 }

@@ -18,8 +18,8 @@
   <link rel="manifest" href="/BarRoomTrivia/assets/manifest--2K9kbVy.webmanifest">
   <link rel="apple-touch-icon" href="./app_logo.png">
   <link rel="icon" type="image/png" href="./app_logo.png">
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-cXwyWcRx.js"></script>
-  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-B-zDzoOU.css">
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-j2eqHUPa.js"></script>
+  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-DiTdCJuv.css">
 </head>
 <body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
@@ -91,6 +91,9 @@
         <!-- TOP HEADER: CENTERED BEER ICON & BAR ROOMS TRIVIA ONLY WITH TV MODE TOGGLE -->
         <div class="tv-header tv-header-centered">
           <div class="tv-brand">
+            <button id="btn-tv-back" class="tv-back-btn" title="Exit / Host Controls Recovery" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); border-radius: 10px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; margin-right: 14px; display: inline-flex; align-items: center; gap: 6px;">
+              ← MENU
+            </button>
             <div id="tv-custom-logo-container" class="custom-logo-wrapper hidden">
               <img id="tv-custom-logo-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Bar Logo" class="tv-logo-img">
             </div>
@@ -310,7 +313,7 @@
             <div style="width: 100%; display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
               <div id="tv-podium-1" style="display: none; justify-content: space-between; align-items: center; background: rgba(255, 214, 0, 0.15); border: 2px solid var(--accent-yellow); padding: 14px 24px; border-radius: 16px;">
                 <div style="text-align: left;">
-                  <div style="font-size: 14px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1px;">🥇 1ST PLACE (+250 BONUS)</div>
+                  <div style="font-size: 14px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1px;">🥇 1ST PLACE (+20 BONUS)</div>
                   <strong id="tv-w1-name" style="font-size: 26px; color: #fff;">—</strong>
                 </div>
                 <span id="tv-w1-score" style="font-size: 26px; font-weight: 900; color: var(--accent-yellow);">0 PTS</span>
@@ -336,6 +339,70 @@
               <strong id="tv-winner-next-round-timer">15</strong>
               <span>SECONDS</span>
             </div>
+          </div>
+        </div>
+        <!-- TV EXIT APPLICATION & RECOVERY MENU OVERLAY -->
+        <div id="tv-exit-dialog-overlay" class="result-modal-backdrop hidden" style="z-index: 500;">
+          <div class="result-modal-card" style="max-width: 500px; border-color: var(--accent-cyan); text-align: left; padding: 28px;">
+            <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+              <div style="background: rgba(0, 229, 255, 0.15); border: 1.5px solid var(--accent-cyan); border-radius: 12px; padding: 8px 12px; font-size: 24px;">📺</div>
+              <div>
+                <div style="font-size: 11px; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1.5px;">TV DISPLAY MENU</div>
+                <h3 style="margin: 0; font-size: 22px; font-weight: 800; color: #fff;">Exit Application?</h3>
+              </div>
+            </div>
+            <p style="color: rgba(255,255,255,0.7); font-size: 14px; line-height: 1.5; margin-bottom: 22px;">
+              Choose an option below. If the host lost the current game website, select <strong>HOST CONTROL QR CODE</strong> to reconnect instantly.
+            </p>
+            <button id="btn-tv-show-host-qr" class="btn btn-block" style="background: var(--accent-yellow); color: #000; font-weight: 900; font-size: 15px; letter-spacing: 1px; padding: 14px; margin-bottom: 12px; border-radius: 14px; cursor: pointer;">
+              📱 HOST CONTROL QR CODE
+            </button>
+            <button id="btn-tv-exit-cancel" class="btn btn-outline btn-block" style="border-radius: 14px; padding: 12px; font-weight: 700; cursor: pointer;">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- TV HOST CONTROL QR CODE RECOVERY OVERLAY -->
+        <div id="tv-host-qr-modal-overlay" class="result-modal-backdrop hidden" style="z-index: 510;">
+          <!-- ACTIVE GAME CARD -->
+          <div id="tv-host-qr-active-card" class="result-modal-card hidden" style="max-width: 520px; border-color: var(--accent-yellow); box-shadow: 0 0 40px rgba(255, 214, 0, 0.35); padding: 28px;">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px;">
+              <span style="font-size: 28px;">👑</span>
+              <h2 style="margin: 0; font-size: 22px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1px;">Current Game Host QR Code</h2>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 14px;">
+              <span class="category-pill-sm" id="tv-host-qr-room-pill" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">ROOM: TRIV</span>
+              <span class="difficulty-pill-sm diff-standard" id="tv-host-qr-round-pill">ROUND 1</span>
+            </div>
+            <p style="color: rgba(255,255,255,0.75); font-size: 13.5px; line-height: 1.4; margin-bottom: 16px;">
+              Scan this QR code with your phone or tablet camera to immediately reconnect to your live host controls if you lost your browser window.
+            </p>
+            <div style="background: #fff; padding: 14px; border-radius: 18px; margin-bottom: 14px; display: inline-block; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+              <canvas id="tv-host-qr-canvas"></canvas>
+            </div>
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); padding: 8px 14px; border-radius: 12px; margin-bottom: 20px; word-break: break-all; font-size: 12px; color: var(--accent-cyan);">
+              🔗 <span id="tv-host-qr-url-text">https://todd4529.github.io/BarRoomTrivia/?view=host</span>
+            </div>
+            <button id="btn-tv-close-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
+              BACK TO TV DISPLAY
+            </button>
+          </div>
+
+          <!-- NO ACTIVE GAME CARD -->
+          <div id="tv-host-qr-empty-card" class="result-modal-card hidden" style="max-width: 480px; border-color: var(--accent-cyan); padding: 32px;">
+            <div style="font-size: 48px; margin-bottom: 12px;">🎮</div>
+            <h2 style="font-size: 22px; font-weight: 900; color: #fff; letter-spacing: 1px; margin-bottom: 12px;">NO CURRENT GAME RUNNING</h2>
+            <p style="color: rgba(255,255,255,0.7); font-size: 14px; line-height: 1.5; margin-bottom: 18px;">
+              There is no current game running in Room <strong id="tv-host-qr-empty-room">TRIV</strong>.<br><br>
+              Start a new game from the host dashboard or wait for a host to launch a game session.
+            </p>
+            <div style="background: rgba(255, 214, 0, 0.12); border: 1px solid rgba(255, 214, 0, 0.4); color: var(--accent-yellow); padding: 8px 16px; border-radius: 12px; font-size: 12px; font-weight: 800; letter-spacing: 1px; margin-bottom: 24px;">
+              STATUS: WAITING FOR HOST / IDLE
+            </div>
+            <button id="btn-tv-close-empty-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
+              RETURN TO TV DISPLAY
+            </button>
           </div>
         </div>
       </div>
@@ -368,20 +435,29 @@
 
       <!-- Player 4-Button Controller Screen with Questions & Answers -->
       <div id="player-controller-screen" class="controller-container hidden">
-        <div class="controller-header">
-          <div class="player-info">
-            <span id="player-disp-nickname" class="nickname-highlight">NICKNAME</span>
-            <span id="player-disp-room" class="room-sub">ROOM: TRIV • ROUND 1</span>
+        <!-- STICKY TOP SECTION: BAR ROOMS TRIVIA BRAND & STICKER CARD -->
+        <div id="player-sticky-top-wrap" class="player-sticky-top-wrap">
+          <div class="player-brand-bar">
+            <img src="/BarRoomTrivia/assets/app_logo-BqXzF9Tm.png" alt="Bar Rooms Trivia" class="player-brand-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';">
+            <span class="player-brand-title-text">BAR ROOMS TRIVIA</span>
           </div>
 
-          <div class="header-right-badges">
-            <!-- LIVE PLAYER COUNTDOWN TIMER BADGE -->
-            <div class="player-timer-badge">
-              ⏱️ <span id="player-timer-val">20</span>s
+          <!-- TOP STICKER CARD (NAME, COUNTER, POINTS) -->
+          <div id="player-sticker-card" class="controller-header sticker-card">
+            <div class="player-info">
+              <span id="player-disp-nickname" class="nickname-highlight">NICKNAME</span>
+              <span id="player-disp-room" class="room-sub">ROOM: TRIV • ROUND 1</span>
             </div>
 
-            <div class="player-score-pill">
-              <span id="player-score-val">0</span> PTS
+            <div class="header-right-badges">
+              <!-- LIVE PLAYER COUNTDOWN TIMER BADGE -->
+              <div class="player-timer-badge">
+                ⏱️ <span id="player-timer-val">20</span>s
+              </div>
+
+              <div class="player-score-pill">
+                <span id="player-score-val">0</span> PTS
+              </div>
             </div>
           </div>
         </div>
@@ -422,11 +498,23 @@
           </button>
         </div>
 
+        <!-- DEDICATED INTER-QUESTION COUNTDOWN SCREEN -->
+        <div id="player-inter-question-screen" class="inter-q-screen hidden">
+          <div class="inter-q-card">
+            <div class="inter-q-icon-wrap">
+              <span class="inter-q-icon">⏱️</span>
+            </div>
+            <div class="inter-q-label">NEXT QUESTION IN</div>
+            <div id="player-inter-q-timer" class="inter-q-timer-val">5 SECS</div>
+            <div id="player-inter-q-subtext" class="inter-q-subtext">Get ready for the next challenge!</div>
+          </div>
+        </div>
+
         <!-- 20-SECOND ANSWER REVEAL & FUNNY RESULT POP-UP MODAL OVERLAY -->
         <div id="result-modal-overlay" class="result-modal-backdrop hidden">
           <div id="result-modal-box" class="result-modal-card">
             <div id="result-modal-icon" class="result-icon">🎉</div>
-            <h2 id="result-modal-title" class="result-title">NAILED IT!</h2>
+            <h2 id="result-modal-title" class="result-title">CORRECT! YOU GOT IT!</h2>
             
             <div id="result-modal-score" class="result-points-pill">+10 PTS</div>
 
@@ -458,7 +546,7 @@
             <div class="podium-list" id="player-podium-list" style="width: 100%; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
               <div class="podium-row podium-1st" id="player-podium-1" style="display: none; justify-content: space-between; align-items: center; background: rgba(255, 214, 0, 0.15); border: 1.5px solid var(--accent-yellow); padding: 10px 14px; border-radius: 12px;">
                 <div style="text-align: left;">
-                  <div style="font-size: 11px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 0.5px;">🥇 1ST PLACE (+250 BONUS)</div>
+                  <div style="font-size: 11px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 0.5px;">🥇 1ST PLACE (+20 BONUS)</div>
                   <strong id="player-w1-name" style="font-size: 16px; color: #fff;">—</strong>
                 </div>
                 <span id="player-w1-score" style="font-size: 16px; font-weight: 900; color: var(--accent-yellow);">0 PTS</span>
@@ -774,6 +862,23 @@
                 </div>
               </div>
 
+              <!-- IN-BETWEEN ROUND DURATION -->
+              <div class="settings-subgroup">
+                <div class="config-label">
+                  <span class="icon">⏳</span>
+                  <span class="lbl-title">IN-BETWEEN ROUND DURATION</span>
+                </div>
+                <div class="inter-round-chips" id="inter-round-chips-container">
+                  <button type="button" class="inter-round-chip" data-round-dur="30">30s</button>
+                  <button type="button" class="inter-round-chip active" data-round-dur="60">1 Min (Default)</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="120">2 Min</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="180">3 Min</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="240">4 Min</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="300">5 Min</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="600">10 Min</button>
+                </div>
+              </div>
+
               <!-- AD DISPLAY SIGNAGE MODE -->
               <div class="settings-subgroup ad-signage-subgroup">
                 <div class="config-label-with-toggle">
@@ -814,6 +919,9 @@
                       <button type="button" class="ad-dur-chip" data-dur="15">15s</button>
                       <button type="button" class="ad-dur-chip" data-dur="20">20s</button>
                       <button type="button" class="ad-dur-chip" data-dur="30">30s</button>
+                      <button type="button" class="ad-dur-chip" data-dur="45">45s</button>
+                      <button type="button" class="ad-dur-chip" data-dur="60">60s</button>
+                      <button type="button" class="ad-dur-chip" data-dur="90">90s</button>
                     </div>
                   </div>
 

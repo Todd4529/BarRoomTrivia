@@ -136,6 +136,89 @@ export function sanitizeQuestionsDistractors(questions) {
 }
 
 /**
+ * Extracts a normalized structural stem for a question text
+ */
+function getQuestionStructuralStem(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/["'“”‘’]/g, '')
+    .replace(/\b(for|with|in|to|of|and|an|the|is|what|which|how|does|why|according|primary|sensory|definition|purpose|standard|classic|target|during|when|using)\b/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2)
+    .slice(0, 3)
+    .join('_');
+}
+
+/**
+ * Calculates token overlap similarity between two question texts
+ */
+function calculateQuestionSimilarity(textA, textB) {
+  if (!textA || !textB) return 0;
+  const tokensA = new Set(textA.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2));
+  const tokensB = new Set(textB.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const t of tokensA) {
+    if (tokensB.has(t)) intersection++;
+  }
+  return intersection / (tokensA.size + tokensB.size - intersection);
+}
+
+/**
+ * Reorders a list of questions so that no two consecutive questions are structurally
+ * or textually similar (e.g. sharing identical prefixes or phrasing templates).
+ */
+export function deClusterSimilarQuestions(questions, windowSize = 4) {
+  if (!questions || questions.length <= 2) return questions;
+
+  const result = [];
+  const pending = [...questions];
+
+  while (pending.length > 0) {
+    const recentWindow = result.slice(-windowSize);
+    const lastQ = result.length > 0 ? result[result.length - 1] : null;
+    let foundIdx = -1;
+
+    for (let i = 0; i < pending.length; i++) {
+      const candidate = pending[i];
+      const candStem = getQuestionStructuralStem(candidate.text || candidate.questionText || '');
+
+      const stemConflict = recentWindow.some(r =>
+        getQuestionStructuralStem(r.text || r.questionText || '') === candStem
+      );
+      const highSimilarity = lastQ && calculateQuestionSimilarity(
+        lastQ.text || lastQ.questionText || '',
+        candidate.text || candidate.questionText || ''
+      ) > 0.40;
+
+      if (!stemConflict && !highSimilarity) {
+        foundIdx = i;
+        break;
+      }
+    }
+
+    if (foundIdx === -1) {
+      // Fallback: Pick candidate that does not match immediate previous stem
+      for (let i = 0; i < pending.length; i++) {
+        const candStem = getQuestionStructuralStem(pending[i].text || pending[i].questionText || '');
+        const lastStem = lastQ ? getQuestionStructuralStem(lastQ.text || lastQ.questionText || '') : '';
+        if (candStem !== lastStem) {
+          foundIdx = i;
+          break;
+        }
+      }
+      if (foundIdx === -1) foundIdx = 0;
+    }
+
+    result.push(pending.splice(foundIdx, 1)[0]);
+  }
+
+  return result;
+}
+
+/**
  * Generates or retrieves 500+ verified non-repeating questions for any specific trivia genre.
  * @param {string} genre
  * @returns {Array<Object>}
@@ -256,16 +339,16 @@ export function generateGenreQuestions(genre) {
     generateUniversalGenre(cleanGenre, addQ);
   }
 
-  // Ensure every genre has 500+ unique questions without repeats
-  if (questions.length < 520) {
-    fillTo500(cleanGenre, questions, seenTexts, addQ);
-  }
+  // STRICT: Do NOT generate synthetic/AI filler questions.
+  // Only authentic domain-specific and factual questions are kept.
+  const authentic = questions.filter(q => 
+    !q.id.startsWith('univ_') && 
+    !q.id.startsWith('fill_') && 
+    !q.id.startsWith('gen_')
+  );
 
-  // 1. Interleave & shuffle all questions
-  questions = fisherYatesShuffle(questions);
-
-  // 2. Anti-Repetition Sanitization Pass
-  questions = sanitizeQuestionsDistractors(questions);
+  const declusteredAuth = deClusterSimilarQuestions(fisherYatesShuffle(authentic), 4);
+  questions = sanitizeQuestionsDistractors(declusteredAuth);
 
   genreQuestionCache.set(cleanGenre, questions);
   return questions;
@@ -613,109 +696,95 @@ function generateUniversalGenre(genre, addQ) {
 
 function fillTo500(genre, list, seenTexts, addQ) {
   const topics = [
-    'Quality Control and Standardization',
-    'Historical Evolution and Roots',
-    'Foundational Theory and Principles',
-    'Advanced Diagnostic Techniques',
-    'Tool Calibration and Measurement',
-    'Safety Protocols and Risk Mitigation',
-    'Material Selection and Durability',
-    'Component Compatibility and Integration',
-    'Performance Optimization and Efficiency',
-    'Industry Regulations and Certified Codes',
-    'Troubleshooting and Root Cause Analysis',
-    'Preventative Maintenance Schedules',
-    'Systematic Workflow and Project Planning',
-    'Master Craftsmanship and Technical Precision',
-    'Environmental Impact and Sustainability',
-    'Structural Integrity and Stress Tolerance',
-    'Surface Preparation and Finishing',
-    'Inspection Benchmarks and Empirical Testing',
-    'Emergency Procedures and Fail-Safe Measures',
-    'Resource Management and Cost Optimization',
-    'Historical Milestones and Paradigm Shifts',
-    'Contemporary Innovations and Modern Trends',
-    'Ergonomic Design and Practical Usability',
-    'Chemical and Physical Properties',
-    'Load Capacities and Maximum Thresholds',
-    'Thermal Dynamics and Heat Dissipation',
-    'Moisture Management and Barrier Protection',
-    'Acoustic and Vibration Dampening',
-    'Fastener and Connector Specifications',
-    'Alignment and Leveling Requirements',
-    'Standardized Terminology and Nomenclature',
-    'Long-Term Maintenance and Preservation',
-    'Routine Operational Guidelines',
-    'Peer Review and Expert Evaluation',
-    'Error Prevention and Quality Assurance',
-    'Baseline Calibration Standards',
-    'Field Testing and Real-World Validation',
-    'Lifecycle Analysis and Replacement Intervals'
+    'Historic Golden Age Productions',
+    'Pioneering Creative Breakthroughs',
+    'Signature Styles and Traditions',
+    'Timeless Masterpieces and Classics',
+    'Iconic Legends and Pioneers',
+    'Celebrated Historic Milestones',
+    'Famous Fan Traditions and Lore',
+    'World-Renowned Highlights and Records',
+    'Classic Storytelling and Artistry',
+    'Enduring Cultural Influences',
+    'Fascinating Trivia and Fun Facts',
+    'Famous Premieres and Debuts',
+    'Beloved Fan Favorites and Tributes',
+    'Groundbreaking Original Releases',
+    'Defining Turning Points and Eras',
+    'Critically Acclaimed Masterworks',
+    'Timeless Legacies and Heritage',
+    'Iconic Character and Design Hallmarks',
+    'Celebrated Global Honors and Awards',
+    'Generational Hits and Crossovers',
+    'Historic Moments and Memorable Debuts',
+    'Legendary Collaborations and Teams',
+    'Enduring Pop Culture Tributes',
+    'Signature Creative Visions',
+    'Artistic Milestones and Innovations',
+    'World-Famous Showcases and Events',
+    'Greatest Historical Highlights',
+    'Treasured Vintage Classics',
+    'Cult Classics and Fan Lore',
+    'Defining Decades and Movements',
+    'Treasured Archival Gems',
+    'Audience Favorites and Encores',
+    'Iconic Quotes and Memorable Lore',
+    'Distinctive Creative Techniques',
+    'Trailblazing Visionaries',
+    'Modern Re-imaginings and Adaptations'
   ];
 
   const templates = [
-    'In professional {genre}, why is meticulous attention to "{topic}" essential for optimal outcomes?',
-    'Which core principle governs best practices regarding "{topic}" within {genre}?',
-    'When evaluating expertise in {genre}, what primary objective is targeted through "{topic}"?',
-    'What critical issue is most effectively prevented by adhering to standards for "{topic}" in {genre}?',
-    'According to modern {genre} trade guidelines, how should practitioners approach "{topic}"?',
-    'Why do experienced {genre} specialists prioritize "{topic}" before initiating major operations?',
-    'What empirical benchmark is universally monitored when managing "{topic}" in {genre}?',
-    'In professional {genre} craftsmanship, what distinguishes thorough execution of "{topic}"?',
-    'When troubleshooting complex challenges in {genre}, why is "{topic}" commonly evaluated first?',
-    'What operational risk is mitigated by maintaining compliance with "{topic}" across {genre}?',
-    'In comprehensive {genre} practice, how does proper management of "{topic}" ensure sustained integrity?',
-    'Which foundational standard dictates acceptable tolerances for "{topic}" in {genre}?',
-    'When executing advanced projects in {genre}, how should "{topic}" be integrated into the strategic timeline?',
-    'What primary benefit does systematic adherence provide for "{topic}" in {genre}?',
-    'In modern {genre} methodology, what instrument or protocol is indispensable for "{topic}"?',
-    'How does a structured review of "{topic}" directly impact the overall longevity of work in {genre}?'
+    'In {genre} trivia, what is widely regarded as an iconic hallmark of "{topic}"?',
+    'Which classic milestone is famously celebrated in connection with "{topic}" in {genre}?',
+    'Among fans and enthusiasts of {genre}, what makes "{topic}" an enduring classic?',
+    'In the rich history of {genre}, what major achievement is best remembered for "{topic}"?',
+    'Which creative legacy was established by "{topic}" across the golden age of {genre}?',
+    'In popular culture, what standout element defines the lasting appeal of "{topic}" in {genre}?',
+    'Which celebrated tradition helped define the golden standard of "{topic}" in {genre}?',
+    'When looking back at greatest moments in {genre}, what legacy was shaped by "{topic}"?',
+    'In classic {genre} lore, what primary contribution is attributed to "{topic}"?',
+    'Which cultural distinction is most famously associated with "{topic}" in {genre}?',
+    'In {genre} history, what memorable era is celebrated for "{topic}"?',
+    'What iconic distinction helped popularize "{topic}" across generations of {genre}?',
+    'Which timeless attribute is most admired about "{topic}" within {genre}?',
+    'In the lore of {genre}, what signature quality helped define "{topic}"?',
+    'What celebrated creative achievement is linked to "{topic}" in {genre}?',
+    'Why does "{topic}" hold a legendary reputation among followers of {genre}?'
   ];
 
   const masterDistractorPool = [
-    'Relying purely on arbitrary guesswork and improvised estimations',
-    'Bypassing all standard safety thresholds to speed up delivery',
-    'Eliminating all regular inspection intervals completely',
-    'Using unverified speculation without physical measurements',
-    'Assuming all environmental variables remain identical indefinitely',
-    'Replacing calibrated tools with decorative hand ornaments',
-    'Maximizing friction and accelerating structural wear',
-    'Ignoring manufacturer specifications in favor of superstition',
-    'Allowing uncontrolled moisture and heat buildup throughout the assembly',
-    'Applying arbitrary variations on every single iteration',
-    'Omitting critical foundational preparation phases',
-    'Disregarding local building and safety regulations',
-    'Relying solely on word-of-mouth hearsay without records',
-    'Discarding calibration logs immediately upon completion',
-    'Reversing the sequence of diagnostic procedures at random',
-    'Using expired chemical bonding agents without ventilation',
-    'Doubling electrical current beyond maximum rated load capacity',
-    'Storing volatile compounds directly adjacent to open heating elements',
-    'Neglecting routine lubrications until complete mechanical seizure occurs',
-    'Replacing precision measuring calipers with visual estimations',
-    'Submerging sensitive electronic circuits in unpurified tap water',
-    'Operating machinery continuously beyond duty cycle thermal limits',
-    'Bypassing emergency cutoff switches during high-pressure testing',
-    'Substituting lightweight plastic fasteners for structural steel bolts',
-    'Skipping baseline diagnostic scans prior to system overhaul',
-    'Ignoring manufacturer torque specifications during critical fastening',
-    'Painting over active rust corrosion without surface preparation',
-    'Disabling automated warning alarms to reduce ambient noise levels',
-    'Using incorrect thread pitch and forcing cross-threaded connections',
-    'Allowing sediment accumulation in cooling reservoirs indefinitely'
+    'A fleeting one-week gimmick forgotten almost immediately',
+    'An accidental footnote with no audience or cultural recognition',
+    'A rejected draft that was never officially performed or produced',
+    'An unverified urban legend with zero historical record',
+    'A superficial novelty abandoned after a single trial',
+    'A purely derivative copy lacking any creative distinction',
+    'A temporary seasonal stunt that left no lasting impression',
+    'A forgotten prototype discarded before public debut',
+    'An unauthorized counterfeit rejected by the community',
+    'A short-lived passing fad forgotten within a week',
+    'An accidental novelty never repeated in history',
+    'A minor footnote with no lasting impact or audience',
+    'Relying exclusively on untested rumors without creative effort',
+    'Completely abandoning all original style and storytelling',
+    'An unreleased concept that never reached the public',
+    'A purely mechanical repetition with zero creative expression',
+    'An arbitrary rumor with no verified historical record',
+    'A failed experiment immediately withdrawn from circulation',
+    'A generic placeholder with no artistic merit',
+    'An obscure private rehearsal never heard by audiences',
+    'A transient social media rumor with no foundation',
+    'An unintended blooper discarded from final release'
   ];
 
   const answerSets = [
-    'Ensuring reproducible precision, safety compliance, and maximum longevity',
-    'Systematic calibration against empirical industry benchmarks',
-    'Mitigating cumulative stress and preventing premature systemic failure',
-    'Standardized procedural consistency and verifiable quality control',
-    'Establishing an unbroken chain of empirical testing and documentation',
-    'Optimizing resource allocation and minimizing material fatigue',
-    'Maintaining strict structural integrity and operational safety margins',
-    'Ensuring adherence to certified regulatory standards and building codes',
-    'Minimizing operational thermal variance and mechanical friction',
-    'Maximizing component lifecycle durability through preventative protocols'
+    'Pioneering original works that defined a golden generation',
+    'Setting a beloved standard celebrated by fans and historians worldwide',
+    'Fostering creative brilliance, authentic storytelling, and timeless admiration',
+    'Demonstrating masterful artistry and memorable original execution',
+    'Inspiring future generations with unforgettable classic productions',
+    'Captivating worldwide audiences through enduring excellence and charm'
   ];
 
   for (let tIdx = 0; tIdx < topics.length && list.length < 520; tIdx++) {

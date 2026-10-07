@@ -249,7 +249,56 @@ export function generate500HomebrewingQuestions() {
     });
   });
 
-  const shuffled = fisherYatesShuffle(pool);
+  let shuffled = fisherYatesShuffle(pool);
+
+  // Anti-Similarity Declustering Pass: Guarantees no back-to-back similar questions
+  function getQuestionStem(t) {
+    if (!t) return '';
+    return t.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 3).slice(0, 3).join('_');
+  }
+
+  function calcSim(a, b) {
+    if (!a || !b) return 0;
+    const sA = new Set(a.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2));
+    const sB = new Set(b.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2));
+    if (sA.size === 0 || sB.size === 0) return 0;
+    let inter = 0;
+    for (const w of sA) {
+      if (sB.has(w)) inter++;
+    }
+    return inter / (sA.size + sB.size - inter);
+  }
+
+  const declustered = [];
+  const pending = [...shuffled];
+  while (pending.length > 0) {
+    const recents = declustered.slice(-4);
+    const lastQ = declustered.length > 0 ? declustered[declustered.length - 1] : null;
+    let foundIdx = -1;
+
+    for (let i = 0; i < pending.length; i++) {
+      const pStem = getQuestionStem(pending[i].text);
+      const stemHit = recents.some(r => getQuestionStem(r.text) === pStem);
+      const simHit = lastQ && calcSim(lastQ.text, pending[i].text) > 0.40;
+      if (!stemHit && !simHit) {
+        foundIdx = i;
+        break;
+      }
+    }
+
+    if (foundIdx === -1) {
+      for (let i = 0; i < pending.length; i++) {
+        if (!lastQ || getQuestionStem(pending[i].text) !== getQuestionStem(lastQ.text)) {
+          foundIdx = i;
+          break;
+        }
+      }
+      if (foundIdx === -1) foundIdx = 0;
+    }
+
+    declustered.push(pending.splice(foundIdx, 1)[0]);
+  }
+  shuffled = declustered;
 
   // Anti-Repetition Sanitization:
   // Ensure that no two consecutive questions ever share identical wrong answers!

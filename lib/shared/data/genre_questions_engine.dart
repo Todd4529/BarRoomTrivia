@@ -58,7 +58,7 @@ class GenreQuestionsEngine {
     final cleanGenre = genre.isEmpty ? 'General Trivia' : genre;
     if (_genreCache.containsKey(cleanGenre)) return _genreCache[cleanGenre]!;
 
-    final questions = <Question>[];
+    List<Question> questions = <Question>[];
     final Set<String> seenTexts = {};
     final random = math.Random();
 
@@ -239,10 +239,79 @@ class GenreQuestionsEngine {
       _fillTo500(cleanGenre, questions, seenTexts, addQ);
     }
 
-    // 1. Shuffle questions so sub-topics and question formats are well-interleaved
-    questions.shuffle(random);
+    // 1. Separate authentic handcrafted domain questions from synthetic filler
+    final authentic = questions.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(random);
+    final filler = questions.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(random);
 
-    // 2. Comprehensive Anti-Repetition Sanitization Pass:
+    // 2. Anti-Similarity Declustering Pass: Guarantees no back-to-back similar questions
+    String getQuestionStem(String text) {
+      return text
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+          .split(' ')
+          .where((w) => w.length > 3)
+          .take(3)
+          .join('_');
+    }
+
+    double calcQuestionSim(String textA, String textB) {
+      final tokensA = textA
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+          .split(' ')
+          .where((w) => w.length > 2)
+          .toSet();
+      final tokensB = textB
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+          .split(' ')
+          .where((w) => w.length > 2)
+          .toSet();
+      if (tokensA.isEmpty || tokensB.isEmpty) return 0.0;
+      final intersection = tokensA.intersection(tokensB).length;
+      return intersection / (tokensA.length + tokensB.length - intersection);
+    }
+
+    List<Question> declusterList(List<Question> list) {
+      if (list.isEmpty) return list;
+      final declustered = <Question>[];
+      final pending = List<Question>.from(list);
+
+      while (pending.isNotEmpty) {
+        final recents = declustered.length > 4 ? declustered.sublist(declustered.length - 4) : declustered;
+        final lastQ = declustered.isNotEmpty ? declustered.last : null;
+        int foundIdx = -1;
+
+        for (int i = 0; i < pending.length; i++) {
+          final pStem = getQuestionStem(pending[i].questionText);
+          final stemHit = recents.any((r) => getQuestionStem(r.questionText) == pStem);
+          final simHit = lastQ != null && calcQuestionSim(lastQ.questionText, pending[i].questionText) > 0.40;
+
+          if (!stemHit && !simHit) {
+            foundIdx = i;
+            break;
+          }
+        }
+
+        if (foundIdx == -1) {
+          for (int i = 0; i < pending.length; i++) {
+            if (lastQ == null || getQuestionStem(pending[i].questionText) != getQuestionStem(lastQ.questionText)) {
+              foundIdx = i;
+              break;
+            }
+          }
+          if (foundIdx == -1) foundIdx = 0;
+        }
+
+        declustered.add(pending.removeAt(foundIdx));
+      }
+      return declustered;
+    }
+
+    // Authentic questions are ALWAYS served first to players; filler acts as late-round fallback
+    questions = [...declusterList(authentic), ...declusterList(filler)];
+
+    // 3. Comprehensive Anti-Repetition Sanitization Pass:
     // Ensures that no two consecutive questions ever share identical wrong answers!
     final allWrongPool = <String>{};
     for (final q in questions) {
@@ -485,6 +554,74 @@ class GenreQuestionsEngine {
     for (var step in brewingStepsAndChemistry) {
       addQ('hb_step_def_${step[0]}', 'In all-grain homebrewing, what does "${step[0]}" refer to?', step[1], '', '', '', distractorPool: stepDefs);
       addQ('hb_step_goal_${step[0]}', 'What is the primary technical objective of "${step[0]}" during a brew session?', step[1], '', '', '', distractorPool: stepDefs);
+    }
+
+    // 6. Authentic Style & Hop Combinations (30 hops x 8 classic styles = 240 questions)
+    final pairingStyles = [
+      'American IPA',
+      'Hazy / New England IPA',
+      'Double IPA (Imperial IPA)',
+      'American Pale Ale',
+      'Belgian Saison',
+      'Czech Premium Pale Lager (Pilsner)',
+      'German Hefeweizen',
+      'Kölsch',
+    ];
+
+    for (var h in hops) {
+      for (var s in pairingStyles) {
+        addQ('hb_combo_hop_${h[0]}_$s',
+            'When crafting an authentic $s, how does dry-hopping with "${h[0]}" hops impact the final aroma?',
+            'Infuses vibrant ${h[1]} without extracting bitter alpha acids',
+            'Doubles the alcohol content instantly',
+            'Causes the beer to turn completely jet black',
+            'Eliminates all carbonation from the finished beer');
+      }
+    }
+
+    // 7. Authentic Style & Malt Combinations (20 malts x 8 classic styles = 160 questions)
+    for (var m in malts) {
+      for (var s in pairingStyles) {
+        addQ('hb_combo_malt_${m[0]}_$s',
+            'In an all-grain recipe formulation for $s, what sensory contribution is provided by adding "${m[0]}"?',
+            'Contributes ${m[1]}',
+            'Adds artificial lemon flavor',
+            'Prevents all yeast reproduction',
+            'Filters out water minerals entirely');
+      }
+    }
+
+    // 8. Authentic Brewing Calculations, Chemistry & Fermentation Science (25 questions)
+    final brewScience = [
+      ['Hydrometer Specific Gravity Calculation', 'If an original gravity (OG) is 1.050 and final gravity (FG) is 1.010, what is the approximate ABV?', 'Approx. 5.25% ABV (using (OG - FG) * 131.25)', 'Approx. 2.1% ABV', 'Approx. 8.5% ABV', 'Approx. 12.0% ABV'],
+      ['Mash Temperature Enzyme Control', 'What is the primary enzymatic outcome of mashing grains at a lower temperature of 148°F (64°C)?', 'Maximizes beta-amylase activity, producing highly fermentable wort and a dry, crisp beer', 'Denatures all enzymes immediately', 'Produces high unfermentable dextrins and heavy body', 'Stops starch conversion completely'],
+      ['High Mash Temperature Body Impact', 'What happens to the finished beer when the mash temperature is held high at 156°F - 158°F (69°C)?', 'Promotes alpha-amylase creating unfermentable dextrins, yielding fuller body and sweetness', 'Produces 100% alcohol attenuation', 'Lowers the final gravity to 0.990', 'Stops yeast from fermenting alcohol entirely'],
+      ['Water Chemistry Sulfate-to-Chloride', 'In brewing water chemistry, what effect does a high sulfate-to-chloride ratio (2:1 or higher) have on beer flavor?', 'Accentuates crisp, assertive hop bitterness and dryness in IPAs', 'Accentuates round, sweet maltiness and suppresses hops', 'Turns the water permanently cloudy', 'Lowers water pH below 3.0'],
+      ['Water Chemistry Chloride-to-Sulfate', 'In brewing water chemistry for Hazy / NEIPAs, why is a high chloride-to-sulfate ratio favored?', 'Enhances round, pillowy malt fullness and smooth mouthfeel', 'Produces harsh, sharp hop bitterness', 'Removes all yeast haze from the finished beer', 'Prevents wort from boiling'],
+      ['Mash pH Target Range', 'What is the optimal mash pH range measured at room temperature for maximum enzymatic starch conversion?', '5.2 to 5.6 pH', '3.0 to 3.5 pH', '6.8 to 7.5 pH', '8.0 to 9.0 pH'],
+      ['Boil Hop Utilization Time', 'Why are bittering hops traditionally boiled for 60 minutes or longer in the brew kettle?', 'To maximize thermal isomerization of insoluble alpha acids into soluble iso-alpha acids', 'To preserve volatile delicate floral essential oils', 'To lower the specific gravity of the wort', 'To kill active yeast inside the boil kettle'],
+      ['Whirlpool / Hop Stand Temperature', 'Why do homebrewers perform a whirlpool hop stand below 180°F (82°C)?', 'To extract aromatic essential oils and flavors while minimizing further alpha acid isomerization', 'To freeze the wort before transfer', 'To ferment the wort without pitching yeast', 'To convert malt starches into sugars'],
+      ['Yeast Pitch Rate Underpitching Risk', 'What common off-flavor is most likely produced if a homebrewer drastically underpitches yeast into a high-gravity wort?', 'Excessive fruity esters, higher alcohols (fusels), and possible diacetyl', 'Pure lactic sourness', 'Vegetal cooked corn (DMS)', 'Lightstruck skunking'],
+      ['Diacetyl Rest for Lagers', 'Why is a "diacetyl rest" performed near the end of cold lager fermentation (raising temp to 65°F / 18°C)?', 'To encourage yeast to reabsorb and metabolize diacetyl into flavorless acetoin and 2,3-butanediol', 'To kill off the lager yeast strain', 'To carbonate the lager before lagering', 'To evaporate alcohol from the fermenter'],
+      ['Cold Break vs Hot Break', 'What constitutes the "hot break" that forms during the first 15 minutes of a rolling wort boil?', 'Coagulated proteins and polyphenol tannins precipitating out of solution', 'Yeast cells clumping together', 'Caramelized sugar crystals adhering to kettle walls', 'Isomerized hop pellet debris'],
+      ['Priming Sugar Corn Sugar vs Table Sugar', 'When bottle conditioning 5 gallons of beer, why does dextrose (corn sugar) require slightly more weight than sucrose (table sugar)?', 'Corn sugar contains roughly 9% monohydrate water content compared to 100% fermentable sucrose', 'Table sugar contains unfermentable lactose', 'Corn sugar prevents carbonation bubbles', 'Corn sugar is twice as dense as sucrose'],
+      ['Gelatin Fining Clarification', 'How does adding positively charged gelatin to cold-crashed beer clarify cloudy homebrew?', 'Binds to negatively charged suspended yeast cells and polyphenol proteins, causing them to settle', 'Dissolves all protein molecules completely', 'Filters beer through micro-mesh pores chemically', 'Neutralizes hop bitterness'],
+      ['Oxidation in Post-Fermentation', 'Why must homebrewers strictly avoid splashing or aerating finished beer during bottling or kegging?', 'Oxygen reacts with hop compounds and melanoidins, rapidly creating stale wet-cardboard off-flavors', 'It makes the beer dangerously acidic', 'It causes the yeast to ferment glass bottles', 'It triples the alcohol content uncontrollably'],
+      ['Krausen Fermentation Stage', 'In homebrew fermentation, what is "kraüsen"?', 'The thick, foamy head of active yeast, proteins, and hop resins that forms atop fermenting wort', 'The trub sediment at the bottom of the fermenter', 'The siphon tube used to transfer liquid', 'The hydrometer reading at terminal gravity'],
+      ['Blow-off Tube Utility', 'When should a homebrewer use a blow-off tube instead of a standard 3-piece airlock?', 'When fermenting high-gravity beers or using vigorous yeasts with minimal fermenter headspace', 'Only during secondary lagering at 32°F', 'When heating mash water in the kettle', 'When chilling wort with an immersion chiller'],
+      ['Specific Gravity Temperature Correction', 'Why must homebrewers correct hydrometer readings taken on hot wort?', 'Hydrometers are calibrated at 60°F (15.5°C); hot liquids are less dense, reading artificially lower', 'Hot wort dissolves the glass hydrometer stem', 'Specific gravity changes color at high temperatures', 'Sugar content doubles at higher temperatures'],
+      ['Grain-to-Water Mash Ratio', 'What is the standard water-to-grain ratio commonly used in all-grain homebrewing mashes?', '1.25 to 1.5 quarts of water per pound of crushed grain (approx. 2.6 - 3.1 L/kg)', '4 to 5 quarts of water per pound of grain', '0.5 quarts of water per pound of grain', '10 quarts of water per pound of grain'],
+      ['Decoction Mashing Technique', 'What is traditional European "decoction mashing"?', 'Removing a portion of the thick mash, boiling it, and returning it to raise mash temperature while developing melanoidins', 'Adding chemical food coloring to darken the beer', 'Soaking grain bags in ice water overnight', 'Injecting pure steam into the boil kettle'],
+      ['Sparge Water Temperature Limit', 'Why should sparge rinse water not exceed 170°F (77°C)?', 'Temperatures above 170°F extract harsh, astringent tannins from grain husks', 'It will cause the mash tun to implode', 'It converts fermentable sugars back into starch', 'It halts hot break formation in the kettle'],
+      ['Iodine Mash Conversion Test', 'How does a homebrewer use an iodine solution to verify complete mash conversion?', 'Tincture of iodine remains amber if all starches are converted, but turns dark blue/black if unconverted starch remains', 'Iodine measures water hardness in PPM', 'Iodine calculates target alcohol by volume', 'Iodine measures boiling hop utilization'],
+      ['FWH (First Wort Hopping)', 'What is "First Wort Hopping" (FWH) in homebrewing practice?', 'Adding hops to the boil kettle while sweet wort is lautered from the mash tun before the boil begins', 'Adding dry hops directly into the fermentation bucket', 'Boiling hops with pure water before adding grains', 'Adding hops into the grain mill during crushing'],
+      ['Hop Creep Phenomenon', 'What is "hop creep" during dry-hopping finished beer?', 'Enzymes in raw dry hops breaking down unfermentable dextrins into fermentable sugars, restarting fermentation', 'Hop pellets floating to the top and blocking keg dip tubes', 'Hop oils creating excessive foam in draft lines', 'Hops turning the beer greenish and vegetal'],
+      ['Trub Composition', 'In the bottom of the brew kettle and primary fermenter, what is "trub"?', 'Sediment consisting of coagulated proteins, yeast cells, hop debris, and inactive polyphenols', 'Clear sugary wort ready for packaging', 'Unmalted grain husks remaining after sparging', 'Pure carbon dioxide foam'],
+      ['Gushing / Bottle Infection', 'What typically causes homebrewed bottles to violently gush foam upon opening ("bottle bombs")?', 'Over-priming with excess sugar or contamination by wild diastatic yeast (e.g. S. cerevisiae var. diastaticus)', 'Using glass bottles with pry-off crowns', 'Cold crashing the beer prior to packaging', 'Adding too many bittering hops to the boil'],
+    ];
+
+    for (var sci in brewScience) {
+      addQ('hb_sci_${sci[0]}', sci[1], sci[2], sci[3], sci[4], sci[5]);
     }
   }
 
@@ -1683,24 +1820,24 @@ class GenreQuestionsEngine {
       return;
     }
 
-    final eras = ['Early Historical Era', 'Golden Age', 'Mid-20th Century Transition', 'Modern Digital Renaissance', 'Contemporary Era'];
-    final facets = ['Core Theory', 'Masterwork Standard', 'Foundational Breakthrough', 'Critical Landmark Method', 'Pioneering Innovation'];
+    final eras = ['Early Era', 'Golden Age', 'Mid-Century Modern', 'Pop Culture Renaissance', 'Contemporary Era'];
+    final facets = ['Classic Heritage', 'Signature Masterwork', 'Breakthrough Moment', 'Landmark Legacy', 'Pioneering Vision'];
     final rand = math.Random();
     final universalDistractors = [
-      'By accidental discovery during an electrical power blackout',
-      'Through a royal decree issued in ancient Greece',
-      'By replacing all traditional physical tools with water',
-      'Through arbitrary speculation without testing',
-      'By abandoning previous engineering principles',
-      'Via an anonymous manuscript found in a cave',
-      'By restricting all practices to nighttime hours',
-      'Through improvised consumer polls'
+      'Through a random coincidence during an unrelated event',
+      'By an unverified rumor that was never substantiated',
+      'As a temporary publicity stunt that was quickly dropped',
+      'Through an improvised novelty that faded in days',
+      'By a minor footnote with no audience reception',
+      'As an accidental gimmick never recorded in lore',
+      'Through an unreleased prototype that never surfaced',
+      'By an anonymous draft discarded without notice'
     ];
 
     for (var era in eras) {
       for (var facet in facets) {
-        final d = pickDistractors(universalDistractors, 'Through rigorous empirical refinement and widespread adoption', rand);
-        addQ('gen_${genre}_${era}_$facet', 'In the study of $genre, how did the "$facet" develop during the $era?', 'Through rigorous empirical refinement and widespread adoption', d[0], d[1], d[2]);
+        final d = pickDistractors(universalDistractors, 'Through creative brilliance, cultural storytelling, and popular acclaim', rand);
+        addQ('gen_${genre}_${era}_$facet', 'In the history and trivia of $genre, how is the "$facet" remembered from the $era?', 'Through creative brilliance, cultural storytelling, and popular acclaim', d[0], d[1], d[2]);
       }
     }
   }
@@ -1708,175 +1845,138 @@ class GenreQuestionsEngine {
   // --- ENSURE 500+ DIVERSE QUESTIONS PER GENRE WITHOUT OVERLAP OR NUMBER TAGS ---
   static void _fillTo500(String genre, List<Question> list, Set<String> seenTexts, Function addQ) {
     final topics = [
-      'Quality Control and Standardization',
-      'Historical Evolution and Roots',
-      'Foundational Theory and Principles',
-      'Advanced Diagnostic Techniques',
-      'Tool Calibration and Measurement',
-      'Safety Protocols and Risk Mitigation',
-      'Material Selection and Durability',
-      'Component Compatibility and Integration',
-      'Performance Optimization and Efficiency',
-      'Industry Regulations and Certified Codes',
-      'Troubleshooting and Root Cause Analysis',
-      'Preventative Maintenance Schedules',
-      'Systematic Workflow and Project Planning',
-      'Master Craftsmanship and Technical Precision',
-      'Environmental Impact and Sustainability',
-      'Structural Integrity and Stress Tolerance',
-      'Surface Preparation and Finishing',
-      'Inspection Benchmarks and Empirical Testing',
-      'Emergency Procedures and Fail-Safe Measures',
-      'Resource Management and Cost Optimization',
-      'Historical Milestones and Paradigm Shifts',
-      'Contemporary Innovations and Modern Trends',
-      'Ergonomic Design and Practical Usability',
-      'Chemical and Physical Properties',
-      'Load Capacities and Maximum Thresholds',
-      'Thermal Dynamics and Heat Dissipation',
-      'Moisture Management and Barrier Protection',
-      'Acoustic and Vibration Dampening',
-      'Fastener and Connector Specifications',
-      'Alignment and Leveling Requirements',
-      'Standardized Terminology and Nomenclature',
-      'Long-Term Maintenance and Preservation',
-      'Routine Operational Guidelines',
-      'Peer Review and Expert Evaluation',
-      'Error Prevention and Quality Assurance',
-      'Baseline Calibration Standards',
-      'Field Testing and Real-World Validation',
-      'Lifecycle Analysis and Replacement Intervals',
+      'Historic Golden Age Productions',
+      'Pioneering Creative Breakthroughs',
+      'Signature Styles and Traditions',
+      'Timeless Masterpieces and Classics',
+      'Iconic Legends and Pioneers',
+      'Celebrated Historic Milestones',
+      'Famous Fan Traditions and Lore',
+      'World-Renowned Highlights and Records',
+      'Classic Storytelling and Artistry',
+      'Enduring Cultural Influences',
+      'Fascinating Trivia and Fun Facts',
+      'Famous Premieres and Debuts',
+      'Beloved Fan Favorites and Tributes',
+      'Groundbreaking Original Releases',
+      'Defining Turning Points and Eras',
+      'Critically Acclaimed Masterworks',
+      'Timeless Legacies and Heritage',
+      'Iconic Character and Design Hallmarks',
+      'Celebrated Global Honors and Awards',
+      'Generational Hits and Crossovers',
+      'Historic Moments and Memorable Debuts',
+      'Legendary Collaborations and Teams',
+      'Enduring Pop Culture Tributes',
+      'Signature Creative Visions',
+      'Artistic Milestones and Innovations',
+      'World-Famous Showcases and Events',
+      'Greatest Historical Highlights',
+      'Treasured Vintage Classics',
+      'Cult Classics and Fan Lore',
+      'Defining Decades and Movements',
+      'Treasured Archival Gems',
+      'Audience Favorites and Encores',
+      'Iconic Quotes and Memorable Lore',
+      'Distinctive Creative Techniques',
+      'Trailblazing Visionaries',
+      'Modern Re-imaginings and Adaptations',
     ];
 
     final templates = [
-      'In professional $genre, why is meticulous attention to "{topic}" essential for optimal outcomes?',
-      'Which core principle governs best practices regarding "{topic}" within $genre?',
-      'When evaluating expertise in $genre, what primary objective is targeted through "{topic}"?',
-      'What critical issue is most effectively prevented by adhering to standards for "{topic}" in $genre?',
-      'According to modern $genre trade guidelines, how should practitioners approach "{topic}"?',
-      'Why do experienced $genre specialists prioritize "{topic}" before initiating major operations?',
-      'What empirical benchmark is universally monitored when managing "{topic}" in $genre?',
-      'In professional $genre craftsmanship, what distinguishes thorough execution of "{topic}"?',
-      'When troubleshooting complex challenges in $genre, why is "{topic}" commonly evaluated first?',
-      'What operational risk is mitigated by maintaining compliance with "{topic}" across $genre?',
-      'In comprehensive $genre practice, how does proper management of "{topic}" ensure sustained integrity?',
-      'Which foundational standard dictates acceptable tolerances for "{topic}" in $genre?',
-      'When executing advanced projects in $genre, how should "{topic}" be integrated into the strategic timeline?',
-      'What primary benefit does systematic adherence provide for "{topic}" in $genre?',
-      'In modern $genre methodology, what instrument or protocol is indispensable for "{topic}"?',
-      'How does a structured review of "{topic}" directly impact the overall longevity of work in $genre?',
+      'In $genre trivia, what is widely regarded as an iconic hallmark of "{topic}"?',
+      'Which classic milestone is famously celebrated in connection with "{topic}" in $genre?',
+      'Among fans and enthusiasts of $genre, what makes "{topic}" an enduring classic?',
+      'In the rich history of $genre, what major achievement is best remembered for "{topic}"?',
+      'Which creative legacy was established by "{topic}" across the golden age of $genre?',
+      'In popular culture, what standout element defines the lasting appeal of "{topic}" in $genre?',
+      'Which celebrated tradition helped define the golden standard of "{topic}" in $genre?',
+      'When looking back at greatest moments in $genre, what legacy was shaped by "{topic}"?',
+      'In classic $genre lore, what primary contribution is attributed to "{topic}"?',
+      'Which cultural distinction is most famously associated with "{topic}" in $genre?',
+      'In $genre history, what memorable era is celebrated for "{topic}"?',
+      'What iconic distinction helped popularize "{topic}" across generations of $genre?',
+      'Which timeless attribute is most admired about "{topic}" within $genre?',
+      'In the lore of $genre, what signature quality helped define "{topic}"?',
+      'What celebrated creative achievement is linked to "{topic}" in $genre?',
+      'Why does "{topic}" hold a legendary reputation among followers of $genre?',
     ];
 
     final answerSets = [
       {
-        'correct': 'Ensuring reproducible precision, safety compliance, and maximum longevity',
+        'correct': 'Pioneering original works that defined a golden generation',
         'distractors': [
-          'Relying purely on arbitrary guesswork and improvised estimations',
-          'Bypassing all standard safety thresholds to speed up delivery',
-          'Eliminating all regular inspection intervals completely'
+          'A fleeting one-week gimmick forgotten almost immediately',
+          'An accidental footnote with no audience or cultural recognition',
+          'A rejected draft that was never officially performed or produced'
         ]
       },
       {
-        'correct': 'Systematic calibration against empirical industry benchmarks',
+        'correct': 'Setting a beloved standard celebrated by fans and historians worldwide',
         'distractors': [
-          'Using unverified speculation without physical measurements',
-          'Assuming all environmental variables remain identical indefinitely',
-          'Replacing calibrated tools with decorative hand ornaments'
+          'An unverified urban legend with zero historical record',
+          'A superficial novelty abandoned after a single trial',
+          'A purely derivative copy lacking any creative distinction'
         ]
       },
       {
-        'correct': 'Mitigating cumulative stress and preventing premature systemic failure',
+        'correct': 'Fostering creative brilliance, authentic storytelling, and timeless admiration',
         'distractors': [
-          'Maximizing friction and accelerating structural wear',
-          'Ignoring manufacturer specifications in favor of superstition',
-          'Allowing uncontrolled moisture and heat buildup throughout the assembly'
+          'A temporary seasonal stunt that left no lasting impression',
+          'A forgotten prototype discarded before public debut',
+          'An unauthorized counterfeit rejected by the community'
         ]
       },
       {
-        'correct': 'Standardized procedural consistency and verifiable quality control',
+        'correct': 'Demonstrating masterful artistry and memorable original execution',
         'distractors': [
-          'Applying arbitrary variations on every single iteration',
-          'Omitting critical foundational preparation phases',
-          'Disregarding local building and safety regulations'
+          'A short-lived passing fad forgotten within a week',
+          'An accidental novelty never repeated in history',
+          'A minor footnote with no lasting impact or audience'
         ]
       },
       {
-        'correct': 'Optimal resource allocation combined with rigorous safety verification',
+        'correct': 'Inspiring future generations with unforgettable classic productions',
         'distractors': [
-          'Exceeding maximum rated structural load capacities without reinforcement',
-          'Using substandard uncertified substitute materials',
-          'Operating machinery without proper protective equipment'
+          'Relying exclusively on untested rumors without creative effort',
+          'Completely abandoning all original style and storytelling',
+          'An unreleased concept that never reached the public'
         ]
       },
       {
-        'correct': 'Comprehensive pre-operational analysis and defect mitigation',
+        'correct': 'Captivating worldwide audiences through enduring excellence and charm',
         'distractors': [
-          'Postponing all diagnostic evaluation until total equipment breakdown',
-          'Relying solely on visual appearance rather than functional tolerances',
-          'Treating safety documentation as unnecessary paperwork'
-        ]
-      },
-      {
-        'correct': 'Maintaining strict adherence to calibrated technical tolerances',
-        'distractors': [
-          'Accepting excessive margin of error exceeding fifty percent',
-          'Skipping mandatory joint tightening and fastener torquing',
-          'Using corroded fasteners in high-humidity environments'
-        ]
-      },
-      {
-        'correct': 'Safeguarding structural integrity through certified engineering guidelines',
-        'distractors': [
-          'Disabling automatic cut-off and pressure release valves',
-          'Storing incompatible chemical compounds in open containers',
-          'Conducting electrical work on live uninsulated circuits'
+          'A purely mechanical repetition with zero creative expression',
+          'An arbitrary rumor with no verified historical record',
+          'A failed experiment immediately withdrawn from circulation'
         ]
       },
     ];
 
     final allFillDistractors = <String>[
-      'Relying purely on arbitrary guesswork and improvised estimations',
-      'Bypassing all standard safety thresholds to speed up delivery',
-      'Eliminating all regular inspection intervals completely',
-      'Using unverified speculation without physical measurements',
-      'Assuming all environmental variables remain identical indefinitely',
-      'Replacing calibrated tools with decorative hand ornaments',
-      'Maximizing friction and accelerating structural wear',
-      'Ignoring manufacturer specifications in favor of superstition',
-      'Allowing uncontrolled moisture and heat buildup throughout the assembly',
-      'Applying arbitrary variations on every single iteration',
-      'Omitting critical foundational preparation phases',
-      'Disregarding local building and safety regulations',
-      'Exceeding maximum rated structural load capacities without reinforcement',
-      'Using substandard uncertified substitute materials',
-      'Operating machinery without proper protective equipment',
-      'Postponing all diagnostic evaluation until total equipment breakdown',
-      'Relying solely on visual appearance rather than functional tolerances',
-      'Treating safety documentation as unnecessary paperwork',
-      'Accepting excessive margin of error exceeding fifty percent',
-      'Skipping mandatory joint tightening and fastener torquing',
-      'Using corroded fasteners in high-humidity environments',
-      'Disabling automatic cut-off and pressure release valves',
-      'Storing incompatible chemical compounds in open containers',
-      'Conducting electrical work on live uninsulated circuits',
-      'Submerging sensitive electronic circuits in unpurified tap water',
-      'Operating machinery continuously beyond duty cycle thermal limits',
-      'Bypassing emergency cutoff switches during high-pressure testing',
-      'Substituting lightweight plastic fasteners for structural steel bolts',
-      'Skipping baseline diagnostic scans prior to system overhaul',
-      'Ignoring manufacturer torque specifications during critical fastening',
-      'Painting over active rust corrosion without surface preparation',
-      'Disabling automated warning alarms to reduce ambient noise levels',
-      'Using incorrect thread pitch and forcing cross-threaded connections',
-      'Allowing sediment accumulation in cooling reservoirs indefinitely',
-      'Discarding calibration logs immediately upon completion',
-      'Reversing the sequence of diagnostic procedures at random',
-      'Using expired chemical bonding agents without ventilation',
-      'Doubling electrical current beyond maximum rated load capacity',
-      'Storing volatile compounds directly adjacent to open heating elements',
-      'Neglecting routine lubrications until complete mechanical seizure occurs'
+      'A fleeting one-week gimmick forgotten almost immediately',
+      'An accidental footnote with no audience or cultural recognition',
+      'A rejected draft that was never officially performed or produced',
+      'An unverified urban legend with zero historical record',
+      'A superficial novelty abandoned after a single trial',
+      'A purely derivative copy lacking any creative distinction',
+      'A temporary seasonal stunt that left no lasting impression',
+      'A forgotten prototype discarded before public debut',
+      'An unauthorized counterfeit rejected by the community',
+      'A short-lived passing fad forgotten within a week',
+      'An accidental novelty never repeated in history',
+      'A minor footnote with no lasting impact or audience',
+      'Relying exclusively on untested rumors without creative effort',
+      'Completely abandoning all original style and storytelling',
+      'An unreleased concept that never reached the public',
+      'A purely mechanical repetition with zero creative expression',
+      'An arbitrary rumor with no verified historical record',
+      'A failed experiment immediately withdrawn from circulation',
+      'A generic placeholder with no artistic merit',
+      'An obscure private rehearsal never heard by audiences',
+      'A transient social media rumor with no foundation',
+      'An unintended blooper discarded from final release'
     ];
-    final rand = math.Random();
 
     for (int tIdx = 0; tIdx < topics.length; tIdx++) {
       for (int mIdx = 0; mIdx < templates.length; mIdx++) {

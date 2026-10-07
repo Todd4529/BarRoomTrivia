@@ -366,33 +366,79 @@ class SupabaseService {
   void updateLocalPlayerScore({
     required String roomCode,
     required String nickname,
-    required int pointsToAdd,
+    int? pointsToAdd,
+    int? score,
   }) {
+    if (isMockNickname(nickname)) return;
     final normRoom = roomCode.toUpperCase();
-    final players = _localPlayersMap[normRoom];
-    if (players != null) {
-      final idx = players.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
+    final players = _localPlayersMap.putIfAbsent(normRoom, () => []);
+    final idx = players.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
+    int newScore = 0;
+    if (score != null) {
+      newScore = score;
+    } else {
+      final pts = pointsToAdd ?? 0;
       if (idx >= 0) {
-        final existing = players[idx];
-        final newScore = existing.cumulativeScore + pointsToAdd;
-        players[idx] = Player(
-          id: existing.id,
-          roomCode: existing.roomCode,
-          playerUid: existing.playerUid,
-          nickname: existing.nickname,
-          cumulativeScore: newScore,
-          isConnected: true,
-        );
-        players.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-        if (normRoom != 'TRIV') {
-          _localPlayersMap['TRIV'] = List<Player>.from(players);
-        }
-        RealtimeService().broadcastLeaderboardUpdated(
-          roomCode: normRoom,
-          players: getLocalPlayersJson(normRoom),
-        );
+        newScore = players[idx].cumulativeScore + pts;
+      } else {
+        newScore = pts;
       }
     }
+
+    if (idx >= 0) {
+      final existing = players[idx];
+      newScore = max(existing.cumulativeScore, newScore);
+      players[idx] = Player(
+        id: existing.id,
+        roomCode: existing.roomCode,
+        playerUid: existing.playerUid,
+        nickname: existing.nickname,
+        cumulativeScore: newScore,
+        isConnected: true,
+      );
+    } else {
+      players.add(Player(
+        id: 'player-${DateTime.now().millisecondsSinceEpoch}',
+        roomCode: normRoom,
+        playerUid: 'uid-${nickname.toLowerCase()}',
+        nickname: nickname,
+        cumulativeScore: newScore,
+        isConnected: true,
+      ));
+    }
+    players.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
+    if (normRoom != 'TRIV') {
+      _localPlayersMap['TRIV'] = List<Player>.from(players);
+    }
+
+    // 1. Instantly broadcast leaderboard update across all channels
+    RealtimeService().broadcastLeaderboardUpdated(
+      roomCode: normRoom,
+      players: getLocalPlayersJson(normRoom),
+    );
+
+    // 2. Broadcast single player score updated
+    RealtimeService().broadcastPlayerScoreUpdated(
+      roomCode: normRoom,
+      nickname: nickname,
+      score: newScore,
+      pointsEarned: pointsToAdd ?? 10,
+    );
+
+    // 3. Persist to Supabase DB in background
+    _syncPlayerScoreToDbInBackground(normRoom, nickname, newScore);
+  }
+
+  void _syncPlayerScoreToDbInBackground(String normRoom, String nickname, int newScore) async {
+    try {
+      await _client.from('players').upsert({
+        'room_code': normRoom,
+        'nickname': nickname,
+        'player_uid': 'uid-${nickname.toLowerCase()}',
+        'cumulative_score': newScore,
+        'is_connected': true,
+      }, onConflict: 'room_code, player_uid').timeout(const Duration(milliseconds: 800));
+    } catch (_) {}
   }
 
   void resetRoomScores(String roomCode) {

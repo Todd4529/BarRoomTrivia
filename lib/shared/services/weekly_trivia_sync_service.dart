@@ -93,34 +93,50 @@ class WeeklyTriviaSyncService {
     }
   }
 
-  /// Loads locally saved dynamic questions or bundled asset pack
+  /// Loads bundled asset pack and cached dynamic questions into memory
   static Future<void> _loadOfflineDynamicQuestions() async {
     try {
+      final List<Question> questions = [];
+      final Set<String> seenTexts = {};
+
+      // 1. Always load the comprehensive bundled asset pack (3,400+ real questions)
+      try {
+        final assetData = await rootBundle.loadString('assets/data/weekly_trivia_pack.json');
+        final dynamic decodedAsset = jsonDecode(assetData);
+        if (decodedAsset is List) {
+          for (final item in decodedAsset) {
+            final q = Question.fromJson(item as Map<String, dynamic>);
+            final textLower = q.questionText.trim().toLowerCase();
+            if (!seenTexts.contains(textLower)) {
+              seenTexts.add(textLower);
+              questions.add(q);
+            }
+          }
+        }
+      } catch (assetErr) {
+        debugPrint('[WeeklyTriviaSyncService] Note on asset pack read: $assetErr');
+      }
+
+      // 2. Also merge any freshly synced questions saved in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final cachedJson = prefs.getString(_cachedQuestionsKey);
-
-      List<Question> questions = [];
       if (cachedJson != null && cachedJson.isNotEmpty) {
         final dynamic decoded = jsonDecode(cachedJson);
         if (decoded is List) {
-          questions = decoded.map((item) => Question.fromJson(item as Map<String, dynamic>)).toList();
-        }
-      }
-
-      // If SharedPreferences has no cached questions yet, load from bundled asset pack
-      if (questions.isEmpty) {
-        try {
-          final assetData = await rootBundle.loadString('assets/data/weekly_trivia_pack.json');
-          final dynamic decodedAsset = jsonDecode(assetData);
-          if (decodedAsset is List) {
-            questions = decodedAsset.map((item) => Question.fromJson(item as Map<String, dynamic>)).toList();
+          for (final item in decoded) {
+            final q = Question.fromJson(item as Map<String, dynamic>);
+            final textLower = q.questionText.trim().toLowerCase();
+            if (!seenTexts.contains(textLower)) {
+              seenTexts.add(textLower);
+              questions.insert(0, q);
+            }
           }
-        } catch (_) {}
+        }
       }
 
       if (questions.isNotEmpty) {
         TriviaRepository.injectQuestions(questions);
-        debugPrint('[WeeklyTriviaSyncService] Loaded ${questions.length} dynamic questions into memory.');
+        debugPrint('[WeeklyTriviaSyncService] Loaded ${questions.length} real dynamic questions into memory.');
       }
     } catch (err) {
       debugPrint('[WeeklyTriviaSyncService] Failed to load offline dynamic questions: $err');

@@ -40,6 +40,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   bool _inputsLocked = true;
   bool _isReviewPhase = false;
   int _remainingSeconds = 0;
+  int? _targetTimerEndsAtMs;
   int _questionNumberInRound = 1;
   int _currentRound = 1;
   int _myScore = 0;
@@ -147,8 +148,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     _realtimeService.joinRoomChannel(
       roomCode: roomCode,
       onQuestionBroadcast: (payload) async {
-        final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
-        final qIndex = payload['question_index'] as int? ?? 1;
+        final rawTimerEnds = payload['timer_ends_at_epoch_ms'] ??
+            payload['timerEndsAtMs'] ??
+            payload['timer_ends_at'] ??
+            payload['timerEndsAtEpochMs'];
+        final timerEndsAtEpochMs = (rawTimerEnds is num)
+            ? rawTimerEnds.toInt()
+            : int.tryParse('$rawTimerEnds');
+        final qIndex = (payload['question_index'] as num?)?.toInt() ?? 1;
 
         Question? question;
         if (payload.containsKey('question_text') ||
@@ -170,15 +177,34 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           final nowMs = DateTime.now().millisecondsSinceEpoch;
           final fallbackDuration = (payload['duration_seconds'] as num?)?.toInt() ??
               (payload['durationSeconds'] as num?)?.toInt() ??
+              (payload['time_limit_seconds'] as num?)?.toInt() ??
               20;
-          final remainingMs = (timerEndsAtEpochMs ?? (nowMs + fallbackDuration * 1000)) - nowMs;
-          int durationSec = (remainingMs / 1000).ceil().clamp(0, 180);
 
-          // Defensive guard against clock drift or packet lag:
-          // A question should NEVER start with <= 4 seconds remaining.
-          // If clock skew caused remainingMs <= 4000, fallback to configured duration.
-          if (durationSec <= 4) {
-            durationSec = fallbackDuration > 4 ? fallbackDuration : 20;
+          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+              ? timerEndsAtEpochMs
+              : (nowMs + fallbackDuration * 1000);
+          _targetTimerEndsAtMs = targetEndsAt;
+
+          final remainingMs = targetEndsAt - nowMs;
+          int durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+
+          // Check if this broadcast is simply a state-sync or re-broadcast of the active question
+          final isSameQuestion = _currentQuestion != null &&
+              (_currentQuestion!.id == question.id ||
+                  (_currentQuestion!.questionText.isNotEmpty &&
+                      _currentQuestion!.questionText == question.questionText));
+
+          if (isSameQuestion && _selectedOption != null) {
+            // Player already locked in their answer! Keep their answer and locked inputs intact.
+            setState(() {
+              _remainingSeconds = durationSec;
+              final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+                  (payload['roundNumber'] as num?)?.toInt();
+              if (rFromPayload != null && rFromPayload > 0) {
+                _currentRound = max(_currentRound, rFromPayload);
+              }
+            });
+            return;
           }
 
           _questionStartedAt = DateTime.now();
@@ -214,21 +240,6 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
       },
       onTimerExpiredBroadcast: (payload) {
-        // Defensive check: Guard against stale timer_expired events.
-        // 1. Ignore if current question started less than 3.5 seconds ago.
-        if (_questionStartedAt != null &&
-            DateTime.now().difference(_questionStartedAt!).inMilliseconds < 3500) {
-          debugPrint('[Player] Ignoring stale timer_expired received within 3.5s of question start');
-          return;
-        }
-
-        // 2. Ignore if expired payload has a question_id that does not match current question.
-        final expiredQId = (payload['question_id'] ?? payload['questionId'] ?? payload['id']) as String?;
-        if (expiredQId != null && _currentQuestionId != null && expiredQId != _currentQuestionId) {
-          debugPrint('[Player] Ignoring timer_expired for mismatching question ID: $expiredQId vs $_currentQuestionId');
-          return;
-        }
-
         _lockInputsAndReveal(payload['correct_option'] as String?);
 
         final mode = payload['game_play_mode'] as String? ?? 'Auto';
@@ -250,10 +261,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             final now = DateTime.now().millisecondsSinceEpoch;
             final rem = ((nextStartsAt - now) / 1000).ceil();
             if (rem > 0) {
-              if (mounted && _interQuestionSecondsRemaining != rem) {
-                setState(() {
-                  _interQuestionSecondsRemaining = rem;
-                });
+              if (mounted) {
+                if (_interQuestionSecondsRemaining != rem || (rem <= 5 && _showResultOverlay)) {
+                  setState(() {
+                    _interQuestionSecondsRemaining = rem;
+                    if (rem <= 5 && _showResultOverlay) {
+                      _showResultOverlay = false;
+                    }
+                  });
+                }
               }
             } else {
               _interQuestionTimer?.cancel();
@@ -261,6 +277,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 setState(() {
                   _isInterQuestionPhase = false;
                   _interQuestionSecondsRemaining = 0;
+                  _showResultOverlay = false;
                 });
               }
             }
@@ -421,8 +438,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
             (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
         final delaySec = nextStartsAt != null
-            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 60))
-            : 15;
+            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 660))
+            : (payload['delaySeconds'] as num?)?.toInt() ?? 60;
         final completedR = (payload['completed_round'] as num?)?.toInt() ??
             (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt() ??
@@ -487,36 +504,47 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         });
       },
       onLeaderboardUpdatedBroadcast: (payload) {
-        if (_player != null && payload['players'] is List) {
-          final players = payload['players'] as List;
+        if (_player != null) {
           final myNick = _player!.nickname.toLowerCase();
-          bool foundMe = false;
-          for (var p in players) {
-            if (p is Map<String, dynamic> && (p['nickname'] as String? ?? '').toLowerCase() == myNick) {
-              foundMe = true;
-              final newScore = p['cumulative_score'] as int? ?? 0;
-              if (mounted) {
-                setState(() {
-                  _myScore = newScore;
-                  _player = Player(
-                    id: _player!.id,
-                    roomCode: _player!.roomCode,
-                    playerUid: _player!.playerUid,
-                    nickname: _player!.nickname,
-                    cumulativeScore: newScore,
-                    isConnected: true,
-                  );
-                });
+
+          // 1. Check if payload contains a list of players
+          final rawList = payload['players'] ?? payload['leaderboard'];
+          if (rawList is List && rawList.isNotEmpty) {
+            for (var item in rawList) {
+              if (item is Map) {
+                final nick = (item['nickname'] ?? item['name'] ?? '').toString().toLowerCase();
+                if (nick == myNick) {
+                  final rawScore = item['cumulative_score'] ?? item['score'] ?? item['points'];
+                  final incomingScore = (rawScore is num)
+                      ? rawScore.toInt()
+                      : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
+                  final syncedScore = max(_myScore, incomingScore);
+                  if (mounted && (_myScore != syncedScore || _player!.cumulativeScore != syncedScore)) {
+                    setState(() {
+                      _myScore = syncedScore;
+                      _player = _player!.copyWith(cumulativeScore: syncedScore);
+                    });
+                  }
+                  return;
+                }
               }
-              break;
             }
           }
-          if (!foundMe && players.isEmpty && mounted) {
-            setState(() {
-              _player = null;
-              _myScore = 0;
-              _nicknameController.clear();
-            });
+
+          // 2. Check if payload is a single player score update
+          final singleNick = (payload['nickname'] ?? '').toString().toLowerCase();
+          if (singleNick.isNotEmpty && singleNick == myNick) {
+            final rawScore = payload['score'] ?? payload['cumulative_score'] ?? payload['points'];
+            final incomingScore = (rawScore is num)
+                ? rawScore.toInt()
+                : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
+            final syncedScore = max(_myScore, incomingScore);
+            if (mounted && (_myScore != syncedScore || _player!.cumulativeScore != syncedScore)) {
+              setState(() {
+                _myScore = syncedScore;
+                _player = _player!.copyWith(cumulativeScore: syncedScore);
+              });
+            }
           }
         }
       },
@@ -534,14 +562,37 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   void _startLocalCountdown() {
     _localTimer?.cancel();
-    _localTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        setState(() {
-          _remainingSeconds--;
-        });
+    _localTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_targetTimerEndsAtMs != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final rem = ((_targetTimerEndsAtMs! - now) / 1000).ceil();
+        if (rem > 0) {
+          if (_remainingSeconds != rem) {
+            setState(() {
+              _remainingSeconds = rem;
+            });
+          }
+        } else {
+          timer.cancel();
+          setState(() {
+            _remainingSeconds = 0;
+          });
+          _lockInputsAndReveal(null);
+        }
       } else {
-        _localTimer?.cancel();
-        _lockInputsAndReveal(null);
+        if (_remainingSeconds > 0) {
+          setState(() {
+            _remainingSeconds--;
+          });
+        } else {
+          timer.cancel();
+          _lockInputsAndReveal(null);
+        }
       }
     });
   }
@@ -571,15 +622,18 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       setState(() {
         _inputsLocked = true;
         _isReviewPhase = true;
+        _isInterQuestionPhase = true;
         _showResultOverlay = true;
         _correctOption = correct;
         if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
           _myScore += 10;
           if (_player != null) {
+            _player = _player!.copyWith(cumulativeScore: _myScore);
             _supabaseService.updateLocalPlayerScore(
               roomCode: _player!.roomCode,
               nickname: _player!.nickname,
+              score: _myScore,
               pointsToAdd: 10,
             );
           }
@@ -587,7 +641,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       });
 
       _resultOverlayTimer?.cancel();
-      _resultOverlayTimer = Timer(const Duration(seconds: 15), () {
+      // Display result overlay for 5 seconds (or until tapped), then transition immediately to countdown timer screen
+      _resultOverlayTimer = Timer(const Duration(seconds: 5), () {
         if (mounted && _showResultOverlay) {
           setState(() {
             _showResultOverlay = false;
@@ -605,19 +660,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       _inputsLocked = true;
     });
 
+    if (_player != null) {
+      _realtimeService.broadcastAnswerSubmitted(
+        roomCode: _player!.roomCode,
+        nickname: _player!.nickname,
+        selectedOption: option,
+      );
+    }
+
     try {
       await _supabaseService.submitAnswer(
         sessionId: _gameSession!.id,
         questionId: _currentQuestion!.id,
         selectedOption: option,
       );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _inputsLocked = false;
-        });
-      }
-    }
+    } catch (_) {}
   }
 
   @override
@@ -670,140 +727,152 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                     child: Container(
                       color: Colors.black.withOpacity(0.88),
                       alignment: Alignment.center,
-                      padding: const EdgeInsets.all(20),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.cardSurfaceElevated,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppTheme.neonYellow, width: 2.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.neonYellow.withOpacity(0.35),
-                              blurRadius: 28,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.emoji_events_rounded, color: AppTheme.neonYellow, size: 56),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'ROUND COMPLETED!',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.5,
-                                color: AppTheme.neonYellow,
+                      padding: const EdgeInsets.only(top: 126, left: 20, right: 20, bottom: 20),
+                      child: SingleChildScrollView(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppTheme.cardSurfaceElevated,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: AppTheme.neonYellow, width: 2.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.neonYellow.withOpacity(0.35),
+                                blurRadius: 28,
+                                spreadRadius: 2,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'TOP 3 WINNERS OF THE ROUND',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            ...List.generate(_top3Winners.length, (idx) {
-                              final w = _top3Winners[idx];
-                              final badges = ['🥇 1ST PLACE', '🥈 2ND PLACE', '🥉 3RD PLACE'];
-                              final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
-
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: colors[idx].withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: colors[idx], width: 1.5),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.emoji_events_rounded, color: AppTheme.neonYellow, size: 56),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'ROUND COMPLETED!',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.5,
+                                  color: AppTheme.neonYellow,
                                 ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          badges[idx],
-                                          style: TextStyle(
-                                            color: colors[idx],
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 12,
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'TOP 3 WINNERS OF THE ROUND',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              ...List.generate(_top3Winners.length, (idx) {
+                                final w = _top3Winners[idx];
+                                final badges = ['🥇 1ST PLACE (+20 BONUS)', '🥈 2ND PLACE', '🥉 3RD PLACE'];
+                                final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: colors[idx].withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: colors[idx], width: 1.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            badges[idx],
+                                            style: TextStyle(
+                                              color: colors[idx],
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 12,
+                                            ),
                                           ),
-                                        ),
-                                        Text(
-                                          (w['nickname'] as String? ?? '').toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 16,
+                                          Text(
+                                            (w['nickname'] as String? ?? '').toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 16,
+                                            ),
                                           ),
+                                        ],
+                                      ),
+                                      Text(
+                                        '${w['score']} pts',
+                                        style: TextStyle(
+                                          color: colors[idx],
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16,
                                         ),
-                                      ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                              const SizedBox(height: 16),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.darkBackground,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppTheme.neonYellow, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppTheme.neonYellow.withOpacity(0.35),
+                                      blurRadius: 16,
                                     ),
-                                    Text(
-                                      '${w['score']} pts',
+                                  ],
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'NEXT ROUND STARTING IN.....',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: colors[idx],
+                                        fontSize: 13,
                                         fontWeight: FontWeight.w900,
-                                        fontSize: 16,
+                                        color: AppTheme.neonYellow,
+                                        letterSpacing: 1.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${_interRoundSecondsRemaining ~/ 60}:${(_interRoundSecondsRemaining % 60).toString().padLeft(2, '0')}',
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                        letterSpacing: 2.0,
                                       ),
                                     ),
                                   ],
                                 ),
-                              );
-                            }),
-                            const SizedBox(height: 16),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: AppTheme.darkBackground,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: AppTheme.neonYellow, width: 2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTheme.neonYellow.withOpacity(0.35),
-                                    blurRadius: 16,
-                                  ),
-                                ],
                               ),
-                              child: Column(
-                                children: [
-                                  const Text(
-                                    'NEXT ROUND STARTING IN.....',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w900,
-                                      color: AppTheme.neonYellow,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '0:${_interRoundSecondsRemaining.toString().padLeft(2, '0')}',
-                                    style: const TextStyle(
-                                      fontSize: 34,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      letterSpacing: 2.0,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
+                  ),
+
+                // Top sticky header: "BAR ROOMS TRIVIA" title & logo, plus sticker card (name, counter, points).
+                // Sits as the top layer in Stack so it is never scrolled out of view and remains visible on pop-ups.
+                if (_player != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: _buildStickyTopHeader(),
                   ),
               ],
             ),
@@ -835,125 +904,140 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _resultOverlayTimer?.cancel();
             setState(() {
               _showResultOverlay = false;
+              _isInterQuestionPhase = true;
             });
           }
         },
         child: Container(
           color: Colors.black.withOpacity(0.85),
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-          decoration: BoxDecoration(
-            color: AppTheme.cardSurface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
-              width: 2.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.35),
-                blurRadius: 28,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.only(top: 126, left: 20, right: 20, bottom: 20),
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
-              Text(
-                wasCorrect ? '🎉' : '❌',
-                style: const TextStyle(fontSize: 54),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                wasCorrect ? 'NAILED IT!' : 'OOF! MISSED IT!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              SingleChildScrollView(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 decoration: BoxDecoration(
-                  color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.cardSurface,
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(
                     color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
-                    width: 1.5,
+                    width: 2.5,
                   ),
-                ),
-                child: Text(
-                  wasCorrect ? '+10 PTS' : '0 PTS',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.35),
+                      blurRadius: 28,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'CORRECT ANSWER:',
+                    Text(
+                      wasCorrect ? '🎉' : '❌',
+                      style: const TextStyle(fontSize: 54),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      wasCorrect ? 'CORRECT! YOU GOT IT!' : 'OOPS! YOU MISSED IT!',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 26,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white60,
-                        letterSpacing: 1.2,
+                        color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                        letterSpacing: 1.5,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$correctOpt) $correctText',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.neonGreen,
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        wasCorrect ? '+10 PTS' : '0 PTS',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'CORRECT ANSWER:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white60,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$correctOpt) $correctText',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: wasCorrect ? const Color(0xFF10B981) : AppTheme.neonGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonCyan.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppTheme.neonCyan),
+                      ),
+                      child: Text(
+                        _gamePlayMode == 'Manual'
+                            ? '⏳ Next Question, waiting on host...'
+                            : '⏳ Next Question in ${_interQuestionSecondsRemaining}s...',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.neonCyan,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan),
+            ),
+
+              // Short celebration explosion on correct!
+              if (wasCorrect)
+                const Positioned.fill(
+                  child: CelebrationExplosion(),
                 ),
-                child: Text(
-                  _gamePlayMode == 'Manual'
-                      ? '⏳ Next Question, waiting on host...'
-                      : '⏳ Next Question in ${_interQuestionSecondsRemaining}s...',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.neonCyan,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
-      ),
       ),
     );
   }
@@ -1060,11 +1144,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     );
   }
 
-  Widget _buildActivePlayerScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
+  Widget _buildStickyTopHeader() {
+    return Container(
+      key: const Key('sticky-player-top-header'),
+      color: AppTheme.darkBackground,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1073,8 +1159,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 borderRadius: BorderRadius.circular(8),
                 child: Image.asset(
                   'assets/images/app_logo.png',
-                  width: 32,
-                  height: 32,
+                  width: 30,
+                  height: 30,
                   fit: BoxFit.cover,
                 ),
               ),
@@ -1090,66 +1176,132 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _player!.nickname.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: AppTheme.neonCyan,
-                    ),
-                  ),
-                  if (_currentQuestion != null)
-                    Text(
-                      'Round $_currentRound • Question $_questionNumberInRound of 10',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white54,
-                      ),
-                    )
-                  else
-                    const Text(
-                      'Player Ready',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.neonGreen,
-                      ),
-                    ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonYellow.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonYellow),
-                ),
-                child: Text(
-                  '$_myScore PTS',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: AppTheme.neonYellow,
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          _buildStickyPlayerHeaderCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStickyPlayerHeaderCard() {
+    return Container(
+      key: const Key('sticky-player-header-card'),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurfaceElevated,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppTheme.neonCyan.withOpacity(0.6),
+          width: 2.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.7),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
-          const SizedBox(height: 16),
+          BoxShadow(
+            color: AppTheme.neonCyan.withOpacity(0.25),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
           Expanded(
-            child: _currentQuestion == null
-                ? (_isInterRoundPhase
-                    ? _buildInterRoundCard()
-                    : _buildWaitingOrCountdownCard())
-                : _buildQuestionContent(),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 34,
+                    height: 34,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _player!.nickname.toUpperCase(),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.neonCyan,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _currentQuestion != null
+                            ? 'Round $_currentRound • Question $_questionNumberInRound of 10'
+                            : 'Player Ready',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _currentQuestion != null
+                              ? Colors.white70
+                              : AppTheme.neonGreen,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.neonYellow.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.neonYellow, width: 1.8),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.neonYellow.withOpacity(0.25),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: Text(
+              '$_myScore PTS',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                color: AppTheme.neonYellow,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivePlayerScreen() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 126, left: 16, right: 16, bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _isInterRoundPhase
+                ? _buildInterRoundCard()
+                : (_isInterQuestionPhase
+                    ? _buildInterQuestionCountdownScreen()
+                    : (_currentQuestion == null
+                        ? _buildWaitingOrCountdownCard()
+                        : _buildQuestionContent())),
           ),
         ],
       ),
@@ -1249,7 +1401,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '0:${_interRoundSecondsRemaining.toString().padLeft(2, '0')}',
+                      '${_interRoundSecondsRemaining ~/ 60}:${(_interRoundSecondsRemaining % 60).toString().padLeft(2, '0')}',
                       style: const TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.w900,
@@ -1301,6 +1453,103 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   );
                 }),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInterQuestionCountdownScreen() {
+    final nextQNum = _questionNumberInRound < 10 ? _questionNumberInRound + 1 : 1;
+    final isLastQ = _questionNumberInRound >= 10;
+    return Center(
+      child: SingleChildScrollView(
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+          decoration: BoxDecoration(
+            color: AppTheme.cardSurface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: AppTheme.neonCyan.withOpacity(0.8),
+              width: 2.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.neonCyan.withOpacity(0.25),
+                blurRadius: 28,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.neonCyan,
+                    width: 2.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.timer_outlined,
+                  size: 56,
+                  color: AppTheme.neonCyan,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _gamePlayMode == 'Manual'
+                    ? 'WAITING ON HOST'
+                    : 'NEXT QUESTION IN',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2.0,
+                  color: AppTheme.neonCyan,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _gamePlayMode == 'Manual'
+                    ? 'GET READY!'
+                    : '$_interQuestionSecondsRemaining SECS',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 44,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text(
+                  isLastQ
+                      ? 'Round $_currentRound Final Question Completed'
+                      : 'Round $_currentRound • Preparing Question $nextQNum of 10',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -1713,5 +1962,165 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         ),
       ),
     );
+  }
+}
+
+class CelebrationExplosion extends StatefulWidget {
+  final VoidCallback? onComplete;
+
+  const CelebrationExplosion({super.key, this.onComplete});
+
+  @override
+  State<CelebrationExplosion> createState() => _CelebrationExplosionState();
+}
+
+class _CelebrationExplosionState extends State<CelebrationExplosion>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final List<_ExplosionParticle> _particles;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+
+    final rng = Random();
+    const colors = [
+      Color(0xFF10B981), // Emerald Green
+      Color(0xFF00E5FF), // Neon Cyan
+      Color(0xFFFFD700), // Gold
+      Color(0xFFFF007A), // Hot Pink
+      Color(0xFFFF9100), // Vivid Amber
+      Color(0xFF7C4DFF), // Purple
+      Color(0xFFFFFFFF), // White
+    ];
+
+    _particles = List.generate(55, (index) {
+      final angle = rng.nextDouble() * 2 * pi;
+      final speed = 120.0 + rng.nextDouble() * 260.0;
+      final size = 6.0 + rng.nextDouble() * 8.0;
+      final color = colors[rng.nextInt(colors.length)];
+      final rotationSpeed = (rng.nextDouble() - 0.5) * 8.0;
+      final shapeType = index % 3; // 0 = rect/confetti ribbon, 1 = circle, 2 = diamond
+      return _ExplosionParticle(
+        angle: angle,
+        speed: speed,
+        size: size,
+        color: color,
+        rotationSpeed: rotationSpeed,
+        shapeType: shapeType,
+      );
+    });
+
+    _controller.forward().then((_) {
+      if (mounted) {
+        widget.onComplete?.call();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            size: Size.infinite,
+            painter: _ExplosionPainter(
+              particles: _particles,
+              progress: _controller.value,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ExplosionParticle {
+  final double angle;
+  final double speed;
+  final double size;
+  final Color color;
+  final double rotationSpeed;
+  final int shapeType;
+
+  _ExplosionParticle({
+    required this.angle,
+    required this.speed,
+    required this.size,
+    required this.color,
+    required this.rotationSpeed,
+    required this.shapeType,
+  });
+}
+
+class _ExplosionPainter extends CustomPainter {
+  final List<_ExplosionParticle> particles;
+  final double progress;
+
+  _ExplosionPainter({required this.particles, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0 || progress >= 1.0) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final t = Curves.easeOutCubic.transform(progress);
+    final opacity = (1.0 - Curves.easeInQuad.transform(progress)).clamp(0.0, 1.0);
+
+    for (final p in particles) {
+      final distance = p.speed * t;
+      final dx = center.dx + cos(p.angle) * distance;
+      final dy = center.dy + sin(p.angle) * distance + (progress * progress * 90.0);
+
+      final paint = Paint()
+        ..color = p.color.withOpacity((opacity * (p.color.opacity)).clamp(0.0, 1.0))
+        ..style = PaintingStyle.fill;
+
+      canvas.save();
+      canvas.translate(dx, dy);
+      canvas.rotate(progress * p.rotationSpeed * pi);
+
+      if (p.shapeType == 0) {
+        // Confetti Ribbon / Rect
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset.zero, width: p.size * 1.5, height: p.size * 0.7),
+            const Radius.circular(2),
+          ),
+          paint,
+        );
+      } else if (p.shapeType == 1) {
+        // Circle particle
+        canvas.drawCircle(Offset.zero, p.size / 2, paint);
+      } else {
+        // Diamond star particle
+        final path = Path()
+          ..moveTo(0, -p.size)
+          ..lineTo(p.size * 0.6, 0)
+          ..lineTo(0, p.size)
+          ..lineTo(-p.size * 0.6, 0)
+          ..close();
+        canvas.drawPath(path, paint);
+      }
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ExplosionPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }

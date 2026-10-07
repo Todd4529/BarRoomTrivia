@@ -37,6 +37,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   List<Player> _leaderboard = [];
   int _remainingSeconds = 60;
   int _totalDuration = 60;
+  int? _targetTimerEndsAtMs;
   int _questionIndex = 1;
   int _totalQuestionsInRound = 10;
   int _currentRound = 1;
@@ -57,6 +58,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _interQuestionSecondsRemaining = 15;
   int _totalInterQuestionDuration = 15;
   int _interQuestionTargetEpochMs = 0;
+  int _lastTickedSecond = -1;
   Timer? _interQuestionTimer;
   String _gamePlayMode = 'Auto';
 
@@ -166,12 +168,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   ((rawQ - 1) ~/ totalQ) + 1;
               final roundNum = sessionRound > _currentRound ? sessionRound : _currentRound;
               final cat = qData['category']?.toString() ?? res['category']?.toString();
+              final nowMs = DateTime.now().millisecondsSinceEpoch;
+              final targetEndsAt = (timerEndsAt != null && timerEndsAt > nowMs)
+                  ? timerEndsAt
+                  : (nowMs + dur * 1000);
+              final remainingMs = targetEndsAt - nowMs;
+              final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+              _targetTimerEndsAtMs = targetEndsAt;
+
               _interQuestionTimer?.cancel();
               setState(() {
                 _currentQuestion = _sanitizeQuestionDistractors(q);
                 if (cat != null && cat.isNotEmpty) _activeGenre = cat;
                 _totalDuration = dur;
-                _remainingSeconds = dur;
+                _remainingSeconds = durationSec;
                 _questionIndex = qIdx;
                 _currentRound = roundNum;
                 _totalQuestionsInRound = totalQ;
@@ -279,13 +289,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
 
         if (mounted) {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          final rawEndsAt = payload['timer_ends_at_epoch_ms'] ??
+              payload['timerEndsAtEpochMs'] ??
+              payload['timer_ends_at'] ??
+              payload['timerEndsAtMs'];
+          final timerEndsAtEpochMs = (rawEndsAt is num)
+              ? rawEndsAt.toInt()
+              : (rawEndsAt != null ? int.tryParse(rawEndsAt.toString()) : null);
+
+          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+              ? timerEndsAtEpochMs
+              : (nowMs + duration * 1000);
+          _targetTimerEndsAtMs = targetEndsAt;
+
+          final remainingMs = targetEndsAt - nowMs;
+          final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+
           _adSlideTimer?.cancel();
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
           setState(() {
             _currentQuestion = question;
             _totalDuration = duration;
-            _remainingSeconds = duration;
+            _remainingSeconds = durationSec;
             _questionIndex = qInRound;
             _currentRound = roundNum;
             _totalQuestionsInRound = totalQ;
@@ -388,8 +415,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
             (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
         final delaySec = nextStartsAt != null
-            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 30))
-            : 15;
+            ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 660))
+            : (payload['delaySeconds'] as num?)?.toInt() ?? 60;
 
         if (mounted && winners != null) {
           _timer?.cancel();
@@ -435,6 +462,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           final rawScore = payload['score'] ?? payload['cumulative_score'] ?? 0;
           final score = (rawScore is num) ? rawScore.toInt() : (int.tryParse(rawScore.toString()) ?? 0);
           SupabaseService.registerIncomingPlayer(_displayRoomCode, singleNick, score);
+          final updated = SupabaseService.mergeLocalPlayers(_displayRoomCode, [
+            Player(
+              id: singleNick,
+              playerUid: 'uid-${singleNick.toLowerCase()}',
+              roomCode: _displayRoomCode,
+              nickname: singleNick,
+              cumulativeScore: score,
+              isConnected: true,
+            )
+          ]);
+          if (mounted) {
+            setState(() {
+              _leaderboard = updated;
+            });
+          }
+          return;
         }
 
         final pList = payload['players'] ?? payload['leaderboard'];
@@ -465,12 +508,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       },
       onRequestStateSyncBroadcast: (payload) {
         if (mounted && _isGameActive && _currentQuestion != null && !_isTimerExpired) {
+          final targetEndsAt = _targetTimerEndsAtMs ??
+              (DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000));
           _realtimeService.broadcastQuestion(
             roomCode: _displayRoomCode,
             questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + (_questionIndex > 0 ? _questionIndex : 1),
             question: _currentQuestion!,
             durationSeconds: _remainingSeconds > 0 ? _remainingSeconds : 20,
-            timerEndsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000),
+            timerEndsAtEpochMs: targetEndsAt,
             roundNumber: _currentRound,
             totalQuestions: _totalQuestionsInRound,
           );
@@ -516,6 +561,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _questionIndex = 1;
               _totalDuration = duration;
               _remainingSeconds = duration;
+              _targetTimerEndsAtMs = timerEndsAtEpochMs;
               _isTimerExpired = false;
               _isInterQuestionPhase = false;
             });
@@ -567,14 +613,47 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   void _startTimer() {
     _timer?.cancel();
     _questionStartedAt = DateTime.now();
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_remainingSeconds > 0) {
-        setState(() {
-          _remainingSeconds--;
-        });
+    _lastTickedSecond = -1;
+    SystemSound.play(SystemSoundType.click);
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+
+      if (_targetTimerEndsAtMs != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final rem = ((_targetTimerEndsAtMs! - now) / 1000).ceil();
+        if (rem > 0) {
+          if (_remainingSeconds != rem) {
+            setState(() {
+              _remainingSeconds = rem;
+            });
+            if (rem <= 5 && _lastTickedSecond != rem) {
+              _lastTickedSecond = rem;
+              SystemSound.play(SystemSoundType.click);
+            }
+          }
+        } else {
+          t.cancel();
+          setState(() {
+            _remainingSeconds = 0;
+          });
+          _onTimerEnded();
+        }
       } else {
-        _timer?.cancel();
-        _onTimerEnded();
+        if (_remainingSeconds > 0) {
+          setState(() {
+            _remainingSeconds--;
+          });
+          if (_remainingSeconds <= 5 && _remainingSeconds > 0 && _lastTickedSecond != _remainingSeconds) {
+            _lastTickedSecond = _remainingSeconds;
+            SystemSound.play(SystemSoundType.click);
+          }
+        } else {
+          t.cancel();
+          _onTimerEnded();
+        }
       }
     });
   }
@@ -588,6 +667,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       return;
     }
 
+    SystemSound.play(SystemSoundType.alert);
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
@@ -779,6 +859,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       _questionIndex = nextIndex;
       _totalDuration = duration;
       _remainingSeconds = duration;
+      _targetTimerEndsAtMs = timerEndsAtEpochMs;
       _isTimerExpired = false;
       _isInterQuestionPhase = false;
     });
@@ -835,46 +916,528 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       builder: (dialogContext) => PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {},
-        child: AlertDialog(
-          backgroundColor: AppTheme.cardSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
-          ),
-          title: const Text(
-            'Exit Application',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-          ),
-          actionsAlignment: MainAxisAlignment.end,
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (mounted) setState(() => _isExitDialogOpen = false);
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Cancel', style: TextStyle(color: Colors.white70, fontSize: 16)),
-            ),
-            ElevatedButton(
-              autofocus: true,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonCyan,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 520),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: AppTheme.cardSurfaceElevated,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: AppTheme.neonCyan.withOpacity(0.5),
+                width: 2.0,
               ),
-              onPressed: () {
-                if (mounted) setState(() => _isExitDialogOpen = false);
-                Navigator.of(dialogContext).pop();
-                SystemNavigator.pop();
-              },
-              child: const Text('Yes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.8),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: AppTheme.neonCyan.withOpacity(0.2),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonCyan.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.5)),
+                      ),
+                      child: const Icon(
+                        Icons.tv_rounded,
+                        color: AppTheme.neonCyan,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'TV DISPLAY MENU',
+                            style: TextStyle(
+                              color: AppTheme.neonCyan,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Exit Application',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Choose an option below. If the host lost the current game website, select the Host Control QR Code to view the recovery code.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // OPTION 1: HOST CONTROL QR CODE
+                ElevatedButton.icon(
+                  autofocus: true,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonYellow,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 6,
+                    shadowColor: AppTheme.neonYellow.withOpacity(0.5),
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 24, color: Colors.black),
+                  label: const Text(
+                    'HOST CONTROL QR CODE',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  onPressed: () {
+                    if (mounted) setState(() => _isExitDialogOpen = false);
+                    Navigator.of(dialogContext).pop();
+                    _showHostControlQrDialog();
+                  },
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
+                          if (mounted) setState(() => _isExitDialogOpen = false);
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent.withOpacity(0.2),
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent, width: 1.5),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                        label: const Text(
+                          'Yes',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          if (mounted) setState(() => _isExitDialogOpen = false);
+                          Navigator.of(dialogContext).pop();
+                          SystemNavigator.pop();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     ).then((_) {
       if (mounted) setState(() => _isExitDialogOpen = false);
     });
+  }
+
+  Future<void> _showHostControlQrDialog() async {
+    bool isGameRunning = _isGameActive ||
+        _isPreGameCountdown ||
+        _isGamePaused ||
+        _isResumeCountdownActive ||
+        _isInterQuestionPhase ||
+        _showRoundWinnersOverlay ||
+        _currentQuestion != null;
+
+    if (!isGameRunning) {
+      try {
+        final res = await SupabaseConfig.client
+            .from('game_sessions')
+            .select('status')
+            .eq('room_code', _displayRoomCode)
+            .maybeSingle()
+            .timeout(const Duration(milliseconds: 900));
+        if (res != null) {
+          final st = res['status'] as String?;
+          if (st != null && st != 'idle' && st != 'ended' && st != 'cancelled') {
+            isGameRunning = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    final hostUrl = '$_playerBaseUrl/?view=host&room=$_displayRoomCode';
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: isGameRunning
+            ? _buildActiveHostQrModal(dialogContext, hostUrl)
+            : _buildNoActiveGameModal(dialogContext),
+      ),
+    );
+  }
+
+  Widget _buildActiveHostQrModal(BuildContext dialogContext, String hostUrl) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 540),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurfaceElevated,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppTheme.neonYellow, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.85),
+            blurRadius: 32,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: AppTheme.neonYellow.withOpacity(0.35),
+            blurRadius: 30,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonYellow.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.neonYellow, width: 1.5),
+                  ),
+                  child: const Text('👑', style: TextStyle(fontSize: 26)),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'HOST CONTROLS RECOVERY',
+                      style: TextStyle(
+                        color: AppTheme.neonYellow,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Current Game Host QR Code',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonCyan.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.neonCyan),
+                  ),
+                  child: Text(
+                    'ROOM: $_displayRoomCode',
+                    style: const TextStyle(
+                      color: AppTheme.neonCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Text(
+                    'ROUND $_currentRound',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Scan this QR code with your phone or tablet camera to reconnect to the live game host controls if you lost your browser window or closed the controls tab.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            // High-Contrast QR Code Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.neonYellow.withOpacity(0.35),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: QrImageView(
+                data: hostUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.link_rounded, size: 18, color: AppTheme.neonCyan),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      hostUrl,
+                      style: const TextStyle(
+                        color: AppTheme.neonCyan,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            ElevatedButton.icon(
+              autofocus: true,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 6,
+              ),
+              icon: const Icon(Icons.arrow_back_rounded, size: 20, color: Colors.black),
+              label: const Text(
+                'BACK TO TV DISPLAY',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoActiveGameModal(BuildContext dialogContext) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 480),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurfaceElevated,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: AppTheme.neonCyan.withOpacity(0.6),
+          width: 2.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.85),
+            blurRadius: 32,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: AppTheme.neonCyan.withOpacity(0.2),
+            blurRadius: 28,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppTheme.neonCyan.withOpacity(0.12),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppTheme.neonCyan.withOpacity(0.5), width: 2),
+            ),
+            child: const Icon(
+              Icons.videogame_asset_off_rounded,
+              size: 52,
+              color: AppTheme.neonCyan,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'NO CURRENT GAME RUNNING',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'There is no current game running in Room $_displayRoomCode.\n\nStart a new game from the host dashboard or wait for a host to launch a game session.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.neonYellow.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.neonYellow.withOpacity(0.4)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.info_outline, size: 16, color: AppTheme.neonYellow),
+                SizedBox(width: 8),
+                Text(
+                  'STATUS: WAITING FOR HOST / IDLE',
+                  style: TextStyle(
+                    color: AppTheme.neonYellow,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            autofocus: true,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 6,
+            ),
+            icon: const Icon(Icons.check_circle_outline, size: 20, color: Colors.black),
+            label: const Text(
+              'RETURN TO TV DISPLAY',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+                letterSpacing: 1.0,
+              ),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1003,7 +1566,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         const SizedBox(height: 24),
                         ...List.generate(_top3Winners.length, (idx) {
                           final w = _top3Winners[idx];
-                          final badges = ['🥇 1ST PLACE', '🥈 2ND PLACE', '🥉 3RD PLACE'];
+                          final badges = ['🥇 1ST PLACE (+20 BONUS)', '🥈 2ND PLACE', '🥉 3RD PLACE'];
                           final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
 
                           return Container(

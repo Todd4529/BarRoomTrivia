@@ -588,6 +588,67 @@ class RealtimeService {
     } catch (_) {}
   }
 
+  /// Broadcast single player score update
+  Future<void> broadcastPlayerScoreUpdated({
+    required String roomCode,
+    required String nickname,
+    required int score,
+    int? pointsEarned,
+  }) async {
+    final payload = {
+      'event': 'player_score_updated',
+      'room_code': roomCode,
+      'nickname': nickname,
+      'score': score,
+      'cumulative_score': score,
+      'points_earned': pointsEarned ?? 10,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
+
+    try {
+      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'player_score_updated',
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  /// Broadcast player answer submission
+  Future<void> broadcastAnswerSubmitted({
+    required String roomCode,
+    required String nickname,
+    required String selectedOption,
+  }) async {
+    final payload = {
+      'event': 'answer_submitted',
+      'room_code': roomCode,
+      'nickname': nickname,
+      'selected_option': selectedOption,
+      'player': {'nickname': nickname},
+      'choice': selectedOption,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
+
+    try {
+      final ch = _channel ?? SupabaseConfig.client.channel('room_$roomCode');
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'answer_submitted',
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
   /// Broadcast game reset event (resetMode: 'keep_scores', 'zero_scores', 'clear_all')
   Future<void> broadcastGameReset({
     required String roomCode,

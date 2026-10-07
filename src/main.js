@@ -50,6 +50,7 @@ let currentPlayer = null;
 let currentQuestionIndex = 0;
 let currentRound = 1;
 let selectedQuestionDuration = 20; // Default 20 seconds
+let selectedInterRoundDuration = parseInt(safeStorage.getItem('bar_trivia_inter_round_duration') || '60', 10); // 30, 60 (Default), 120, 180, 240, 300, 600
 let selectedDifficulty = 'Standard'; // Kids, Beginner, Standard, Advanced
 let selectedGenreQueue = []; // Up to 10 genres in order
 let currentVenueName = safeStorage.getItem('bar_trivia_venue_name') || "OUR PUB";
@@ -66,6 +67,7 @@ let currentPromoSlideIndex = 1;
 let playerChoiceSubmitted = null;
 let isCurrentQuestionScored = false;
 let lastScoredQuestionKey = null;
+let currentQuestionAnswers = {};
 let mockPlayerTimeouts = [];
 let currentRoundQuestions = [];
 
@@ -148,56 +150,69 @@ function getAudioContext() {
       audioCtx = new AudioContextClass();
     }
   }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
-  }
   return audioCtx;
 }
 
-function unlockAudioContext(playConfirmation = false) {
+function unlockAudioContext(playConfirmation = true) {
+  isSoundEffectsEnabled = true;
+  safeStorage.setItem('bar_trivia_sound_enabled', 'true');
+  const toggleSound = document.getElementById('host-toggle-sound');
+  if (toggleSound) toggleSound.checked = true;
+
   const ctx = getAudioContext();
   if (!ctx) return Promise.resolve(false);
 
-  if (ctx.state === 'suspended') {
-    return ctx.resume().then(() => {
-      console.log('[Audio] AudioContext successfully resumed & unlocked!');
-      updateTvAudioUI();
-      if (playConfirmation && isSoundEffectsEnabled) {
-        playSound('correct');
-      }
-      return true;
-    }).catch(err => {
-      console.warn('[Audio] Failed to resume AudioContext:', err);
-      return false;
-    });
-  } else if (ctx.state === 'running') {
+  // Play a 1-sample silent Web Audio buffer directly to unlock hardware on iOS / WebKit / Android TVs
+  try {
+    const silentBuf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = silentBuf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch (_) {}
+
+  return ctx.resume().then(() => {
+    console.log('[Audio] AudioContext successfully resumed & unlocked!');
     updateTvAudioUI();
-    return Promise.resolve(true);
-  }
-  return Promise.resolve(false);
+    if (playConfirmation) {
+      playSound('correct');
+    }
+    return true;
+  }).catch(err => {
+    console.warn('[Audio] Failed to resume AudioContext:', err);
+    updateTvAudioUI();
+    return false;
+  });
 }
 
 function unlockAudioOnInteraction() {
+  const events = ['click', 'touchstart', 'touchend', 'pointerdown', 'pointerup', 'keydown', 'keyup'];
   const unlock = () => {
     const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        updateTvAudioUI();
-        if (ctx.state === 'running') {
-          ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
-            window.removeEventListener(e, unlock);
-          });
-        }
-      }).catch(() => {});
-    } else if (ctx && ctx.state === 'running') {
+    if (!ctx) return;
+
+    try {
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch (_) {}
+
+    ctx.resume().then(() => {
       updateTvAudioUI();
-      ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
-        window.removeEventListener(e, unlock);
-      });
-    }
+      if (ctx.state === 'running') {
+        events.forEach(e => {
+          window.removeEventListener(e, unlock);
+          document.removeEventListener(e, unlock);
+        });
+      }
+    }).catch(() => {});
   };
-  ['click', 'touchstart', 'touchend', 'pointerdown', 'keydown'].forEach(e => {
+
+  events.forEach(e => {
     window.addEventListener(e, unlock, { passive: true });
+    document.addEventListener(e, unlock, { passive: true });
   });
 }
 unlockAudioOnInteraction();
@@ -240,97 +255,135 @@ function updateTvAudioUI() {
 
 function playSound(type) {
   if (!isSoundEffectsEnabled) return;
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const executePlay = () => {
+    try {
+      const now = Math.max(ctx.currentTime, 0.005);
+
+      if (type === 'tick') {
+        // High-clarity game show countdown tick (dual harmonic punch: 920Hz + 1840Hz, 100ms)
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc1.type = 'triangle';
+        osc1.frequency.setValueAtTime(920, now);
+        osc1.frequency.linearRampToValueAtTime(540, now + 0.09);
+
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1840, now);
+        osc2.frequency.linearRampToValueAtTime(920, now + 0.07);
+
+        gain.gain.setValueAtTime(0.40, now);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.10);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.10);
+        osc2.stop(now + 0.10);
+      } else if (type === 'tap') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(560, now);
+        osc.frequency.linearRampToValueAtTime(320, now + 0.06);
+        gain.gain.setValueAtTime(0.30, now);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.06);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.06);
+      } else if (type === 'question_start' || type === 'start') {
+        // Confident, uplifting 2-tone stinger: C5 (523Hz) -> G5 (784Hz)
+        [ { f: 523.25, t: 0, d: 0.12 }, { f: 783.99, t: 0.10, d: 0.20 } ].forEach(n => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.f, now + n.t);
+          gain.gain.setValueAtTime(0.0001, now + n.t);
+          gain.gain.linearRampToValueAtTime(0.35, now + n.t + 0.02);
+          gain.gain.linearRampToValueAtTime(0.0001, now + n.t + n.d);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + n.t);
+          osc.stop(now + n.t + n.d);
+        });
+      } else if (type === 'correct') {
+        // Cheerful victory arpeggio: D5 (587Hz) -> A5 (880Hz) -> D6 (1175Hz)
+        [ { f: 587.33, t: 0, d: 0.18 }, { f: 880.00, t: 0.10, d: 0.22 }, { f: 1174.66, t: 0.20, d: 0.45 } ].forEach(n => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(n.f, now + n.t);
+          gain.gain.setValueAtTime(0.0001, now + n.t);
+          gain.gain.linearRampToValueAtTime(0.38, now + n.t + 0.02);
+          gain.gain.linearRampToValueAtTime(0.0001, now + n.t + n.d);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + n.t);
+          osc.stop(now + n.t + n.d);
+        });
+      } else if (type === 'wrong') {
+        // Classic descending buzzer (240Hz -> 140Hz)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(240, now);
+        osc.frequency.linearRampToValueAtTime(140, now + 0.28);
+        gain.gain.setValueAtTime(0.32, now);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.28);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.28);
+      } else if (type === 'buzz') {
+        // Deep, authoritative time-expired buzzer (160Hz square with harmonic depth)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(160, now);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'fanfare') {
+        // Grand victory fanfare: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> C6 (1046Hz)
+        [ { f: 523.25, t: 0, d: 0.16 }, { f: 659.25, t: 0.12, d: 0.18 }, { f: 783.99, t: 0.24, d: 0.22 }, { f: 1046.50, t: 0.36, d: 0.70 } ].forEach(n => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(n.f, now + n.t);
+          gain.gain.setValueAtTime(0.0001, now + n.t);
+          gain.gain.linearRampToValueAtTime(0.36, now + n.t + 0.02);
+          gain.gain.linearRampToValueAtTime(0.0001, now + n.t + n.d);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + n.t);
+          osc.stop(now + n.t + n.d);
+        });
+      }
+    } catch (err) {
+      console.warn('[Audio] Synthesizer error:', err);
+    }
+  };
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => {
       updateTvAudioUI();
-    }
-
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === 'tick') {
-      // Crisp, punchy countdown tick for big TV audio systems (triangle dual-sweep)
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(880, now);
-      osc.frequency.exponentialRampToValueAtTime(440, now + 0.05);
-      gain.gain.setValueAtTime(0.35, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-      osc.start(now);
-      osc.stop(now + 0.06);
-    } else if (type === 'tap') {
-      // Tactile buzzer click (500Hz -> 300Hz triangle)
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(500, now);
-      osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
-      gain.gain.setValueAtTime(0.28, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-      osc.start(now);
-      osc.stop(now + 0.05);
-    } else if (type === 'question_start' || type === 'start') {
-      // Ascending game show stinger (440Hz -> 880Hz)
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
-      gain.gain.setValueAtTime(0.30, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-      osc.start(now);
-      osc.stop(now + 0.16);
-    } else if (type === 'correct') {
-      // Upbeat cheerful chime (triad: 587.33Hz D5 -> 880Hz A5 -> 1174.66Hz D6)
-      const notes = [587.33, 880.00, 1174.66];
-      notes.forEach((freq, idx) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(freq, now + idx * 0.07);
-        g.gain.setValueAtTime(0.32, now + idx * 0.07);
-        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + (idx === 2 ? 0.40 : 0.18));
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start(now + idx * 0.07);
-        o.stop(now + idx * 0.07 + (idx === 2 ? 0.40 : 0.18));
-      });
-    } else if (type === 'wrong') {
-      // Descending buzzer for incorrect answers (240Hz -> 140Hz)
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(240, now);
-      osc.frequency.exponentialRampToValueAtTime(140, now + 0.25);
-      gain.gain.setValueAtTime(0.28, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    } else if (type === 'buzz') {
-      // Time-expired authoritative buzzer (180Hz square)
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(180, now);
-      gain.gain.setValueAtTime(0.30, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
-      osc.start(now);
-      osc.stop(now + 0.30);
-    } else if (type === 'fanfare') {
-      // Victory arpeggio (C5, E5, G5, C6)
-      const notes = [523.25, 659.25, 783.99, 1046.50];
-      notes.forEach((freq, idx) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'triangle';
-        o.frequency.setValueAtTime(freq, now + idx * 0.09);
-        g.gain.setValueAtTime(0.32, now + idx * 0.09);
-        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + (idx === 3 ? 0.65 : 0.22));
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start(now + idx * 0.09);
-        o.stop(now + idx * 0.09 + (idx === 3 ? 0.65 : 0.22));
-      });
-    }
-  } catch (err) {
-    console.warn('[Audio] Synthesizer error:', err);
+      executePlay();
+    }).catch(() => {
+      updateTvAudioUI();
+    });
+  } else {
+    executePlay();
   }
 }
 
@@ -903,13 +956,10 @@ function initTvModeToggle() {
     e.preventDefault();
     e.stopPropagation();
     const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
+    if (!isSoundEffectsEnabled || !ctx || ctx.state === 'suspended') {
       unlockAudioContext(true);
     } else {
-      setSoundEffectsEnabled(!isSoundEffectsEnabled, true);
-      if (isSoundEffectsEnabled) {
-        playSound('correct');
-      }
+      setSoundEffectsEnabled(false, true);
       updateTvAudioUI();
     }
   });
@@ -925,14 +975,98 @@ function initTvModeToggle() {
   });
 
   const tvView = document.getElementById('view-tv');
-  tvView?.addEventListener('click', () => {
+  tvView?.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-tv-back') || e.target.closest('#btn-tv-toggle-sound') || e.target.closest('#btn-tv-toggle-promo') || e.target.closest('#btn-tv-toggle-live') || e.target.closest('.tv-exit-dialog-card') || e.target.closest('.tv-host-qr-card')) return;
     const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
+    if (!ctx || ctx.state === 'suspended') {
       unlockAudioContext(true);
     }
   });
 
   updateTvAudioUI();
+  initTvExitAndRecoveryMenu();
+}
+
+// TV EXIT APPLICATION & HOST CONTROL QR RECOVERY MODAL
+function initTvExitAndRecoveryMenu() {
+  const btnTvBack = document.getElementById('btn-tv-back');
+  const tvExitOverlay = document.getElementById('tv-exit-dialog-overlay');
+  const btnTvExitCancel = document.getElementById('btn-tv-exit-cancel');
+  const btnTvShowHostQr = document.getElementById('btn-tv-show-host-qr');
+  const tvHostQrOverlay = document.getElementById('tv-host-qr-modal-overlay');
+  const btnTvCloseHostQr = document.getElementById('btn-tv-close-host-qr');
+  const btnTvCloseEmptyHostQr = document.getElementById('btn-tv-close-empty-host-qr');
+  const tvHostQrActiveCard = document.getElementById('tv-host-qr-active-card');
+  const tvHostQrEmptyCard = document.getElementById('tv-host-qr-empty-card');
+  const tvHostQrCanvas = document.getElementById('tv-host-qr-canvas');
+  const tvHostQrUrlText = document.getElementById('tv-host-qr-url-text');
+  const tvHostQrRoomPill = document.getElementById('tv-host-qr-room-pill');
+  const tvHostQrRoundPill = document.getElementById('tv-host-qr-round-pill');
+  const tvHostQrEmptyRoom = document.getElementById('tv-host-qr-empty-room');
+
+  function openTvExitDialog() {
+    if (tvExitOverlay) tvExitOverlay.classList.remove('hidden');
+  }
+
+  function closeTvExitDialog() {
+    if (tvExitOverlay) tvExitOverlay.classList.add('hidden');
+  }
+
+  function showTvHostQrRecovery() {
+    closeTvExitDialog();
+    const hostBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+    const hostUrl = `${hostBaseUrl}/?view=host&room=${currentRoomCode}`;
+
+    const isRunning = isAutomatedEngineRunning ||
+      (currentQuestionData !== null) ||
+      (currentGameState === 'IN PROGRESS' || currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') ||
+      (hostEngineState && hostEngineState !== 'IDLE');
+
+    if (isRunning) {
+      if (tvHostQrRoomPill) tvHostQrRoomPill.textContent = `ROOM: ${currentRoomCode}`;
+      if (tvHostQrRoundPill) tvHostQrRoundPill.textContent = `ROUND ${currentRound || 1}`;
+      if (tvHostQrUrlText) tvHostQrUrlText.textContent = hostUrl;
+      if (tvHostQrCanvas) {
+        QRCode.toCanvas(tvHostQrCanvas, hostUrl, { width: 200, margin: 1 }, (err) => {
+          if (err) console.error('Host QR render error:', err);
+        });
+      }
+      if (tvHostQrActiveCard) tvHostQrActiveCard.classList.remove('hidden');
+      if (tvHostQrEmptyCard) tvHostQrEmptyCard.classList.add('hidden');
+    } else {
+      if (tvHostQrEmptyRoom) tvHostQrEmptyRoom.textContent = currentRoomCode;
+      if (tvHostQrActiveCard) tvHostQrActiveCard.classList.add('hidden');
+      if (tvHostQrEmptyCard) tvHostQrEmptyCard.classList.remove('hidden');
+    }
+
+    if (tvHostQrOverlay) tvHostQrOverlay.classList.remove('hidden');
+  }
+
+  function closeTvHostQrRecovery() {
+    if (tvHostQrOverlay) tvHostQrOverlay.classList.add('hidden');
+  }
+
+  btnTvBack?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openTvExitDialog();
+  });
+
+  btnTvExitCancel?.addEventListener('click', closeTvExitDialog);
+  btnTvShowHostQr?.addEventListener('click', showTvHostQrRecovery);
+  btnTvCloseHostQr?.addEventListener('click', closeTvHostQrRecovery);
+  btnTvCloseEmptyHostQr?.addEventListener('click', closeTvHostQrRecovery);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.body.getAttribute('data-view') === 'tv') {
+      if (tvHostQrOverlay && !tvHostQrOverlay.classList.contains('hidden')) {
+        closeTvHostQrRecovery();
+      } else if (tvExitOverlay && !tvExitOverlay.classList.contains('hidden')) {
+        closeTvExitDialog();
+      } else {
+        openTvExitDialog();
+      }
+    }
+  });
 }
 
 // 1. NAVIGATION ROUTING & INSTANT VIEW SWITCHING
@@ -1313,6 +1447,7 @@ function handleIncomingPreGameCountdown(rawPayload) {
 
   hideResultModal();
   hideWinnerModals();
+  hideInterQuestionCountdown();
 
   // If in TV view, automatically transition from rotating promo/ads to live stage
   const tvPromoScreen = document.getElementById('tv-promo-screen');
@@ -1393,6 +1528,7 @@ function handleIncomingQuestionStart(rawPayload) {
 
   hideWinnerModals();
   hideResultModal();
+  hideInterQuestionCountdown();
 
   const qObj = payload.questionData || payload.question_data || payload;
   const opts = qObj.options || payload.options || {};
@@ -1416,11 +1552,14 @@ function handleIncomingQuestionStart(rawPayload) {
     correct: correct,
   };
 
-  currentQuestionData = questionData;
-  currentGameState = 'QUESTION_ACTIVE';
+  const isSameQuestion = currentQuestionData && (
+    (currentQuestionData.id && questionData.id && currentQuestionData.id === questionData.id) ||
+    (currentQuestionData.text && questionData.text && currentQuestionData.text === questionData.text)
+  );
 
   const durationSeconds = Number(payload.duration_seconds || payload.time_limit_seconds || payload.durationSeconds) || selectedQuestionDuration || 20;
   const qIndex = Number(payload.question_index || payload.questionIndex) || 1;
+  currentQuestionIndex = qIndex;
   const rFromPayload = Number(payload.round_number || payload.roundNumber);
   const roundNum = (rFromPayload && rFromPayload > 0)
     ? Math.max(currentRound, rFromPayload)
@@ -1428,13 +1567,28 @@ function handleIncomingQuestionStart(rawPayload) {
   currentRound = roundNum;
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((qIndex - 1) % 10) + 1);
 
-  timerEndsAtGlobalMs = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || (Date.now() + durationSeconds * 1000);
-  let remainingMs = timerEndsAtGlobalMs - Date.now();
-  if (remainingMs <= 4000) {
-    timerEndsAtGlobalMs = Date.now() + durationSeconds * 1000;
-    remainingMs = durationSeconds * 1000;
+  const rawTargetEpoch = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || payload.timer_ends_at || payload.timerEndsAtEpochMs;
+  const now = Date.now();
+  if (rawTargetEpoch && Number(rawTargetEpoch) > now) {
+    timerEndsAtGlobalMs = Number(rawTargetEpoch);
+  } else if (!isSameQuestion || !timerEndsAtGlobalMs) {
+    timerEndsAtGlobalMs = now + durationSeconds * 1000;
   }
-  const remainingSecs = Math.max(5, Math.min(durationSeconds, Math.ceil(remainingMs / 1000)));
+  const remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
+
+  if (isSameQuestion && playerChoiceSubmitted !== null) {
+    // Current question is already active and player has already submitted an answer.
+    // Preserve their answer selection and do not re-enable buttons.
+    currentQuestionData = questionData;
+    return;
+  }
+
+  currentQuestionData = questionData;
+  currentGameState = 'QUESTION_ACTIVE';
+  playerChoiceSubmitted = null;
+  isCurrentQuestionScored = false;
+  lastScoredQuestionKey = null;
+  currentQuestionAnswers = {};
 
   isAutomatedEngineRunning = true;
   updateHostEngineUI('IN PROGRESS');
@@ -1452,22 +1606,9 @@ function handleIncomingTimerExpired(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing timer_expired:', payload);
 
-  // Guard against stale timer_expired events:
-  // 1. Ignore if current question started within the last 4 seconds
-  if (currentGameState === 'QUESTION_ACTIVE' && (Date.now() - questionStartTimeLocal) < 4000) {
-    console.warn('[Realtime] Ignoring stale timer_expired received within 4s of question start');
-    return;
-  }
-  // 2. Ignore if payload specifies a question id that doesn't match current question
-  const expiredQId = payload.question_id || payload.questionId || payload.id;
-  if (expiredQId && currentQuestionData?.id && String(expiredQId) !== String(currentQuestionData.id)) {
-    console.warn('[Realtime] Ignoring timer_expired for different question id:', expiredQId, 'vs', currentQuestionData.id);
-    return;
-  }
-
   const nextEpoch = payload.next_question_starts_at_epoch_ms || 
                     payload.nextQuestionStartsAtEpochMs || 
-                    (Date.now() + 15000);
+                    (Date.now() + 10000);
   onTimerExpired({
     correctOption: payload.correct_option || payload.correctOption || payload.correct,
     correctText: payload.correctText,
@@ -1491,7 +1632,14 @@ function handleRealtimeIncomingEvent(event, data) {
     const nextR = Number(payload?.next_round || payload?.nextRound || ((payload?.round_number || currentRound) + 1));
     currentRound = Math.max(currentRound, nextR);
     const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
-    onRoundWinner({ top3Winners: list, delaySeconds: 15, roundNumber: currentRound });
+    onRoundWinner({ top3Winners: list, delaySeconds: selectedInterRoundDuration || 60, roundNumber: currentRound });
+  } else if (normEvent === 'game_paused') {
+    isAutomatedEngineRunning = false;
+    currentGameState = 'PAUSED';
+    updateHostEngineUI('PAUSED');
+  } else if (normEvent === 'game_resuming') {
+    currentGameState = 'IN PROGRESS';
+    updateHostEngineUI('IN PROGRESS');
   } else if (normEvent === 'game_reset') {
     onGameReset();
   } else if (normEvent === 'request_state_sync') {
@@ -1557,48 +1705,10 @@ function handleRealtimeIncomingEvent(event, data) {
     onPlayerJoined(payload);
   } else if (normEvent === 'answer_submitted') {
     onAnswerSubmitted(payload);
+  } else if (normEvent === 'player_score_updated') {
+    onPlayerScoreUpdated(payload);
   } else if (normEvent === 'leaderboard_updated') {
-    const list = payload?.players || payload?.leaderboard;
-    if (Array.isArray(list)) {
-      const valid = list
-        .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
-        .map(p => ({
-          ...p,
-          score: Number(p.score ?? p.cumulative_score ?? 0),
-          cumulative_score: Number(p.score ?? p.cumulative_score ?? 0),
-        }));
-      valid.forEach(incoming => {
-        const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === incoming.nickname.toLowerCase());
-        if (idx >= 0) {
-          playersLeaderboard[idx] = {
-            ...playersLeaderboard[idx],
-            ...incoming,
-            score: Math.max(Number(playersLeaderboard[idx].score || 0), Number(incoming.score || 0)),
-            cumulative_score: Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), Number(incoming.cumulative_score || 0)),
-            is_connected: incoming.is_connected !== false,
-          };
-        } else {
-          playersLeaderboard.push(incoming);
-        }
-      });
-      if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
-        const myIdx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
-        if (myIdx === -1) {
-          playersLeaderboard.push({
-            id: currentPlayer.nickname,
-            player_uid: currentPlayer.nickname,
-            room_code: currentRoomCode,
-            nickname: currentPlayer.nickname,
-            score: Number(currentPlayer.score ?? 0),
-            cumulative_score: Number(currentPlayer.score ?? 0),
-            streak: currentPlayer.streak || 0,
-            is_connected: true
-          });
-        }
-      }
-      playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
-      renderLeaderboard();
-    }
+    mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
   } else if (normEvent === 'ad_mode_toggled') {
     onAdModeToggled(payload);
   } else if (normEvent === 'ad_slides_updated') {
@@ -1745,9 +1855,17 @@ function initBroadcastChannelListeners() {
       onPlayerJoined(payload);
     } else if (type === 'ANSWER_SUBMITTED') {
       onAnswerSubmitted(payload);
+    } else if (type === 'PLAYER_SCORE_UPDATED') {
+      onPlayerScoreUpdated(payload);
     } else if (type === 'LEADERBOARD_UPDATED') {
-      playersLeaderboard = payload.leaderboard;
-      renderLeaderboard();
+      mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
+    } else if (type === 'GAME_PAUSED') {
+      isAutomatedEngineRunning = false;
+      currentGameState = 'PAUSED';
+      updateHostEngineUI('PAUSED');
+    } else if (type === 'GAME_RESUMING') {
+      currentGameState = 'IN PROGRESS';
+      updateHostEngineUI('IN PROGRESS');
     } else if (type === 'GAME_RESET') {
       onGameReset(payload);
     } else if (type === 'LOGO_UPDATED') {
@@ -1998,6 +2116,25 @@ function initHostControls() {
     });
   });
 
+  // IN-BETWEEN ROUND DURATION SELECTOR (30s, 1 Min, 2 Min, 3 Min, 4 Min, 5 Min, 10 Min)
+  const interRoundChips = document.querySelectorAll('.inter-round-chip');
+  interRoundChips.forEach(chip => {
+    const dur = parseInt(chip.getAttribute('data-round-dur'), 10);
+    chip.classList.toggle('active', dur === selectedInterRoundDuration);
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (isAutomatedEngineRunning) return;
+
+      interRoundChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      if (!isNaN(dur)) {
+        selectedInterRoundDuration = dur;
+        safeStorage.setItem('bar_trivia_inter_round_duration', String(dur));
+      }
+    });
+  });
+
   // MULTI-GENRE QUEUE SELECTION (UP TO 10 GENRES IN ORDER)
   genreChips.forEach(chip => {
     chip.addEventListener('click', (e) => {
@@ -2103,15 +2240,70 @@ function initHostControls() {
   });
 
   btnPauseAuto?.addEventListener('click', () => {
-    isAutomatedEngineRunning = false;
-    stopHostHeartbeatLoop();
-    clearTimeout(autoEngineTimeout);
-    clearInterval(countdownInterval);
-    clearInterval(modalCountdownInterval);
-    clearInterval(tvNextQCountdownInterval);
-    clearInterval(winnerCountdownInterval);
-    clearMockPlayerTimeouts();
-    updateHostEngineUI('PAUSED');
+    if (isAutomatedEngineRunning) {
+      // Transition from RUNNING -> PAUSED
+      isAutomatedEngineRunning = false;
+      stopHostHeartbeatLoop();
+      clearTimeout(autoEngineTimeout);
+      clearInterval(countdownInterval);
+      clearInterval(modalCountdownInterval);
+      clearInterval(tvNextQCountdownInterval);
+      clearInterval(winnerCountdownInterval);
+      clearMockPlayerTimeouts();
+      currentGameState = 'PAUSED';
+      updateHostEngineUI('PAUSED');
+
+      channel.postMessage({ type: 'GAME_PAUSED', payload: { roomCode: currentRoomCode } });
+      broadcastRealtimeEvent('game_paused', { room_code: currentRoomCode });
+
+      try {
+        supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          status: 'paused',
+          current_round: currentRound,
+          current_question_index: currentQuestionIndex,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'room_code' }).catch(() => {});
+      } catch (_) {}
+    } else {
+      // Transition from PAUSED -> RESUME
+      isAutomatedEngineRunning = true;
+      currentGameState = 'IN PROGRESS';
+      updateHostEngineUI('IN PROGRESS');
+      startHostHeartbeatLoop();
+
+      const resumeSecs = 10;
+      const startsAtMs = Date.now() + (resumeSecs * 1000);
+      channel.postMessage({
+        type: 'GAME_RESUMING',
+        payload: {
+          roomCode: currentRoomCode,
+          starts_at_epoch_ms: startsAtMs,
+          remaining_question_seconds: selectedQuestionDuration
+        }
+      });
+      broadcastRealtimeEvent('game_resuming', {
+        room_code: currentRoomCode,
+        starts_at_epoch_ms: startsAtMs,
+        remaining_question_seconds: selectedQuestionDuration
+      });
+
+      try {
+        supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          status: 'resuming',
+          starts_at: startsAtMs,
+          current_round: currentRound,
+          current_question_index: currentQuestionIndex,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'room_code' }).catch(() => {});
+      } catch (_) {}
+
+      clearTimeout(autoEngineTimeout);
+      autoEngineTimeout = setTimeout(() => {
+        checkHostEngineTick();
+      }, resumeSecs * 1000);
+    }
   });
 
   btnResetGame?.addEventListener('click', () => {
@@ -2129,8 +2321,23 @@ function initHostControls() {
     currentGameState = 'LOBBY';
     updateHostEngineUI('NOT STARTED');
 
-    channel.postMessage({ type: 'GAME_RESET', payload: { roomCode: currentRoomCode } });
+    channel.postMessage({ type: 'GAME_RESET', payload: { roomCode: currentRoomCode, reset_mode: 'clear_all' } });
+    broadcastRealtimeEvent('game_reset', { room_code: currentRoomCode, reset_mode: 'clear_all' });
+
+    try {
+      supabase.from('game_sessions').upsert({
+        room_code: currentRoomCode,
+        status: 'lobby',
+        current_round: 1,
+        current_question_index: 0,
+        question_data: null,
+        current_question_data: null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
+
     onGameReset({ roomCode: currentRoomCode });
+    syncTvSignageDisplay();
   });
 
   // Initial UI Render & Active Session Sync
@@ -3330,6 +3537,7 @@ function updateHostEngineUI(statusText) {
   const hostPlayersRoom = document.getElementById('host-players-room-code');
 
   const isRunning = (statusText === 'IN PROGRESS');
+  const isPaused = (statusText === 'PAUSED');
 
   if (btnStartAuto) {
     btnStartAuto.disabled = isRunning;
@@ -3340,7 +3548,19 @@ function updateHostEngineUI(statusText) {
     }
   }
   if (btnPauseAuto) {
-    btnPauseAuto.disabled = !isRunning;
+    const btnPauseText = document.getElementById('btn-pause-auto-text');
+    btnPauseAuto.disabled = (!isRunning && !isPaused);
+    if (isPaused) {
+      if (btnPauseText) btnPauseText.textContent = 'Resume';
+      btnPauseAuto.classList.add('btn-success');
+      btnPauseAuto.classList.remove('btn-warning');
+      btnPauseAuto.setAttribute('title', 'Resume Game');
+    } else {
+      if (btnPauseText) btnPauseText.textContent = 'Pause';
+      btnPauseAuto.classList.add('btn-warning');
+      btnPauseAuto.classList.remove('btn-success');
+      btnPauseAuto.setAttribute('title', 'Pause Game');
+    }
   }
 
   if (statRound) statRound.textContent = currentRound;
@@ -3420,12 +3640,12 @@ async function runNextAutomatedStep() {
         id: `q_safe_${Date.now()}_${questionInRound}`,
         category: activeRoundGenre,
         difficulty: selectedDifficulty,
-        text: `In the study of ${activeRoundGenre}, which approach ensures highest quality outcomes?`,
+        text: `In the rich history and culture of ${activeRoundGenre}, what quality defines its greatest achievements?`,
         options: {
-          A: 'Rigorous empirical standards and safety compliance',
-          B: 'Random improvised guesswork without verification',
-          C: 'Bypassing all standard inspection procedures',
-          D: 'Discarding equipment manuals immediately'
+          A: 'Creative originality and timeless cultural storytelling',
+          B: 'A short-lived passing fad forgotten within days',
+          C: 'An unverified rumor with no historical foundation',
+          D: 'A generic copy lacking any artistic distinction'
         },
         correct: 'A'
       };
@@ -3518,8 +3738,43 @@ async function runNextAutomatedStep() {
 function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
 
-  const reviewDurationMs = 15000; // Synchronized 15-second review across TV and player screens
+  const reviewDurationMs = 10000; // Synchronized 10-second review: 5s result modal + 5s dedicated countdown screen
   hostTargetEpochMs = Date.now() + reviewDurationMs;
+
+  const correctOpt = (question.correct || '').toUpperCase().trim();
+
+  // Host reliably grades all answers submitted for this question so leaderboard always updates
+  let anyScoreChanged = false;
+  Object.values(currentQuestionAnswers).forEach(ans => {
+    if (ans && ans.choice === correctOpt && ans.nickname && !ans.graded) {
+      ans.graded = true;
+      const pIdx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === ans.nickname.toLowerCase());
+      if (pIdx >= 0) {
+        const currentScore = Number(playersLeaderboard[pIdx].score || 0);
+        if (currentScore <= (ans.scoreAtSubmission || 0)) {
+          playersLeaderboard[pIdx].score = (ans.scoreAtSubmission || 0) + 10;
+          playersLeaderboard[pIdx].cumulative_score = playersLeaderboard[pIdx].score;
+          anyScoreChanged = true;
+        }
+      } else {
+        playersLeaderboard.push({
+          id: ans.nickname,
+          player_uid: ans.nickname,
+          room_code: currentRoomCode,
+          nickname: ans.nickname,
+          score: 10,
+          cumulative_score: 10,
+          is_connected: true
+        });
+        anyScoreChanged = true;
+      }
+    }
+  });
+
+  if (anyScoreChanged) {
+    playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
+    renderLeaderboard();
+  }
 
   const expiredPayload = {
     correctOption: question.correct,
@@ -3541,6 +3796,26 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   broadcastRealtimeEvent('timer_expired', expiredPayload);
   onTimerExpired(expiredPayload);
 
+  if (anyScoreChanged) {
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: currentRoomCode
+    });
+    // Persist scores to Supabase DB in background
+    playersLeaderboard.forEach(p => {
+      try {
+        supabase.from('players').upsert({
+          room_code: currentRoomCode.toUpperCase(),
+          nickname: p.nickname,
+          player_uid: p.player_uid || p.nickname,
+          cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
+          is_connected: true
+        }, { onConflict: 'room_code, nickname' });
+      } catch (_) {}
+    });
+  }
+
   clearTimeout(autoEngineTimeout);
   autoEngineTimeout = setTimeout(() => {
     checkHostEngineTick();
@@ -3557,7 +3832,8 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
   if (questionInRound === 10) {
     currentGameState = 'ROUND_SUMMARY';
     hostEngineState = 'ROUND_SUMMARY';
-    hostTargetEpochMs = Date.now() + 15000;
+    const interRoundSecs = Math.max(5, selectedInterRoundDuration || 60);
+    hostTargetEpochMs = Date.now() + (interRoundSecs * 1000);
     
     playersLeaderboard.sort((a, b) => (Number(b.score ?? b.cumulative_score ?? 0)) - (Number(a.score ?? a.cumulative_score ?? 0)));
     const validPlayers = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
@@ -3568,7 +3844,7 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       winnerName: '',
       winnerScore: 0,
       top3Winners: [],
-      delaySeconds: 15
+      delaySeconds: interRoundSecs
     };
 
     if (validPlayers.length > 0) {
@@ -3592,7 +3868,7 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
         winnerName: roundWinner.nickname,
         winnerScore: roundWinner.score,
         top3Winners: top3,
-        delaySeconds: 15
+        delaySeconds: interRoundSecs
       };
     }
 
@@ -3612,7 +3888,7 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
 
     autoEngineTimeout = setTimeout(() => {
       checkHostEngineTick();
-    }, 15000);
+    }, interRoundSecs * 1000);
   } else {
     runNextAutomatedStep();
   }
@@ -3744,9 +4020,15 @@ function onQuestionStart(payload) {
   totalTimerDuration = durationSeconds;
   playerChoiceSubmitted = null;
   isCurrentQuestionScored = false;
+  lastScoredQuestionKey = null;
+  currentQuestionAnswers = {};
+  if (payload.questionIndex !== undefined || payload.question_index !== undefined) {
+    currentQuestionIndex = Number(payload.questionIndex ?? payload.question_index);
+  }
 
   hideResultModal();
   hideWinnerModals();
+  hideInterQuestionCountdown();
   clearInterval(modalCountdownInterval);
   clearInterval(playerReviewInterval);
 
@@ -3882,6 +4164,7 @@ function onQuestionStart(payload) {
   isCurrentQuestionScored = false;
   hideResultModal();
   hideWinnerModals();
+  hideInterQuestionCountdown();
 
   // Update Player Phone Display & Difficulty Pill
   const playerDispRoom = document.getElementById('player-disp-room');
@@ -3923,12 +4206,11 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
-  let initialRem = timerEndsAtGlobalMs > 0 ? Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000) : seconds;
-  if (initialRem <= 4 && seconds > 4) {
-    initialRem = seconds;
+  totalTimerDuration = seconds;
+  if (!timerEndsAtGlobalMs || timerEndsAtGlobalMs <= Date.now()) {
     timerEndsAtGlobalMs = Date.now() + seconds * 1000;
   }
-  remainingTimerSeconds = Math.min(seconds, Math.max(1, initialRem));
+  remainingTimerSeconds = Math.max(0, Math.ceil((timerEndsAtGlobalMs - Date.now()) / 1000));
   updateTimerUI();
 
   let lastTickedSecond = -1;
@@ -4161,7 +4443,7 @@ function onTimerExpired(payload) {
   const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
-  if (!isCurrentQuestionScored && lastScoredQuestionKey !== qIdentifier) {
+  if (!isCurrentQuestionScored) {
     isCurrentQuestionScored = true;
     lastScoredQuestionKey = qIdentifier;
 
@@ -4259,12 +4541,20 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   if (isCorrect) {
     card.className = 'result-modal-card is-correct';
     if (icon) icon.textContent = '🎉';
-    if (title) title.textContent = 'NAILED IT!';
+    if (title) title.textContent = 'CORRECT! YOU GOT IT!';
     if (scorePill) scorePill.textContent = pointsText;
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 90,
+        origin: { y: 0.5 },
+        colors: ['#10B981', '#00E5FF', '#FFD700', '#FF007A', '#FFFFFF']
+      });
+    } catch (_) {}
   } else {
     card.className = 'result-modal-card is-wrong';
     if (icon) icon.textContent = '❌';
-    if (title) title.textContent = 'OOF! MISSED IT!';
+    if (title) title.textContent = 'OOPS! YOU MISSED IT!';
     if (scorePill) scorePill.textContent = pointsText;
   }
 
@@ -4276,13 +4566,10 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   const updateModalCountdown = () => {
     const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
     if (modalTimerVal) modalTimerVal.textContent = rem;
-    if (rem <= 0) {
+    if (rem <= 5) {
       clearInterval(modalCountdownInterval);
       hideResultModal();
-      if (typeof triggerActiveSessionSync === 'function') {
-        triggerActiveSessionSync();
-      }
-      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+      showInterQuestionCountdown(targetEpoch);
     }
   };
 
@@ -4291,14 +4578,67 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   modalCountdownInterval = setInterval(updateModalCountdown, 500);
 
   overlay.classList.remove('hidden');
-  // Tap-to-dismiss fallback guarantees player is never trapped
+  // Tap-to-dismiss immediately transitions to dedicated countdown screen
   overlay.onclick = () => {
+    clearInterval(modalCountdownInterval);
     hideResultModal();
-    if (typeof triggerActiveSessionSync === 'function') {
-      triggerActiveSessionSync();
-    }
-    broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+    showInterQuestionCountdown(targetEpoch);
   };
+}
+
+let playerInterQuestionInterval = null;
+
+function showInterQuestionCountdown(targetEpochMs) {
+  hideResultModal();
+  clearInterval(playerInterQuestionInterval);
+
+  const interQScreen = document.getElementById('player-inter-question-screen');
+  const timerVal = document.getElementById('player-inter-q-timer');
+  const subtextVal = document.getElementById('player-inter-q-subtext');
+  const qCard = document.querySelector('.player-question-card');
+  const btnGrid = document.querySelector('.button-grid-2x2');
+
+  // Immediately hide previous question and previous choices
+  if (qCard) qCard.classList.add('hidden');
+  if (btnGrid) btnGrid.classList.add('hidden');
+  if (interQScreen) interQScreen.classList.remove('hidden');
+
+  const updateCountdown = () => {
+    const rem = Math.max(0, Math.ceil((targetEpochMs - Date.now()) / 1000));
+    if (timerVal) {
+      timerVal.textContent = rem > 0 ? `${rem} SECS` : '0 SECS';
+    }
+    if (subtextVal) {
+      const qNumInRound = ((currentQuestionIndex % 10) + 1);
+      const nextQNum = qNumInRound < 10 ? qNumInRound + 1 : 1;
+      const isLastQ = qNumInRound >= 10;
+      subtextVal.textContent = rem > 0 
+        ? (isLastQ 
+            ? `Round ${currentRound} Final Question Complete • Preparing Results...` 
+            : `Round ${currentRound} • Preparing Question ${nextQNum} of 10...`)
+        : 'Loading next question...';
+    }
+    if (rem <= 0) {
+      clearInterval(playerInterQuestionInterval);
+      if (typeof triggerActiveSessionSync === 'function') {
+        triggerActiveSessionSync();
+      }
+      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+    }
+  };
+
+  updateCountdown();
+  playerInterQuestionInterval = setInterval(updateCountdown, 500);
+}
+
+function hideInterQuestionCountdown() {
+  clearInterval(playerInterQuestionInterval);
+  const interQScreen = document.getElementById('player-inter-question-screen');
+  const qCard = document.querySelector('.player-question-card');
+  const btnGrid = document.querySelector('.button-grid-2x2');
+  if (interQScreen) interQScreen.classList.add('hidden');
+  if (qCard) qCard.classList.remove('hidden');
+  if (btnGrid) btnGrid.classList.remove('hidden');
 }
 
 function hideResultModal() {
@@ -4313,6 +4653,7 @@ function hideResultModal() {
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 function onRoundWinner(payload) {
   hideResultModal();
+  hideInterQuestionCountdown();
 
   // Update Host Mobile Stage Card
   const hostStageBadge = document.getElementById('host-stage-badge');
@@ -4418,6 +4759,16 @@ function onRoundWinner(payload) {
         playerPodium3.style.display = 'none';
       }
     }
+  }
+
+  if (top3.length > 0 && currentPlayer && currentPlayer.nickname) {
+    const myWinner = top3.find(w => w && w.nickname && w.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+    if (myWinner) {
+      const topScore = Math.max(Number(currentPlayer.score || 0), Number(myWinner.score ?? myWinner.cumulative_score ?? 0));
+      currentPlayer.score = topScore;
+      const scoreVal = document.getElementById('player-score-val');
+      if (scoreVal) scoreVal.textContent = topScore;
+    }
   } else {
     // If no players are registered yet, hide podium rows rather than showing fictitious names
     if (tvPodium1) tvPodium1.style.display = 'none';
@@ -4434,9 +4785,15 @@ function onRoundWinner(payload) {
   if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
 
-  let remWinnerSecs = payload?.delaySeconds || 15;
-  if (tvNextRoundTimer) tvNextRoundTimer.textContent = remWinnerSecs;
-  if (playerWinnerTimer) playerWinnerTimer.textContent = String(remWinnerSecs).padStart(2, '0');
+  let remWinnerSecs = payload?.delaySeconds || selectedInterRoundDuration || 60;
+  const formatRoundTimer = (s) => {
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  if (tvNextRoundTimer) tvNextRoundTimer.textContent = remWinnerSecs >= 60 ? formatRoundTimer(remWinnerSecs) : remWinnerSecs;
+  if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(remWinnerSecs);
 
   // Also display NEXT ROUND STARTING IN..... directly on the player question card
   const playerQuestionText = document.getElementById('player-question-text');
@@ -4446,7 +4803,7 @@ function onRoundWinner(payload) {
     playerQuestionText.innerHTML = `
       <div style="text-align:center; padding: 12px 0;">
         <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">NEXT ROUND STARTING IN.....</div>
-        <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">0:${String(remWinnerSecs).padStart(2, '0')}</div>
+        <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">${formatRoundTimer(remWinnerSecs)}</div>
         <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${currentRound} Complete • Ready for Next Round!</div>
       </div>
     `;
@@ -4462,10 +4819,10 @@ function onRoundWinner(payload) {
   winnerCountdownInterval = setInterval(() => {
     remWinnerSecs--;
     const currentSecs = Math.max(0, remWinnerSecs);
-    if (tvNextRoundTimer) tvNextRoundTimer.textContent = currentSecs;
-    if (playerWinnerTimer) playerWinnerTimer.textContent = String(currentSecs).padStart(2, '0');
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = currentSecs >= 60 ? formatRoundTimer(currentSecs) : currentSecs;
+    if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(currentSecs);
     const cardTimer = document.getElementById('player-card-round-timer');
-    if (cardTimer) cardTimer.textContent = `0:${String(currentSecs).padStart(2, '0')}`;
+    if (cardTimer) cardTimer.textContent = formatRoundTimer(currentSecs);
 
     if (remWinnerSecs <= 0) {
       clearInterval(winnerCountdownInterval);
@@ -4488,6 +4845,7 @@ function hideWinnerModals() {
 
 function onRoundSummary(payload) {
   hideResultModal();
+  hideInterQuestionCountdown();
 }
 
 // 8. PLAYER CONTROLLER HANDLER WITH SPEED BONUS & STREAK MULTIPLIER SCORING
@@ -4741,8 +5099,8 @@ function onPlayerJoined(player) {
     if (idx >= 0) {
       playersLeaderboard[idx].is_connected = true;
       if (player.score !== undefined || player.cumulative_score !== undefined) {
-        playersLeaderboard[idx].score = initialScore;
-        playersLeaderboard[idx].cumulative_score = initialScore;
+        playersLeaderboard[idx].score = Math.max(Number(playersLeaderboard[idx].score || 0), initialScore);
+        playersLeaderboard[idx].cumulative_score = Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), initialScore);
       }
     }
   }
@@ -4770,9 +5128,114 @@ function onPlayerJoined(player) {
   updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
 }
 
-function onAnswerSubmitted({ player, choice }) {
-  // Answer submission recorded
-  console.log(`Player ${player?.nickname} submitted answer: ${choice}`);
+function onAnswerSubmitted(payload) {
+  if (!payload) return;
+  const nick = payload.nickname || payload.player?.nickname;
+  const choice = (payload.selected_option || payload.choice || '').toUpperCase().trim();
+  if (!nick || !choice) return;
+
+  const existingPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === nick.toLowerCase());
+  const scoreAtSubmission = existingPlayer ? Number(existingPlayer.score || 0) : Number(payload.score || 0);
+
+  currentQuestionAnswers[nick.toLowerCase()] = {
+    nickname: nick,
+    choice: choice,
+    scoreAtSubmission: scoreAtSubmission,
+    timestamp: payload.timestamp || Date.now(),
+    graded: false,
+  };
+  console.log(`[Host/TV] Player ${nick} answer recorded: ${choice}`);
+}
+
+function onPlayerScoreUpdated(payload) {
+  if (!payload) return;
+  const nick = payload.nickname || payload.player?.nickname;
+  if (!nick || isFictitiousPlayer(nick)) return;
+  const incScore = Number(payload.score ?? payload.cumulative_score ?? 0);
+  const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === nick.toLowerCase());
+  if (idx >= 0) {
+    playersLeaderboard[idx].score = Math.max(Number(playersLeaderboard[idx].score || 0), incScore);
+    playersLeaderboard[idx].cumulative_score = Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), incScore);
+    if (payload.streak !== undefined) playersLeaderboard[idx].streak = payload.streak;
+    playersLeaderboard[idx].is_connected = true;
+  } else {
+    playersLeaderboard.push({
+      id: nick,
+      player_uid: nick,
+      room_code: currentRoomCode,
+      nickname: nick,
+      score: incScore,
+      cumulative_score: incScore,
+      streak: payload.streak || 0,
+      is_connected: true,
+    });
+  }
+
+  if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === nick.toLowerCase()) {
+    currentPlayer.score = Math.max(Number(currentPlayer.score || 0), incScore);
+    if (payload.streak !== undefined) currentPlayer.streak = payload.streak;
+    const scoreVal = document.getElementById('player-score-val');
+    if (scoreVal) scoreVal.textContent = currentPlayer.score;
+  }
+
+  playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
+  renderLeaderboard();
+}
+
+function mergeIncomingLeaderboard(list) {
+  if (!Array.isArray(list)) return;
+  const valid = list
+    .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
+    .map(p => ({
+      ...p,
+      score: Number(p.score ?? p.cumulative_score ?? 0),
+      cumulative_score: Number(p.score ?? p.cumulative_score ?? 0),
+    }));
+
+  valid.forEach(incoming => {
+    const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === incoming.nickname.toLowerCase());
+    if (idx >= 0) {
+      playersLeaderboard[idx] = {
+        ...playersLeaderboard[idx],
+        ...incoming,
+        score: Math.max(Number(playersLeaderboard[idx].score || 0), Number(incoming.score || 0)),
+        cumulative_score: Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), Number(incoming.cumulative_score || 0)),
+        is_connected: incoming.is_connected !== false,
+      };
+    } else {
+      playersLeaderboard.push(incoming);
+    }
+  });
+
+  if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+    const myIdx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+    if (myIdx >= 0) {
+      const topScore = Math.max(
+        Number(currentPlayer.score || 0),
+        Number(playersLeaderboard[myIdx].score || 0),
+        Number(playersLeaderboard[myIdx].cumulative_score || 0)
+      );
+      currentPlayer.score = topScore;
+      playersLeaderboard[myIdx].score = topScore;
+      playersLeaderboard[myIdx].cumulative_score = topScore;
+      const scoreVal = document.getElementById('player-score-val');
+      if (scoreVal) scoreVal.textContent = topScore;
+    } else {
+      playersLeaderboard.push({
+        id: currentPlayer.nickname,
+        player_uid: currentPlayer.nickname,
+        room_code: currentRoomCode,
+        nickname: currentPlayer.nickname,
+        score: Number(currentPlayer.score ?? 0),
+        cumulative_score: Number(currentPlayer.score ?? 0),
+        streak: currentPlayer.streak || 0,
+        is_connected: true
+      });
+    }
+  }
+
+  playersLeaderboard.sort((a, b) => (b.cumulative_score || b.score || 0) - (a.cumulative_score || a.score || 0));
+  renderLeaderboard();
 }
 
 // RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL
@@ -4789,6 +5252,7 @@ function onGameReset() {
   lastScoredQuestionKey = null;
   hideResultModal();
   hideWinnerModals();
+  hideInterQuestionCountdown();
 
   // Reset Host Mobile Stage Card
   const hostStageBadge = document.getElementById('host-stage-badge');

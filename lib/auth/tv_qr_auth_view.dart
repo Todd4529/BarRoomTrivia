@@ -404,14 +404,6 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                 children: [
                   Row(
                     children: [
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 28),
-                        tooltip: 'Exit Application',
-                        onPressed: _showExitApplicationDialog,
-                      ),
-                      const SizedBox(width: 16),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.asset(
@@ -627,17 +619,6 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 28),
-                tooltip: 'Exit Application',
-                onPressed: _showExitApplicationDialog,
-              ),
-            ),
-            const SizedBox(height: 12),
             const Text(
               'BAR ROOMS TRIVIA',
               style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 2.0, color: Colors.white),

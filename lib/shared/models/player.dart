@@ -43,6 +43,24 @@ class Player {
     );
   }
 
+  Player copyWith({
+    String? id,
+    String? playerUid,
+    String? roomCode,
+    String? nickname,
+    int? cumulativeScore,
+    bool? isConnected,
+  }) {
+    return Player(
+      id: id ?? this.id,
+      playerUid: playerUid ?? this.playerUid,
+      roomCode: roomCode ?? this.roomCode,
+      nickname: nickname ?? this.nickname,
+      cumulativeScore: cumulativeScore ?? this.cumulativeScore,
+      isConnected: isConnected ?? this.isConnected,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

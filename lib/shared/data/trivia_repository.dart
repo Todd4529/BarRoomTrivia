@@ -869,9 +869,14 @@ class TriviaRepository {
     // Retrieve or initialize the randomized non-repeating deck for this genre
     if (!_shuffledSessionDecks.containsKey(targetGenre) || _shuffledSessionDecks[targetGenre]!.isEmpty) {
       final fullPool = getQuestionsForCategory(targetGenre);
-      final shuffledDeck = List<Question>.from(fullPool)..shuffle(_random);
+      // Partition authentic handcrafted domain questions from synthetic filler
+      final authenticQuestions = fullPool.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(_random);
+      final fillerQuestions = fullPool.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(_random);
 
-      // Prioritize freshly ingested weekly questions by placing them at the front of the active session deck
+      // Shuffled deck ALWAYS places authentic questions first
+      final shuffledDeck = <Question>[...authenticQuestions, ...fillerQuestions];
+
+      // Prioritize freshly ingested weekly questions by placing them at the very front of the active session deck
       for (final entry in _dynamicWeeklyQuestions.entries) {
         if (entry.key.toLowerCase() == targetGenre.toLowerCase()) {
           for (final dynQ in entry.value) {
@@ -891,7 +896,11 @@ class TriviaRepository {
 
     // Reshuffle deck only when all 500+ questions have been exhausted
     if (cursor >= deck.length) {
-      deck.shuffle(_random);
+      final auth = deck.where((q) => !q.id.startsWith('fill_') && !q.id.startsWith('univ_') && !q.id.startsWith('gen_')).toList()..shuffle(_random);
+      final fill = deck.where((q) => q.id.startsWith('fill_') || q.id.startsWith('univ_') || q.id.startsWith('gen_')).toList()..shuffle(_random);
+      deck
+        ..clear()
+        ..addAll([...auth, ...fill]);
       cursor = 0;
     }
 
