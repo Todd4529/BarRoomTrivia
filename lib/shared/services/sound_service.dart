@@ -8,9 +8,9 @@ class SoundService {
 
   /// Play a tailored sound effect for a specific trivia game event:
   /// - 'question_start': Ascending game show chime announcing new question
-  /// - 'tick': Crisp tension tick (param: remaining seconds 5..1 for pitch escalation)
+  /// - 'tick' / 'tick_tock': Crisp ticking clock sound (param: remaining seconds 5..1)
   /// - 'buzz' / 'time_up': Authoritative game show time-expired buzzer
-  /// - 'correct': Sparkling victory chime
+  /// - 'correct' / 'clapping_fanfare': Triumphant clapping fanfare sound celebrating correct answer reveal
   /// - 'fanfare': Celebratory round victory fanfare
   static Future<void> playSound(String type, [int param = 0]) async {
     try {
@@ -24,6 +24,11 @@ class SoundService {
         SystemSound.play(SystemSoundType.alert);
       } else {
         SystemSound.play(SystemSoundType.click);
+        if (type == 'tick' || type == 'tick_tock' || type == 'ticktock') {
+          Future.delayed(const Duration(milliseconds: 120), () {
+            SystemSound.play(SystemSoundType.click);
+          });
+        }
       }
     }
   }

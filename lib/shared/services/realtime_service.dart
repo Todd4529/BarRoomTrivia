@@ -77,6 +77,7 @@ class RealtimeService {
     void Function(Map<String, dynamic>)? onRoundCompletedBroadcast,
     void Function(Map<String, dynamic>)? onLeaderboardUpdatedBroadcast,
     void Function(Map<String, dynamic>)? onRequestStateSyncBroadcast,
+    void Function(Map<String, dynamic>)? onAdModeToggledBroadcast,
   }) {
     void handleEvent(dynamic rawData) {
       if (rawData is Map<String, dynamic>) {
@@ -109,6 +110,8 @@ class RealtimeService {
           onGameResetBroadcast(data);
         } else if (event == 'round_completed' && onRoundCompletedBroadcast != null) {
           onRoundCompletedBroadcast(data);
+        } else if (event == 'ad_mode_toggled' && onAdModeToggledBroadcast != null) {
+          onAdModeToggledBroadcast(data);
         } else if (event == 'request_state_sync' && onRequestStateSyncBroadcast != null) {
           onRequestStateSyncBroadcast(data);
         } else if (event == 'player_joined') {
@@ -378,11 +381,12 @@ class RealtimeService {
   }
 
   /// Broadcast state sync request across all connected clients
-  Future<void> broadcastSyncRequest({required String roomCode}) async {
+  Future<void> broadcastSyncRequest({required String roomCode, String? sender}) async {
     final payload = {
       'event': 'request_state_sync',
       'room_code': roomCode,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
+      if (sender != null) 'sender': sender,
     };
 
     _localEventBus.add(payload);
@@ -733,6 +737,40 @@ class RealtimeService {
         'current_round': upR,
         'round_number': upR,
         'starts_at': nextRoundStartsAtEpochMs,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
+  }
+
+  Future<void> broadcastAdModeToggled({
+    required String roomCode,
+    required bool isAdModeActive,
+  }) async {
+    final norm = roomCode.toUpperCase().trim();
+    final payload = {
+      'event': 'ad_mode_toggled',
+      'isAdModeActive': isAdModeActive,
+      'is_ad_mode_active': isAdModeActive,
+      'room_code': norm,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(norm, payload);
+
+    try {
+      final ch = _getChannel(norm);
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'ad_mode_toggled',
+        payload: payload,
+      );
+    } catch (_) {}
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'is_ad_mode_active': isAdModeActive,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}

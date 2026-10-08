@@ -78,6 +78,8 @@ class GameEngineManager {
 
   void broadcastNextQuestion({required String roomCode}) {
     if (!isEngineRunning) return;
+    isGamePaused = false;
+    isResumeCountdownActive = false;
 
     final question = TriviaRepository.getQuestionForGenres(selectedGenres, currentQuestionIndex);
     activeQuestion = question;

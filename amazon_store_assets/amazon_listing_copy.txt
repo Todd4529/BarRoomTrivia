@@ -1,0 +1,80 @@
+================================================================================
+BAR ROOMS TRIVIA - AMAZON APPSTORE SUBMISSION COPY PACK
+================================================================================
+
+--------------------------------------------------------------------------------
+1. SHORT DESCRIPTION (Amazon Appstore)
+--------------------------------------------------------------------------------
+Turn any TV or tablet into an electric live trivia night! Bar Rooms Trivia brings the authentic bar and pub quiz experience directly to your Amazon Fire TV, Fire TV Stick, and Fire Tablets. 
+
+One person hosts the game on the big screen while friends, patrons, or family join instantly on their smartphones by scanning an on-screen QR code—no app downloads required for players! Enjoy real-time multiplayer scoring, 30+ human-crafted categories, zero repetitive questions, and live podiums. Perfect for bars, breweries, pubs, and home game nights!
+
+
+--------------------------------------------------------------------------------
+2. LONG DESCRIPTION (Amazon Appstore)
+--------------------------------------------------------------------------------
+Transform any room into an authentic, high-energy pub trivia lounge with Bar Rooms Trivia—the ultimate real-time cross-platform trivia game engineered specifically for Amazon Fire TV, Fire Tablets, bars, breweries, pubs, and lively home game nights!
+
+HOW IT WORKS:
+1. LAUNCH ON YOUR TV OR TABLET: Open Bar Rooms Trivia on your Amazon Fire TV, Fire Stick, or Fire Tablet to display the main game board.
+2. INSTANT SMARTPHONE JOIN: Players simply scan the on-screen QR code or visit barroomstrivia.com and enter the 4-letter room code. Players join in seconds without downloading an app or creating tedious accounts!
+3. REAL-TIME MULTIPLAYER ACTION: When the host starts the round, questions appear simultaneously on the TV screen and players' phones. Answer on your device within the countdown timer, earn points for correct answers, and compete for top leaderboard glory!
+
+OVER 30 AUTHENTIC HUMAN-CRAFTED GENRES:
+Every single question in Bar Rooms Trivia is 100% human-verified with authentic pub-grade facts. Say goodbye to synthetic AI nonsense, robotic phrasing, and repeats! Choose from over 30 specialized genres or shuffle them into custom round playlists:
+• Bar Life & Drinks: Homebrewing Beer, Beer, Wine & Spirits, Food & Culinary
+• Pop Culture & Entertainment: Movies & Hollywood, 80s & 90s Nostalgia, Pop Culture & Music, Rock & Roll Classics, Music Lyrics, Sitcoms & TV Dramas
+• Geeks & Gaming: Video Games & Gaming, Comics & Superheroes, Science & Technology, Astronomy & Space
+• Knowledge & Culture: World History, World Geography, Sports & Stadiums, Classic Literature, Art & Architecture, Mythology & Folklore, Wildlife & Nature, Mind Benders & Riddles
+• Practical & Lifestyle: Automotive & Racing, Home Repair, Personal Finance, Travel & Exploration
+
+POWERFUL HOST CONTROLS:
+• Custom Round Rotation: Queue up to 10 genres in rotation or let the engine auto-select fresh categories.
+• Adjustable Pace: Run automatic countdown timers (10s, 15s, 20s, 30s) or manual host-paced control.
+• Live Leaderboard & Podiums: Automatic +20 point winner bonuses per round, real-time standings, and gold/silver/bronze victory podiums.
+• Cross-Device Remote Control: Control the Fire TV display right from the host's phone or tablet using secure QR pairing.
+
+DESIGNED SPECIFICALLY FOR FIRE TV & TABLETS:
+Optimized with full Amazon Fire TV voice remote (D-pad) support, stunning neon aesthetic, crisp 1080p widescreen graphics, and rock-solid offline and online resilience. 
+
+Whether you're running a commercial trivia night at a local brewery or hosting an unforgettable weekend party with friends and family, Bar Rooms Trivia delivers the complete, professional trivia experience!
+
+
+--------------------------------------------------------------------------------
+3. PRODUCT FEATURE BULLETS (3 - 5 Bullets for Amazon Appstore)
+--------------------------------------------------------------------------------
+• Instant QR Code Join: Players join on any smartphone browser in seconds—zero app downloads, signups, or extra controllers required for players!
+• 30+ Verified Human-Crafted Genres: Over 3,700 pub-grade questions across Homebrewing, Movies, Music, 80s/90s Nostalgia, Sports, Science, History, and more with zero AI filler.
+• Live Real-Time Scoring: Instant automatic scoring, round winner bonuses, and dynamic gold, silver, and bronze leaderboard podiums.
+• Fire TV Remote & D-Pad Optimized: Built for the big screen with intuitive remote control navigation, high-contrast neon graphics, and smooth animations.
+• Full Host Dashboard: Easily pause, adjust timers, build custom genre playlists, and manage live players from the TV or mobile device.
+
+
+--------------------------------------------------------------------------------
+4. KEYWORDS (Amazon Appstore Search Tags)
+--------------------------------------------------------------------------------
+trivia, bar trivia, pub quiz, party game, multiplayer, game night, fire tv game, quiz game, board game, live trivia, couch multiplayer, casual game, family game, pop culture, music trivia, sports trivia, movies, history quiz, general knowledge, tv game
+
+
+--------------------------------------------------------------------------------
+5. ASSET FILE REFERENCE & SPECIFICATIONS
+--------------------------------------------------------------------------------
+All production image assets are rendered and stored in:
+e:\Coding\BarRoomTrivia\amazon_store_assets\
+
+FIRE TV ASSETS:
+• App Icon (Large): app_icon_512x512.png (512 x 512 px)
+• App Icon (Small): app_icon_114x114.png (114 x 114 px)
+• Fire TV Screenshot 1: fire_tv_screenshot_1.png (1920 x 1080 px) - Live Question & Answering Screen
+• Fire TV Screenshot 2: fire_tv_screenshot_2.png (1920 x 1080 px) - Live Leaderboard & Podiums
+• Fire TV Screenshot 3: fire_tv_screenshot_3.png (1920 x 1080 px) - 30+ Human-Crafted Genres Showcase
+• Fire TV Background: fire_tv_background_1920x1080.png (1920 x 1080 px) - Ambient Catalog Backdrop
+• Featured Content Logo: featured_content_logo.png (640 x 260 px) - Transparent Brand Logo
+• Featured Content Background: featured_content_background.png (1920 x 1080 px) - Cinematic Spotlight Backdrop
+
+TABLET & MOBILE ASSETS:
+• Tablet Screenshot 1: tablet_screenshot_1.png (1920 x 1200 px) - Player Controller Screen
+• Tablet Screenshot 2: tablet_screenshot_2.png (1920 x 1200 px) - Host Control Dashboard
+• Tablet Screenshot 3: tablet_screenshot_3.png (1920 x 1200 px) - Round Completed & Winner Celebration
+• Promotional Image: promotional_image_1024x500.png (1024 x 500 px) - Featured Store Banner
+================================================================================

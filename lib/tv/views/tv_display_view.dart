@@ -10,6 +10,8 @@ import '../../shared/models/question.dart';
 import '../../shared/data/homebrewing_database.dart';
 import '../../shared/data/genre_questions_engine.dart';
 import '../../shared/data/trivia_genres.dart';
+import '../../shared/data/trivia_repository.dart';
+import '../../shared/services/game_engine.dart';
 import '../../shared/services/realtime_service.dart';
 import '../../shared/services/sound_service.dart';
 import '../../shared/services/supabase_service.dart';
@@ -68,6 +70,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   bool _isExitDialogOpen = false;
+  bool _isAdSignageModeActive = false;
   final Set<String> _previousWrongOptions = {};
   static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
@@ -137,6 +140,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             .timeout(const Duration(seconds: 1));
 
         if (res != null && mounted) {
+          final isAdMode = res['is_ad_mode_active'] == true;
+          if (_isAdSignageModeActive != isAdMode) {
+            setState(() {
+              _isAdSignageModeActive = isAdMode;
+            });
+          }
           final status = res['status'] as String?;
           if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
             final startsAt = res['starts_at'] as int?;
@@ -147,6 +156,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _preGameSeconds = rem > 0 ? rem : 10;
               _isGameActive = false;
               _isTimerExpired = false;
+              _isGamePaused = false;
+              _isResumeCountdownActive = false;
             });
             _startPreGameTimer();
           } else if (status == 'question_active' && !_isGameActive && !_isPreGameCountdown) {
@@ -189,6 +200,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 _isPreGameCountdown = false;
                 _isTimerExpired = false;
                 _isInterQuestionPhase = false;
+                _isGamePaused = false;
+                _isResumeCountdownActive = false;
               });
               _startTimer();
             }
@@ -208,7 +221,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _startTvSessionPolling();
 
     // Broadcast state sync request immediately to sync with running host
-    _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
+    _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode, sender: 'tv');
 
     _realtimeService.joinRoomChannel(
       roomCode: _displayRoomCode,
@@ -234,6 +247,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _isGameActive = false;
           _isTimerExpired = false;
           _isInterQuestionPhase = false;
+          _isGamePaused = false;
+          _isResumeCountdownActive = false;
           _currentQuestion = null; // Stale question flushed
           _questionIndex = 0;
           if (rNum != null && rNum > 0) {
@@ -283,12 +298,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           debugPrint('[TV] Error parsing incoming question: $e');
         }
 
-        if (question == null) {
-          final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-          question = fallbackList[(qInRound - 1) % fallbackList.length];
-        }
+        question ??= TriviaRepository.getQuestionForGenres([_activeGenre], qInRound - 1);
 
         if (mounted) {
+          // If this exact question is already actively playing and counting down on TV, ignore redundant echo
+          if (_isGameActive &&
+              !_isTimerExpired &&
+              !_isInterQuestionPhase &&
+              _currentQuestion != null &&
+              (_currentQuestion!.id == question.id || _currentQuestion!.questionText == question.questionText) &&
+              _questionIndex == qInRound) {
+            return;
+          }
+
           final nowMs = DateTime.now().millisecondsSinceEpoch;
           final rawEndsAt = payload['timer_ends_at_epoch_ms'] ??
               payload['timerEndsAtEpochMs'] ??
@@ -321,6 +343,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isTimerExpired = false;
             _isInterQuestionPhase = false;
             _showRoundWinnersOverlay = false;
+            _isGamePaused = false;
+            _isResumeCountdownActive = false;
           });
           _startTimer();
         }
@@ -517,6 +541,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       },
       onRequestStateSyncBroadcast: (payload) {
         if (!mounted) return;
+        final sender = payload['sender']?.toString();
+        if (sender == 'tv') return;
+
         if (_showRoundWinnersOverlay) {
           _realtimeService.broadcastRoundCompleted(
             roomCode: _displayRoomCode,
@@ -533,22 +560,29 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             genre: _activeGenre,
           );
         } else if (_isGameActive && _currentQuestion != null) {
-          final targetEndsAt = _targetTimerEndsAtMs ??
-              (DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000));
-          _realtimeService.broadcastQuestion(
-            roomCode: _displayRoomCode,
-            questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + (_questionIndex > 0 ? _questionIndex : 1),
-            question: _currentQuestion!,
-            durationSeconds: _remainingSeconds > 0 ? _remainingSeconds : 20,
-            timerEndsAtEpochMs: targetEndsAt,
-            roundNumber: _currentRound,
-            totalQuestions: _totalQuestionsInRound,
-          );
-          if (_isTimerExpired || _isInterQuestionPhase) {
+          if (!_isTimerExpired && !_isInterQuestionPhase && _remainingSeconds > 0) {
+            final targetEndsAt = _targetTimerEndsAtMs ??
+                (DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000));
+            _realtimeService.broadcastQuestion(
+              roomCode: _displayRoomCode,
+              questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + (_questionIndex > 0 ? _questionIndex : 1),
+              question: _currentQuestion!,
+              durationSeconds: _remainingSeconds,
+              timerEndsAtEpochMs: targetEndsAt,
+              roundNumber: _currentRound,
+              totalQuestions: _totalQuestionsInRound,
+            );
+          } else if (_isTimerExpired || _isInterQuestionPhase) {
             _realtimeService.broadcastTimerExpired(
               roomCode: _displayRoomCode,
               correctOption: _currentQuestion!.correctOption,
-              nextQuestionStartsAtEpochMs: DateTime.now().millisecondsSinceEpoch + ((_interQuestionSecondsRemaining > 0 ? _interQuestionSecondsRemaining : 15) * 1000),
+              nextQuestionStartsAtEpochMs: _interQuestionTargetEpochMs > 0
+                  ? _interQuestionTargetEpochMs
+                  : (DateTime.now().millisecondsSinceEpoch + ((_interQuestionSecondsRemaining > 0 ? _interQuestionSecondsRemaining : 15) * 1000)),
+              gamePlayMode: _gamePlayMode,
+              questionId: _currentQuestion!.id,
+              questionIndex: _questionIndex,
+              roundNumber: _currentRound,
             );
           }
         }
@@ -561,7 +595,64 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           );
         }
       },
+      onAdModeToggledBroadcast: (payload) {
+        if (!mounted) return;
+        final active = payload['isAdModeActive'] == true ||
+            payload['is_ad_mode_active'] == true;
+        setState(() {
+          _isAdSignageModeActive = active;
+        });
+      },
     );
+  }
+
+  void _startRoundQuestionOneAutonomously() async {
+    if (!mounted || !_isGameActive) return;
+
+    final question = TriviaRepository.getQuestionForGenres([_activeGenre], 0);
+    final duration = _totalDuration > 0 ? _totalDuration : 20;
+    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
+
+    setState(() {
+      _currentQuestion = question;
+      _questionIndex = 1;
+      _totalDuration = duration;
+      _remainingSeconds = duration;
+      _targetTimerEndsAtMs = timerEndsAtEpochMs;
+      _isTimerExpired = false;
+      _isInterQuestionPhase = false;
+    });
+
+    _startTimer();
+
+    try {
+      await _realtimeService.broadcastQuestion(
+        roomCode: _displayRoomCode,
+        questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + 1,
+        question: question,
+        durationSeconds: duration,
+        timerEndsAtEpochMs: timerEndsAtEpochMs,
+        roundNumber: _currentRound,
+        totalQuestions: _totalQuestionsInRound,
+      );
+    } catch (e) {
+      debugPrint('[TV] Start round Question 1 broadcast error: $e');
+    }
+
+    try {
+      await SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': _displayRoomCode,
+        'status': 'question_active',
+        'current_question_index': ((_currentRound - 1) * _totalQuestionsInRound) + 1,
+        'current_round': _currentRound,
+        'round_number': _currentRound,
+        'genre': _activeGenre,
+        'duration_seconds': duration,
+        'timer_ends_at': timerEndsAtEpochMs,
+        'question_data': question.toJson(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code');
+    } catch (_) {}
   }
 
   void _startPreGameTimer() {
@@ -579,56 +670,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _isTimerExpired = false;
           _isInterQuestionPhase = false;
         });
-        _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
-        // Fallback: if no question arrived after 5s, generate question 1 locally using active genre
-        Timer(const Duration(seconds: 5), () async {
-          if (mounted && _isGameActive && _currentQuestion == null) {
-            final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-            final fallback = fallbackList.isNotEmpty ? fallbackList.first : HomebrewingDatabase.generate500Questions().first;
-            final duration = _totalDuration > 0 ? _totalDuration : 20;
-            final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
-            setState(() {
-              _currentQuestion = fallback;
-              _questionIndex = 1;
-              _totalDuration = duration;
-              _remainingSeconds = duration;
-              _targetTimerEndsAtMs = timerEndsAtEpochMs;
-              _isTimerExpired = false;
-              _isInterQuestionPhase = false;
-            });
-            _startTimer();
-
-            try {
-              await _realtimeService.broadcastQuestion(
-                roomCode: _displayRoomCode,
-                questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + 1,
-                question: fallback,
-                durationSeconds: duration,
-                timerEndsAtEpochMs: timerEndsAtEpochMs,
-                roundNumber: _currentRound,
-                totalQuestions: _totalQuestionsInRound,
-              );
-            } catch (e) {
-              debugPrint('[TV] Start round fallback question 1 broadcast error: $e');
-            }
-
-            try {
-              await SupabaseConfig.client.from('game_sessions').upsert({
-                'room_code': _displayRoomCode,
-                'status': 'question_active',
-                'current_question_index': ((_currentRound - 1) * _totalQuestionsInRound) + 1,
-                'current_round': _currentRound,
-                'round_number': _currentRound,
-                'genre': _activeGenre,
-                'duration_seconds': duration,
-                'timer_ends_at': timerEndsAtEpochMs,
-                'question_data': fallback.toJson(),
-                'updated_at': DateTime.now().toIso8601String(),
-              }, onConflict: 'room_code');
-            } catch (_) {}
-          }
-        });
+        if (GameEngineManager.instance.isEngineRunning) {
+          GameEngineManager.instance.broadcastNextQuestion(roomCode: _displayRoomCode);
+        } else {
+          _startRoundQuestionOneAutonomously();
+        }
       }
     });
   }
@@ -646,7 +693,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _timer?.cancel();
     _questionStartedAt = DateTime.now();
     _lastTickedSecond = -1;
-    SoundService.playSound('question_start');
+    _isGamePaused = false;
+    _isResumeCountdownActive = false;
+    _targetTimerEndsAtMs ??= DateTime.now().millisecondsSinceEpoch + ((_remainingSeconds > 0 ? _remainingSeconds : 20) * 1000);
+    // Silent countdown: do not play any sound until the last five seconds
     _timer = Timer.periodic(const Duration(milliseconds: 250), (t) {
       if (!mounted) {
         t.cancel();
@@ -661,7 +711,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             setState(() {
               _remainingSeconds = rem;
             });
-            if (rem <= 5 && _lastTickedSecond != rem) {
+            if (rem <= 5 && rem > 0 && _lastTickedSecond != rem) {
               _lastTickedSecond = rem;
               SoundService.playSound('tick', rem);
             }
@@ -699,7 +749,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       return;
     }
 
-    SoundService.playSound('buzz');
+    // When the correct question is displayed, play celebratory clapping fanfare sound
+    SoundService.playSound('clapping_fanfare');
+    // SoundService.playSound('buzz');
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
@@ -732,6 +784,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _totalInterQuestionDuration = remaining;
         _interQuestionTargetEpochMs = nextStartsAt;
         _gamePlayMode = mode;
+        _isGamePaused = false;
+        _isResumeCountdownActive = false;
       });
     }
 
@@ -755,14 +809,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _isInterQuestionPhase = false;
               _interQuestionSecondsRemaining = 0;
             });
-            _realtimeService.broadcastSyncRequest(roomCode: _displayRoomCode);
 
-            // Autonomous Safety Net: If host engine drops or lags, TV auto-advances question
-            Timer(const Duration(seconds: 2), () {
-              if (mounted && _isGameActive && !_isInterQuestionPhase && _remainingSeconds == 0 && !_showRoundWinnersOverlay) {
-                _advanceNextQuestionAutonomously();
-              }
-            });
+            // Cleanly advance to the next question without state-sync echo looping
+            if (GameEngineManager.instance.isEngineRunning) {
+              GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
+            } else {
+              _advanceNextQuestionAutonomously();
+            }
           }
         }
       });
@@ -894,7 +947,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   void _advanceNextQuestionAutonomously() async {
-    if (!mounted || !_isGameActive || _showRoundWinnersOverlay || _currentQuestion == null) return;
+    if (!mounted || !_isGameActive || _showRoundWinnersOverlay) return;
 
     if (_questionIndex > 0 && _questionIndex % _totalQuestionsInRound == 0) {
       _completeRoundAutonomously();
@@ -902,13 +955,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
 
     final nextIndex = _questionIndex + 1;
-    debugPrint('[TV] Safety Net: Autonomously advancing to Question $nextIndex');
+    debugPrint('[TV] Autonomously advancing to Question $nextIndex in Round $_currentRound');
 
-    final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
-    final rawQuestion = fallbackList.isNotEmpty
-        ? fallbackList[(nextIndex - 1) % fallbackList.length]
-        : HomebrewingDatabase.generate500Questions()[(nextIndex - 1) % 500];
-    final question = _sanitizeQuestionDistractors(rawQuestion) ?? rawQuestion;
+    Question question;
+    try {
+      question = TriviaRepository.getQuestionForGenres([_activeGenre], nextIndex - 1);
+    } catch (_) {
+      final fallbackList = GenreQuestionsEngine.generateGenreQuestions(_activeGenre);
+      final rawQuestion = fallbackList.isNotEmpty
+          ? fallbackList[(nextIndex - 1) % fallbackList.length]
+          : HomebrewingDatabase.generate500Questions()[(nextIndex - 1) % 500];
+      question = _sanitizeQuestionDistractors(rawQuestion) ?? rawQuestion;
+    }
+
     final duration = _totalDuration > 0 ? _totalDuration : 20;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
@@ -1608,7 +1667,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   Expanded(
                     child: (_isGameActive || _isGamePaused || _isResumeCountdownActive)
                         ? _buildLiveStageGrid()
-                        : (_isPreGameCountdown ? _buildPreGameCountdownScreen() : _buildOfficial4PageAdCarousel()),
+                        : (_isPreGameCountdown
+                            ? _buildPreGameCountdownScreen()
+                            : (_isAdSignageModeActive
+                                ? _buildFullscreenSignageDisplay()
+                                : _buildOfficial4PageAdCarousel())),
                   ),
                 ],
               ),
@@ -1877,6 +1940,123 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Fullscreen Venue Ad / Sponsor Signage Display Screen
+  Widget _buildFullscreenSignageDisplay() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.6), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonCyan.withValues(alpha: 0.2),
+            blurRadius: 36,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Stack(
+          children: [
+            // Fullscreen Animated Slide Content
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 700),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
+                },
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                child: SizedBox.expand(
+                  key: ValueKey(_adSlideIndex),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
+                    child: _buildAdSlideContent(_adSlideIndex),
+                  ),
+                ),
+              ),
+            ),
+
+            // Top Slide Progress Track
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 6,
+                color: Colors.white.withOpacity(0.08),
+                alignment: Alignment.centerLeft,
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(_adSlideIndex),
+                  tween: Tween<double>(begin: 0.0, end: 1.0),
+                  duration: const Duration(seconds: 15),
+                  builder: (context, val, child) {
+                    return FractionallySizedBox(
+                      widthFactor: val,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [AppTheme.neonCyan, AppTheme.neonPurple],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // Bottom Signage Mode Pill Indicator & Ad Counter
+            Positioned(
+              bottom: 18,
+              left: 24,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkBackground.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'AD DISPLAY SIGNAGE MODE • AD ${_adSlideIndex + 1} OF 4',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2307,7 +2487,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           ),
                         ),
                       )
-                    else if (_isGamePaused)
+                    else if (_isGamePaused && !_isResumeCountdownActive && (!_isGameActive || (_timer == null || !_timer!.isActive) || _isTimerExpired))
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(

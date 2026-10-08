@@ -2,7 +2,7 @@ name: bar_rooms_trivia
 description: "A real-time cross-platform bar trivia game monorepo built with Flutter and Supabase."
 publish_to: 'none'
 
-version: 1.1.50+71
+version: 1.1.54+75
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

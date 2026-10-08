@@ -17,6 +17,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let mqttClient = null;
+let liveRoomChannel = null;
+let liveDefaultChannel = null;
+let liveGlobalChannel = null;
 
 // State & Broadcast Channel
 const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
@@ -263,24 +266,59 @@ function playSound(type) {
     try {
       const now = Math.max(ctx.currentTime, 0.005);
 
-      if (type === 'tick') {
+      if (type === 'tick' || type === 'tick_tock') { // if (type === 'tick')
+        // Authentic mechanical ticking clock sound (escapement click + acoustic body + gear catch)
         const remaining = typeof param === 'number' ? param : 5;
-        const freqMap = { 1: 1150, 2: 960, 3: 830, 4: 720, 5: 620 };
-        const tickFreq = freqMap[remaining] || 800;
+        const isTick = (remaining % 2 !== 0); // Alternate Tick / Tock like a clock pendulum
+        const baseFreq = isTick ? 1450 : 920;
 
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(tickFreq, now);
-        osc.frequency.exponentialRampToValueAtTime(Math.max(100, tickFreq * 0.7), now + 0.06);
+        // 1. Sharp mechanical escapement click impulse (high-frequency burst)
+        const clickLen = Math.floor(ctx.sampleRate * 0.015);
+        const clickBuf = ctx.createBuffer(1, clickLen, ctx.sampleRate);
+        const clickData = clickBuf.getChannelData(0);
+        for (let i = 0; i < clickLen; i++) {
+          clickData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.003));
+        }
+        const clickSrc = ctx.createBufferSource();
+        clickSrc.buffer = clickBuf;
+        const clickFilter = ctx.createBiquadFilter();
+        clickFilter.type = 'bandpass';
+        clickFilter.frequency.setValueAtTime(isTick ? 2800 : 2000, now);
+        clickFilter.Q.setValueAtTime(5.0, now);
+        const clickGain = ctx.createGain();
+        clickGain.gain.setValueAtTime(0.42, now);
+        clickGain.gain.linearRampToValueAtTime(0.0001, now + 0.015);
+        clickSrc.connect(clickFilter);
+        clickFilter.connect(clickGain);
+        clickGain.connect(ctx.destination);
+        clickSrc.start(now);
 
-        gain.gain.setValueAtTime(0.40, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+        // 2. Resonant wood/brass clock housing body decay
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(baseFreq, now);
+        osc1.frequency.exponentialRampToValueAtTime(baseFreq * 0.65, now + 0.028);
+        gain1.gain.setValueAtTime(0.38, now);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.028);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.028);
 
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.07);
+        // 3. Subtle escapement gear catch recoil at +36ms
+        const rebTime = now + 0.036;
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(baseFreq * 1.5, rebTime);
+        osc2.frequency.exponentialRampToValueAtTime(baseFreq, rebTime + 0.012);
+        gain2.gain.setValueAtTime(0.18, rebTime);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, rebTime + 0.012);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(rebTime);
+        osc2.stop(rebTime + 0.012);
       } else if (type === 'tap') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -308,15 +346,58 @@ function playSound(type) {
           osc.start(now + n.t);
           osc.stop(now + n.t + n.d);
         });
-      } else if (type === 'correct') {
-        // Sparkling bell chime arpeggio: G5 (784Hz) -> B5 (988Hz) -> D6 (1175Hz) -> G6 (1568Hz)
-        [ { f: 783.99, t: 0, d: 0.10 }, { f: 987.77, t: 0.08, d: 0.12 }, { f: 1174.66, t: 0.16, d: 0.16 }, { f: 1567.98, t: 0.24, d: 0.40 } ].forEach(n => {
+      } else if (type === 'correct' || type === 'clapping_fanfare') { // if (type === 'correct')
+        // CLAPPING FANFARE: Layered Crowd Applause + Celebratory Brass Fanfare Chords
+        // Layer 1: Crowd Applause (18 staggered acoustic handclaps)
+        const clapDelays = [
+          0, 0.04, 0.09, 0.14, 0.19, 0.25, 0.31, 0.38, 
+          0.45, 0.53, 0.61, 0.70, 0.80, 0.90, 1.01, 1.12, 1.23, 1.34
+        ];
+        clapDelays.forEach((delay, idx) => {
+          const clapTime = now + delay + (Math.sin(idx * 7) * 0.015);
+          const clapLen = Math.floor(ctx.sampleRate * 0.022);
+          const clapBuf = ctx.createBuffer(1, clapLen, ctx.sampleRate);
+          const cData = clapBuf.getChannelData(0);
+          for (let j = 0; j < clapLen; j++) {
+            cData[j] = (Math.random() * 2 - 1) * Math.exp(-j / (ctx.sampleRate * 0.005));
+          }
+          const cSrc = ctx.createBufferSource();
+          cSrc.buffer = clapBuf;
+          const cFilter = ctx.createBiquadFilter();
+          cFilter.type = 'bandpass';
+          cFilter.frequency.setValueAtTime(1100 + ((idx % 5) * 220), clapTime);
+          cFilter.Q.setValueAtTime(3.5, clapTime);
+          const cGain = ctx.createGain();
+          const vol = 0.24 + ((idx % 3) * 0.06);
+          cGain.gain.setValueAtTime(vol, clapTime);
+          cGain.gain.linearRampToValueAtTime(0.0001, clapTime + 0.022);
+          cSrc.connect(cFilter);
+          cFilter.connect(cGain);
+          cGain.connect(ctx.destination);
+          cSrc.start(clapTime);
+        });
+
+        // Layer 2: Celebratory Brass Fanfare Progression
+        // G4 (392Hz) -> C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> High C Major Chord Finale
+        const fanfareNotes = [
+          { f: 392.00, t: 0.00, d: 0.12, g: 0.35 },
+          { f: 523.25, t: 0.11, d: 0.12, g: 0.38 },
+          { f: 659.25, t: 0.23, d: 0.14, g: 0.40 },
+          { f: 783.99, t: 0.36, d: 0.16, g: 0.42 },
+          // Finale Grand Chord (sustained through applause)
+          { f: 523.25, t: 0.52, d: 0.85, g: 0.36 },
+          { f: 659.25, t: 0.52, d: 0.85, g: 0.36 },
+          { f: 783.99, t: 0.52, d: 0.85, g: 0.38 },
+          { f: 1046.50, t: 0.52, d: 0.85, g: 0.40 },
+        ];
+
+        fanfareNotes.forEach(n => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
-          osc.type = 'sine';
+          osc.type = 'triangle';
           osc.frequency.setValueAtTime(n.f, now + n.t);
           gain.gain.setValueAtTime(0.0001, now + n.t);
-          gain.gain.linearRampToValueAtTime(0.38, now + n.t + 0.02);
+          gain.gain.linearRampToValueAtTime(n.g, now + n.t + 0.02);
           gain.gain.linearRampToValueAtTime(0.0001, now + n.t + n.d);
           osc.connect(gain);
           gain.connect(ctx.destination);
@@ -350,8 +431,32 @@ function playSound(type) {
           osc.start(now);
           osc.stop(now + 0.35);
         });
-      } else if (type === 'fanfare') {
-        // Grand victory fanfare: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> C6 (1046Hz)
+      } else if (type === 'fanfare') { // if (type === 'fanfare')
+        // Celebratory clapping fanfare for round victories
+        const clapDelays = [0, 0.05, 0.11, 0.18, 0.26, 0.35, 0.45, 0.56, 0.68, 0.81, 0.95, 1.10, 1.25];
+        clapDelays.forEach((delay, idx) => {
+          const clapTime = now + delay;
+          const clapLen = Math.floor(ctx.sampleRate * 0.022);
+          const clapBuf = ctx.createBuffer(1, clapLen, ctx.sampleRate);
+          const cData = clapBuf.getChannelData(0);
+          for (let j = 0; j < clapLen; j++) {
+            cData[j] = (Math.random() * 2 - 1) * Math.exp(-j / (ctx.sampleRate * 0.005));
+          }
+          const cSrc = ctx.createBufferSource();
+          cSrc.buffer = clapBuf;
+          const cFilter = ctx.createBiquadFilter();
+          cFilter.type = 'bandpass';
+          cFilter.frequency.setValueAtTime(1200 + ((idx % 4) * 200), clapTime);
+          cFilter.Q.setValueAtTime(3.5, clapTime);
+          const cGain = ctx.createGain();
+          cGain.gain.setValueAtTime(0.24, clapTime);
+          cGain.gain.linearRampToValueAtTime(0.0001, clapTime + 0.022);
+          cSrc.connect(cFilter);
+          cFilter.connect(cGain);
+          cGain.connect(ctx.destination);
+          cSrc.start(clapTime);
+        });
+
         [ { f: 523.25, t: 0, d: 0.16 }, { f: 659.25, t: 0.12, d: 0.18 }, { f: 783.99, t: 0.24, d: 0.22 }, { f: 1046.50, t: 0.36, d: 0.70 } ].forEach(n => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -598,13 +703,6 @@ function initApp() {
   setInterval(() => {
     loadInitialPlayers();
   }, 4000);
-}
-
-// Execute immediately when DOM is ready or completed
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  initApp();
 }
 
 // HOST AUTHENTICATION LOGIC (Mobile & Web)
@@ -1148,9 +1246,11 @@ function switchView(viewName) {
       } else {
         if (tvAdScreen) tvAdScreen.classList.add('hidden');
         stopTvAdSignageRotation();
-        if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
-        if (btnLive) btnLive.classList.add('active');
-        if (btnPromo) btnPromo.classList.remove('active');
+        if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
+        if (tvPromoScreen) tvPromoScreen.classList.remove('hidden');
+        if (btnPromo) btnPromo.classList.add('active');
+        if (btnLive) btnLive.classList.remove('active');
+        startPromoCarouselRotation();
       }
     }
   }
@@ -1297,10 +1397,6 @@ function initQrCodes() {
 function getMqttTopic() {
   return `barrooms_trivia/room_${currentRoomCode.toUpperCase()}`;
 }
-
-let liveRoomChannel = null;
-let liveDefaultChannel = null;
-let liveGlobalChannel = null;
 
 function initRealtimeSupabaseChannels() {
   try {
@@ -2445,9 +2541,22 @@ function initHostControls() {
             updateHostEngineUI('IN PROGRESS');
           }
         } else if (session.status === 'paused') {
-          isAutomatedEngineRunning = false;
-          currentGameState = 'PAUSED';
-          updateHostEngineUI('PAUSED');
+          if (currentGameState !== 'QUESTION_ACTIVE' && currentGameState !== 'PRE_GAME') {
+            isAutomatedEngineRunning = false;
+            currentGameState = 'PAUSED';
+            updateHostEngineUI('PAUSED');
+          }
+        }
+
+        if (session.is_ad_mode_active !== undefined) {
+          const remoteAdActive = Boolean(session.is_ad_mode_active);
+          if (isAdModeActive !== remoteAdActive) {
+            isAdModeActive = remoteAdActive;
+            safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
+            const toggle = document.getElementById('host-toggle-ad-mode');
+            if (toggle) toggle.checked = isAdModeActive;
+            syncTvSignageDisplay();
+          }
         }
       }
     } catch (err) {
@@ -3116,6 +3225,8 @@ function syncTvSignageDisplay() {
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvPromoScreen = document.getElementById('tv-promo-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
+  const btnPromo = document.getElementById('btn-tv-toggle-promo');
+  const btnLive = document.getElementById('btn-tv-toggle-live');
 
   // Active game play ALWAYS overrides ad mode
   if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {
@@ -3131,15 +3242,18 @@ function syncTvSignageDisplay() {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
+    if (btnPromo) btnPromo.classList.add('active');
+    if (btnLive) btnLive.classList.remove('active');
     startTvAdSignageRotation();
   } else {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
-    // Only unhide promo if live grid is not currently active
-    const btnLive = document.getElementById('btn-tv-toggle-live');
     const isLiveActive = btnLive?.classList.contains('active');
-    if (!isLiveActive && tvPromoScreen) {
-      tvPromoScreen.classList.remove('hidden');
+    if (!isLiveActive) {
+      if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
+      if (tvPromoScreen) tvPromoScreen.classList.remove('hidden');
+      if (btnPromo) btnPromo.classList.add('active');
+      startPromoCarouselRotation();
     }
   }
 }
@@ -3198,11 +3312,16 @@ function displayAdSlide(index) {
   const counterText = document.getElementById('tv-ad-slide-counter-text');
 
   if (img) {
-    img.classList.add('fading');
-    setTimeout(() => {
+    if (!img.src || img.src === window.location.href || img.src.endsWith('/') || img.classList.contains('fading')) {
       img.src = slide.dataUrl;
       img.classList.remove('fading');
-    }, 250);
+    } else {
+      img.classList.add('fading');
+      setTimeout(() => {
+        img.src = slide.dataUrl;
+        img.classList.remove('fading');
+      }, 250);
+    }
   }
 
   if (counterText) {
@@ -3293,6 +3412,14 @@ function broadcastAdModeChange() {
   } catch (e) {
     console.warn('Ad mode broadcast error:', e);
   }
+
+  try {
+    supabase.from('game_sessions').upsert({
+      room_code: (currentRoomCode || 'TRIV').toUpperCase(),
+      is_ad_mode_active: isAdModeActive,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }).catch(() => {});
+  } catch (_) {}
 }
 
 function broadcastAdSlidesUpdated() {
@@ -4224,7 +4351,7 @@ function onQuestionStart(payload) {
   // UNHIDE & START TV COUNTDOWN TIMER IMMEDIATELY
   if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
   startCountdown(totalTimerDuration);
-  playSound('question_start');
+  // Silent countdown: do not play sound until last 5 seconds (playSound('question_start') omitted during countdown)
 
   // Reset player answer choice state and dismiss previous result modal for new question
   playerChoiceSubmitted = null;
@@ -5479,4 +5606,11 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, function(m) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
   });
+}
+
+// Execute app initializer after full script and DOM are ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
 }

@@ -36,6 +36,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   final List<String> _selectedGenreQueue = [];
 
   // 30-Second Pre-Game Countdown & Active Question State
+  bool _isAdSignageModeActive = false;
   bool _isPreGameCountdownActive = false;
   int _preGameSecondsRemaining = 30;
   Timer? _preGameTimer;
@@ -564,6 +565,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   if (_isPreGameCountdownActive || _isEngineRunning) _buildActiveCountdownTimerCard(),
                   _buildGameModeSegmentedControl(),
                   const SizedBox(height: 16),
+                  _buildAdSignageModeSwitch(),
+                  const SizedBox(height: 16),
                   _buildDifficultySegmentedControl(),
                   const SizedBox(height: 16),
                   _buildTimerDurationScrollWheel(),
@@ -865,6 +868,75 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 );
               }).toList(),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdSignageModeSwitch() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isAdSignageModeActive ? AppTheme.neonCyan.withValues(alpha: 0.5) : Colors.white.withOpacity(0.06),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'AD DISPLAY SIGNAGE MODE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Show fullscreen ads on TV when game is idle',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Switch(
+            value: _isAdSignageModeActive,
+            activeColor: AppTheme.neonCyan,
+            activeTrackColor: AppTheme.neonCyan.withValues(alpha: 0.4),
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: Colors.white.withOpacity(0.1),
+            onChanged: (val) {
+              setState(() {
+                _isAdSignageModeActive = val;
+              });
+              RealtimeService().broadcastAdModeToggled(
+                roomCode: 'TRIV',
+                isAdModeActive: val,
+              );
+            },
           ),
         ],
       ),

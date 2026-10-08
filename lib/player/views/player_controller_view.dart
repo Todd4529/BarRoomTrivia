@@ -137,7 +137,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
         _listenToGameEvents(roomCode);
         _startPlayerSessionPolling();
-        _realtimeService.broadcastSyncRequest(roomCode: roomCode);
+        _realtimeService.broadcastSyncRequest(roomCode: roomCode, sender: 'player');
       }
     } catch (e) {
       if (mounted) {
@@ -208,6 +208,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           if (isSameQuestion && _selectedOption != null) {
             // Player already locked in their answer! Keep their answer and locked inputs intact.
             setState(() {
+              _isGamePaused = false;
+              _isResumeCountdownActive = false;
               _remainingSeconds = durationSec;
               final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
                   (payload['roundNumber'] as num?)?.toInt() ??
@@ -660,6 +662,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 });
                 _startLocalCountdown();
               } else {
+                if (_isGamePaused || _isResumeCountdownActive) {
+                  setState(() {
+                    _isGamePaused = false;
+                    _isResumeCountdownActive = false;
+                  });
+                }
                 if (_questionNumberInRound != calcQNum || (rNum != null && rNum > 0 && _currentRound != rNum)) {
                   setState(() {
                     if (rNum != null && rNum > 0) _currentRound = rNum;
@@ -1887,7 +1895,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                         ),
                       ),
                     )
-                  else if (_isGamePaused)
+                  else if (_isGamePaused && !_isResumeCountdownActive && (_currentQuestion == null || _remainingSeconds == 0 || (_localTimer == null || !_localTimer!.isActive)))
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(

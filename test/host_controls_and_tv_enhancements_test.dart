@@ -203,6 +203,7 @@ void main() {
       // Flutter verification
       expect(
           tvDisplayContent.contains("SoundService.playSound('tick'") ||
+              tvDisplayContent.contains("SoundService.playSound('tick_tock'") ||
               tvDisplayContent.contains('SystemSound.play(SystemSoundType.click)'),
           isTrue,
           reason: 'Flutter TV display must trigger tailored or click sound on countdown ticks');
