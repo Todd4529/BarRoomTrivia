@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -63,14 +64,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _lastTickedSecond = -1;
   Timer? _interQuestionTimer;
   String _gamePlayMode = 'Auto';
+  bool _isQuestionTimerRunning = true;
 
-  // Active 4-Page Advertisement Slide Index
+  // Active Advertisement Slides
   int _adSlideIndex = 0;
   Timer? _adSlideTimer;
+  List<Map<String, dynamic>> _customAdSlides = [];
+
+  int get _totalAdSlides => _customAdSlides.isEmpty ? 1 : (1 + _customAdSlides.length);
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
+  Timer? _roundWinnersOverlayTimer;
+  Timer? _interRoundCountdownTimer;
+  int _interRoundDurationSeconds = 120;
   bool _isExitDialogOpen = false;
   bool _isAdSignageModeActive = false;
+  bool _isSoundEffectsEnabled = true;
+  String? _lastAnswerRevealSoundQuestionId;
   final Set<String> _previousWrongOptions = {};
   static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
 
@@ -101,6 +111,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     if (savedCode != null && savedCode.isNotEmpty) {
       if (mounted) setState(() => _savedRoomCode = savedCode);
     }
+    final savedSound = prefs.getBool('tv_sound_effects_enabled');
+    if (savedSound != null) {
+      if (mounted) setState(() => _isSoundEffectsEnabled = savedSound);
+      SoundService.isSoundEffectsEnabled = savedSound;
+    }
     // Purge any legacy local URL saved in SharedPreferences so it never overrides the public GitHub site
     await prefs.remove('player_base_url');
   }
@@ -112,13 +127,33 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   // Preserve exact broadcast options so TV display 100% matches player phones and host
   Question? _sanitizeQuestionDistractors(Question? q) => q;
 
+  String _formatIntermissionMinutes(int seconds) {
+    if (seconds >= 60 && seconds % 60 == 0) {
+      final mins = seconds ~/ 60;
+      return '$mins MINUTE${mins > 1 ? 'S' : ''}';
+    } else if (seconds >= 60) {
+      final mins = seconds ~/ 60;
+      final rem = seconds % 60;
+      return '$mins MIN $rem SEC';
+    }
+    return '$seconds SECONDS';
+  }
+
 
   void _startAdSlideTimer() {
     _adSlideTimer?.cancel();
-    _adSlideTimer = Timer.periodic(const Duration(seconds: 20), (t) {
-      if (!_isGameActive && !_isPreGameCountdown && mounted) {
+    final total = _totalAdSlides;
+    if (total <= 1) {
+      if (_adSlideIndex != 0 && mounted) {
+        setState(() => _adSlideIndex = 0);
+      }
+      return;
+    }
+    _adSlideTimer = Timer.periodic(const Duration(seconds: 15), (t) {
+      if ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown && mounted) {
         setState(() {
-          _adSlideIndex = (_adSlideIndex + 1) % 4; // 4 Slides total (20s per slide)
+          final count = _totalAdSlides;
+          _adSlideIndex = count > 0 ? (_adSlideIndex + 1) % count : 0;
         });
       }
     });
@@ -145,9 +180,51 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             setState(() {
               _isAdSignageModeActive = isAdMode;
             });
+            _startAdSlideTimer();
+          }
+          if (res['ad_slides'] is List) {
+            final rawSlides = res['ad_slides'] as List;
+            final parsedSlides = <Map<String, dynamic>>[];
+            for (final s in rawSlides) {
+              if (s is Map) parsedSlides.add(Map<String, dynamic>.from(s));
+            }
+            if (_customAdSlides.length != parsedSlides.length) {
+              setState(() {
+                _customAdSlides = parsedSlides;
+                if (_adSlideIndex >= _totalAdSlides) {
+                  _adSlideIndex = 0;
+                }
+              });
+              _startAdSlideTimer();
+            }
+          }
+          if (res.containsKey('is_sound_effects_enabled') || res.containsKey('is_sound_enabled')) {
+            final soundEnabled = res['is_sound_effects_enabled'] != false && res['is_sound_enabled'] != false;
+            if (_isSoundEffectsEnabled != soundEnabled) {
+              setState(() {
+                _isSoundEffectsEnabled = soundEnabled;
+              });
+              SoundService.isSoundEffectsEnabled = soundEnabled;
+              SharedPreferences.getInstance().then((prefs) {
+                prefs.setBool('tv_sound_effects_enabled', soundEnabled);
+              }).catchError((_) {});
+            }
           }
           final status = res['status'] as String?;
-          if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
+          if (status == 'paused' && !_isGamePaused) {
+            _timer?.cancel();
+            _preGameTimer?.cancel();
+            _resumeTimer?.cancel();
+            setState(() {
+              _isGamePaused = true;
+              _isResumeCountdownActive = false;
+            });
+            _startAdSlideTimer();
+          } else if (status == 'question_active' && _isGamePaused) {
+            setState(() {
+              _isGamePaused = false;
+            });
+          } else if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
             final startsAt = res['starts_at'] as int?;
             final now = DateTime.now().millisecondsSinceEpoch;
             final rem = startsAt != null ? ((startsAt - now) / 1000).ceil().clamp(0, 30) : 10;
@@ -303,8 +380,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         if (mounted) {
           // If this exact question is already actively playing and counting down on TV, ignore redundant echo
           if (_isGameActive &&
+              _timer != null &&
+              _timer!.isActive &&
               !_isTimerExpired &&
               !_isInterQuestionPhase &&
+              !_isGamePaused &&
+              !_isResumeCountdownActive &&
               _currentQuestion != null &&
               (_currentQuestion!.id == question.id || _currentQuestion!.questionText == question.questionText) &&
               _questionIndex == qInRound) {
@@ -312,6 +393,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           }
 
           final nowMs = DateTime.now().millisecondsSinceEpoch;
+          final mode = (payload['game_play_mode'] ?? payload['gamePlayMode'])?.toString() ?? _gamePlayMode;
+          _gamePlayMode = mode;
+          final timerState = payload['timer_state']?.toString();
+          final questionPhase = payload['question_phase']?.toString();
+          final isIdleTimer = timerState == 'idle' || questionPhase == 'reading';
+
           final rawEndsAt = payload['timer_ends_at_epoch_ms'] ??
               payload['timerEndsAtEpochMs'] ??
               payload['timer_ends_at'] ??
@@ -320,17 +407,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               ? rawEndsAt.toInt()
               : (rawEndsAt != null ? int.tryParse(rawEndsAt.toString()) : null);
 
-          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
               ? timerEndsAtEpochMs
               : (nowMs + duration * 1000);
-          _targetTimerEndsAtMs = targetEndsAt;
+          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
 
           final remainingMs = targetEndsAt - nowMs;
-          final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+          final durationSec = isIdleTimer ? duration : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
 
           _adSlideTimer?.cancel();
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
+          _timer?.cancel();
+
           setState(() {
             _currentQuestion = question;
             _totalDuration = duration;
@@ -345,15 +434,50 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _showRoundWinnersOverlay = false;
             _isGamePaused = false;
             _isResumeCountdownActive = false;
+            _isQuestionTimerRunning = !isIdleTimer;
           });
-          _startTimer();
+
+          if (!isIdleTimer) {
+            _startTimer();
+          }
         }
+      },
+      onManualTimerStartedBroadcast: (payload) {
+        if (!mounted || !_isGameActive) return;
+        final rawEndsAt = payload['timer_ends_at_epoch_ms'] ?? payload['timerEndsAtMs'];
+        final timerEndsAtEpochMs = (rawEndsAt is num) ? rawEndsAt.toInt() : int.tryParse('$rawEndsAt');
+        final duration = (payload['duration_seconds'] as num?)?.toInt() ?? _totalDuration;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+            ? timerEndsAtEpochMs
+            : (nowMs + duration * 1000);
+
+        _targetTimerEndsAtMs = targetEndsAt;
+        final remSec = max(0, ((targetEndsAt - nowMs) / 1000).ceil().clamp(0, 180));
+
+        setState(() {
+          _totalDuration = duration;
+          _remainingSeconds = remSec;
+          _isQuestionTimerRunning = true;
+          _isTimerExpired = false;
+          _isInterQuestionPhase = false;
+        });
+        _startTimer();
       },
       onTimerExpiredBroadcast: (payload) {
         _onTimerEnded(payload);
       },
       onGamePausedBroadcast: (payload) {
         if (mounted) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (_targetTimerEndsAtMs != null && _targetTimerEndsAtMs! > now) {
+            _remainingSeconds = ((_targetTimerEndsAtMs! - now) / 1000).ceil();
+          } else if (payload['remaining_question_seconds'] != null) {
+            final raw = payload['remaining_question_seconds'];
+            if (raw is num && raw > 0) {
+              _remainingSeconds = raw.toInt();
+            }
+          }
           _timer?.cancel();
           _preGameTimer?.cancel();
           _resumeTimer?.cancel();
@@ -361,6 +485,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isGamePaused = true;
             _isResumeCountdownActive = false;
           });
+          _startAdSlideTimer();
         }
       },
       onGameResumingBroadcast: (payload) {
@@ -368,6 +493,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _timer?.cancel();
           _preGameTimer?.cancel();
           _resumeTimer?.cancel();
+
+          if (payload['remaining_question_seconds'] != null) {
+            final raw = payload['remaining_question_seconds'];
+            if (raw is num && raw > 0) {
+              _remainingSeconds = raw.toInt();
+            }
+          }
 
           final startsAtEpochMs = payload['starts_at_epoch_ms'] as int?;
           final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -395,6 +527,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   _isResumeCountdownActive = false;
                   _isGameActive = true;
                 });
+                if (_currentQuestion != null && !_isTimerExpired && !_isInterQuestionPhase) {
+                  final rem = _remainingSeconds > 0 ? _remainingSeconds : 20;
+                  _targetTimerEndsAtMs = DateTime.now().millisecondsSinceEpoch + (rem * 1000);
+                  _startTimer();
+                }
               }
             }
           });
@@ -425,6 +562,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         if (mode != 'clear_all') {
           _loadLeaderboard();
         }
+        _startAdSlideTimer();
       },
       onRoundCompletedBroadcast: (payload) {
         _previousWrongOptions.clear();
@@ -437,15 +575,24 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _currentRound = rNum;
         }
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
-            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
+            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt() ??
+            (payload['starts_at_epoch_ms'] as num?)?.toInt();
+        final rawDelay = (payload['delaySeconds'] as num?)?.toInt() ??
+            (payload['delay_seconds'] as num?)?.toInt() ??
+            (payload['duration_seconds'] as num?)?.toInt() ??
+            (payload['inter_round_duration'] as num?)?.toInt() ??
+            _interRoundDurationSeconds;
         final delaySec = nextStartsAt != null
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 660))
-            : (payload['delaySeconds'] as num?)?.toInt() ?? 60;
+            : (rawDelay > 0 ? rawDelay : 120);
 
         if (mounted) {
           _timer?.cancel();
           _interQuestionTimer?.cancel();
           _preGameTimer?.cancel();
+          _roundWinnersOverlayTimer?.cancel();
+          _interRoundCountdownTimer?.cancel();
+
           final parsed = <Map<String, dynamic>>[];
           if (winners != null) {
             for (var item in winners) {
@@ -475,8 +622,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             SoundService.playSound('fanfare');
           }
 
-          Future.delayed(Duration(seconds: delaySec), () {
+          // Display the Top 3 Winners overlay for 20 seconds, then dismiss it
+          // so the ad signage is displayed uncovered for the rest of the intermission
+          final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;
+          _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
             if (mounted && _showRoundWinnersOverlay) {
+              setState(() {
+                _showRoundWinnersOverlay = false;
+              });
+            }
+          });
+
+          // Maintain ad signage display for the entire intermission time (e.g. 2 minutes)
+          _interRoundCountdownTimer = Timer(Duration(seconds: delaySec), () {
+            if (mounted) {
               setState(() {
                 _showRoundWinnersOverlay = false;
                 _isTimerExpired = false;
@@ -487,6 +646,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _startPreGameTimer();
             }
           });
+          _startAdSlideTimer();
         }
       },
       onLeaderboardUpdatedBroadcast: (payload) {
@@ -528,6 +688,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             }
           }
           if (incoming.isNotEmpty) {
+            SupabaseService.mergeLocalPlayers('TRIV', incoming);
             final merged = SupabaseService.mergeLocalPlayers(_displayRoomCode, incoming);
             if (mounted) {
               setState(() {
@@ -567,7 +728,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               roomCode: _displayRoomCode,
               questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + (_questionIndex > 0 ? _questionIndex : 1),
               question: _currentQuestion!,
-              durationSeconds: _remainingSeconds,
+              durationSeconds: _totalDuration > 0 ? _totalDuration : (_remainingSeconds > 0 ? _remainingSeconds : 20),
               timerEndsAtEpochMs: targetEndsAt,
               roundNumber: _currentRound,
               totalQuestions: _totalQuestionsInRound,
@@ -602,6 +763,47 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         setState(() {
           _isAdSignageModeActive = active;
         });
+        _startAdSlideTimer();
+      },
+      onAdSlidesUpdatedBroadcast: (payload) {
+        if (!mounted) return;
+        final rawSlides = payload['slides'];
+        if (rawSlides is List) {
+          final parsed = <Map<String, dynamic>>[];
+          for (final s in rawSlides) {
+            if (s is Map) parsed.add(Map<String, dynamic>.from(s));
+          }
+          setState(() {
+            _customAdSlides = parsed;
+            if (_adSlideIndex >= _totalAdSlides) {
+              _adSlideIndex = 0;
+            }
+            if (payload['isAdModeActive'] != null || payload['is_ad_mode_active'] != null) {
+              _isAdSignageModeActive = payload['isAdModeActive'] == true || payload['is_ad_mode_active'] == true;
+            }
+          });
+          _startAdSlideTimer();
+        }
+      },
+      onSoundEffectsToggledBroadcast: (payload) {
+        if (!mounted) return;
+        final enabled = payload['isSoundEffectsEnabled'] != false &&
+            payload['is_sound_effects_enabled'] != false &&
+            payload['is_sound_enabled'] != false &&
+            payload['sound_effects_enabled'] != false &&
+            payload['soundEffectsEnabled'] != false &&
+            (payload['isSoundEffectsEnabled'] == true ||
+                payload['is_sound_effects_enabled'] == true ||
+                payload['is_sound_enabled'] == true ||
+                payload['sound_effects_enabled'] == true ||
+                payload['soundEffectsEnabled'] == true);
+        setState(() {
+          _isSoundEffectsEnabled = enabled;
+        });
+        SoundService.isSoundEffectsEnabled = enabled;
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setBool('tv_sound_effects_enabled', enabled);
+        }).catchError((_) {});
       },
     );
   }
@@ -749,11 +951,26 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       return;
     }
 
-    // When the correct question is displayed, play celebratory clapping fanfare sound
-    SoundService.playSound('clapping_fanfare');
-    // SoundService.playSound('buzz');
+    // When the correct question is displayed, play celebratory clapping and cheering sound ONLY ONCE per question
+    final currentQId = _currentQuestion?.id ?? 'r${_currentRound}_q$_questionIndex';
+    final alreadyRevealed = _isTimerExpired || _isInterQuestionPhase;
+    if (!alreadyRevealed && _lastAnswerRevealSoundQuestionId != currentQId) {
+      _lastAnswerRevealSoundQuestionId = currentQId;
+      SoundService.playSound('clapping_fanfare');
+      // SoundService.playSound('buzz');
+    }
     _timer?.cancel();
     _interQuestionTimer?.cancel();
+
+    final isRoundEndingQuestion = _questionIndex > 0 && (_questionIndex % _totalQuestionsInRound == 0);
+    if (isRoundEndingQuestion) {
+      if (GameEngineManager.instance.isEngineRunning) {
+        GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
+      } else {
+        _completeRoundAutonomously();
+      }
+      return;
+    }
 
     final mode = payload?['game_play_mode'] as String? ?? 'Auto';
     final nextStartsAt = (payload?['next_question_starts_at_epoch_ms'] as int?) ??
@@ -847,42 +1064,45 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
     if (sorted.isNotEmpty) {
       final winner = sorted.first;
-      final newScore = winner.score + 20;
-      SupabaseService.updatePlayerScoreDirectly(
-        roomCode: _displayRoomCode,
-        nickname: winner.nickname,
-        score: newScore,
-      );
-      _supabaseService.updateLocalPlayerScore(
-        roomCode: _displayRoomCode,
-        nickname: winner.nickname,
-        score: newScore,
-        pointsToAdd: 20,
-      );
-      final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
-      if (wIdx >= 0) {
-        sorted[wIdx] = Player(
-          id: winner.id,
-          playerUid: winner.playerUid,
-          roomCode: winner.roomCode,
+      // Strictly only award round bonus if winner scored points (> 0) and GameEngine hasn't already awarded it
+      if (winner.score > 0 && !GameEngineManager.instance.isEngineRunning) {
+        final newScore = winner.score + 20;
+        SupabaseService.updatePlayerScoreDirectly(
+          roomCode: _displayRoomCode,
           nickname: winner.nickname,
-          cumulativeScore: newScore,
-          isConnected: winner.isConnected,
+          score: newScore,
+        );
+        _supabaseService.updateLocalPlayerScore(
+          roomCode: _displayRoomCode,
+          nickname: winner.nickname,
+          score: newScore,
+          pointsToAdd: 20,
+        );
+        final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
+        if (wIdx >= 0) {
+          sorted[wIdx] = Player(
+            id: winner.id,
+            playerUid: winner.playerUid,
+            roomCode: winner.roomCode,
+            nickname: winner.nickname,
+            cumulativeScore: newScore,
+            isConnected: winner.isConnected,
+          );
+        }
+        sorted.sort((a, b) => b.score.compareTo(a.score));
+        _leaderboard = sorted;
+
+        _realtimeService.broadcastPlayerScoreUpdated(
+          roomCode: _displayRoomCode,
+          nickname: winner.nickname,
+          score: newScore,
+          pointsEarned: 20,
+        );
+        _realtimeService.broadcastLeaderboardUpdated(
+          roomCode: _displayRoomCode,
+          players: SupabaseService.getLocalPlayersJson(_displayRoomCode),
         );
       }
-      sorted.sort((a, b) => b.score.compareTo(a.score));
-      _leaderboard = sorted;
-
-      _realtimeService.broadcastPlayerScoreUpdated(
-        roomCode: _displayRoomCode,
-        nickname: winner.nickname,
-        score: newScore,
-        pointsEarned: 20,
-      );
-      _realtimeService.broadcastLeaderboardUpdated(
-        roomCode: _displayRoomCode,
-        players: SupabaseService.getLocalPlayersJson(_displayRoomCode),
-      );
     }
 
     final winners = sorted.take(3).map((p) => {
@@ -894,7 +1114,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final currIdx = allGenres.indexOf(_activeGenre);
     final nextGenre = allGenres[(currIdx + 1) % allGenres.length];
     final nextRound = _currentRound + 1;
-    final nextStartsAt = DateTime.now().millisecondsSinceEpoch + 15000;
+    final interRoundSec = _interRoundDurationSeconds > 0 ? _interRoundDurationSeconds : 120;
+    final nextStartsAt = DateTime.now().millisecondsSinceEpoch + (interRoundSec * 1000);
 
     setState(() {
       _currentQuestion = null;
@@ -915,6 +1136,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         top3Winners: winners,
         roundNumber: nextRound,
         nextRoundStartsAtEpochMs: nextStartsAt,
+        delaySeconds: interRoundSec,
       );
     } catch (e) {
       debugPrint('[TV] Autocomplete round broadcast error: $e');
@@ -927,13 +1149,29 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         'current_round': nextRound,
         'round_number': nextRound,
         'current_question_index': (nextRound - 1) * _totalQuestionsInRound,
+        'duration_seconds': interRoundSec,
+        'starts_at': nextStartsAt,
+        'timer_ends_at': nextStartsAt,
         'genre': nextGenre,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code');
     } catch (_) {}
 
-    Timer(const Duration(seconds: 15), () {
+    // Display Top 3 Winners overlay for 20 seconds, then dismiss so ad signage displays uncovered
+    final winnerDisplaySec = interRoundSec > 20 ? 20 : interRoundSec;
+    _roundWinnersOverlayTimer?.cancel();
+    _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
       if (mounted && _showRoundWinnersOverlay) {
+        setState(() {
+          _showRoundWinnersOverlay = false;
+        });
+      }
+    });
+
+    // Run the full intermission between rounds (e.g. 2 minutes / 120s) displaying ad signage uncovered
+    _interRoundCountdownTimer?.cancel();
+    _interRoundCountdownTimer = Timer(Duration(seconds: interRoundSec), () {
+      if (mounted) {
         setState(() {
           _showRoundWinnersOverlay = false;
           _isTimerExpired = false;
@@ -944,6 +1182,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _startPreGameTimer();
       }
     });
+    _startAdSlideTimer();
   }
 
   void _advanceNextQuestionAutonomously() async {
@@ -997,6 +1236,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       debugPrint('[TV] Safety Net broadcast error: $e');
     }
 
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (mounted && _isGameActive && _questionIndex == nextIndex) {
+        _realtimeService.broadcastQuestion(
+          roomCode: _displayRoomCode,
+          questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + nextIndex,
+          question: question,
+          durationSeconds: duration,
+          timerEndsAtEpochMs: timerEndsAtEpochMs,
+          roundNumber: _currentRound,
+          totalQuestions: _totalQuestionsInRound,
+        );
+      }
+    });
+
     try {
       await SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': _displayRoomCode,
@@ -1019,6 +1272,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _timer?.cancel();
     _preGameTimer?.cancel();
     _adSlideTimer?.cancel();
+    _roundWinnersOverlayTimer?.cancel();
+    _interRoundCountdownTimer?.cancel();
     _realtimeService.leaveChannel();
     super.dispose();
   }
@@ -1665,13 +1920,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
                   // Main TV Stage Grid: Live Round / Paused / Resuming OR Pre-Game Countdown OR Official 4-Page Advertisement Carousel
                   Expanded(
-                    child: (_isGameActive || _isGamePaused || _isResumeCountdownActive)
-                        ? _buildLiveStageGrid()
-                        : (_isPreGameCountdown
-                            ? _buildPreGameCountdownScreen()
-                            : (_isAdSignageModeActive
-                                ? _buildFullscreenSignageDisplay()
-                                : _buildOfficial4PageAdCarousel())),
+                    child: (_isGamePaused && _isAdSignageModeActive)
+                        ? _buildFullscreenSignageDisplay()
+                        : ((_isGameActive || _isGamePaused || _isResumeCountdownActive)
+                            ? _buildLiveStageGrid()
+                            : (_isPreGameCountdown
+                                ? _buildPreGameCountdownScreen()
+                                : (_isAdSignageModeActive
+                                    ? _buildFullscreenSignageDisplay()
+                                    : _buildOfficial4PageAdCarousel()))),
                   ),
                 ],
               ),
@@ -1720,6 +1977,38 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
                             color: Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonCyan.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: AppTheme.neonCyan, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.neonCyan.withOpacity(0.3),
+                                blurRadius: 16,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.timer_rounded, color: AppTheme.neonCyan, size: 22),
+                              const SizedBox(width: 8),
+                              Text(
+                                'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundDurationSeconds)}',
+                                style: const TextStyle(
+                                  color: AppTheme.neonCyan,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -1969,94 +2258,861 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 duration: const Duration(milliseconds: 700),
                 switchInCurve: Curves.easeInOut,
                 switchOutCurve: Curves.easeInOut,
-                layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: <Widget>[
-                      ...previousChildren,
-                      if (currentChild != null) currentChild,
-                    ],
-                  );
-                },
                 transitionBuilder: (Widget child, Animation<double> animation) {
                   return FadeTransition(opacity: animation, child: child);
                 },
-                child: SizedBox.expand(
+                child: KeyedSubtree(
                   key: ValueKey(_adSlideIndex),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 24.0),
-                    child: _buildAdSlideContent(_adSlideIndex),
-                  ),
-                ),
-              ),
-            ),
-
-            // Top Slide Progress Track
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 6,
-                color: Colors.white.withOpacity(0.08),
-                alignment: Alignment.centerLeft,
-                child: TweenAnimationBuilder<double>(
-                  key: ValueKey(_adSlideIndex),
-                  tween: Tween<double>(begin: 0.0, end: 1.0),
-                  duration: const Duration(seconds: 15),
-                  builder: (context, val, child) {
-                    return FractionallySizedBox(
-                      widthFactor: val,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [AppTheme.neonCyan, AppTheme.neonPurple],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            // Bottom Signage Mode Pill Indicator & Ad Counter
-            Positioned(
-              bottom: 18,
-              left: 24,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.darkBackground.withOpacity(0.92),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.35),
-                      blurRadius: 14,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'AD DISPLAY SIGNAGE MODE • AD ${_adSlideIndex + 1} OF 4',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ],
+                  child: _buildFullscreenAdSlide(_adSlideIndex),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Selects the appropriate rich full-screen advertisement poster for Signage Mode.
+  /// If host has uploaded custom slides, rotates between the default official game ad
+  /// (at index 0) and each custom slide (at indices 1..N).
+  /// If no slides are uploaded, only the official default ad is displayed.
+  Widget _buildFullscreenAdSlide(int index) {
+    if (_customAdSlides.isNotEmpty) {
+      if (index == 0) {
+        return _buildFullscreenSlide0();
+      }
+      final customIdx = index - 1;
+      if (customIdx >= 0 && customIdx < _customAdSlides.length) {
+        return _buildCustomAdSlide(_customAdSlides[customIdx]);
+      }
+    }
+    // Default ad for this game
+    return _buildFullscreenSlide0();
+  }
+
+  /// Signage Slide 0: Official Bar Rooms Trivia App & Home Party Flyer
+  Widget _buildFullscreenSlide0() {
+    final playUrl = _getPlayUrl();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                ),
+                child: const Text(
+                  '⚡ OFFICIAL BAR & HOME TRIVIA APP ⚡',
+                  style: TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Text(
+                  'PLAY ON ANY DEVICE • NO DOWNLOAD REQUIRED',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'BAR ROOMS TRIVIA',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                  shadows: [
+                    Shadow(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.neonYellow,
+                      letterSpacing: 1,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 54,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '📱',
+                          'PLAY ON ANY PHONE',
+                          AppTheme.neonCyan,
+                          'No app download needed for players! Guests scan the TV QR code with their mobile cameras to buzz in and play instantly.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '🎯',
+                          '30+ TRIVIA GENRES',
+                          AppTheme.neonGreen,
+                          'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions!',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '⚡',
+                          'REAL-TIME MULTIPLAYER',
+                          AppTheme.neonCyan,
+                          'Instant 20s countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '🤖',
+                          'AUTOMATED GAME HOST',
+                          AppTheme.neonPurple,
+                          'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '🏆',
+                          'LIVE TV LEADERBOARD',
+                          AppTheme.neonYellow,
+                          'Standings update in real-time on the big screen! Watch players climb the ranks with speed bonuses and round bonuses.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: _buildSignageFeatureCard(
+                          '🏠',
+                          'PERFECT FOR PARTIES',
+                          AppTheme.neonYellow,
+                          'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 42,
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 62,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.neonGreen),
+                              ),
+                              child: const Text(
+                                '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES',
+                                style: TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.w900, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Text(
+                          'BRING THE EXCITEMENT OF PUB TRIVIA HOME!',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white),
+                        ),
+                        const Text(
+                          'No pens, no paper sheets! Hook up any smart TV or tablet, gather friends & family, and start playing in under 60 seconds.',
+                          style: TextStyle(fontSize: 12.5, color: Colors.white70),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const Text(
+                          '★ Compatible with any Smart TV, Projector, Laptop, Tablet, Android Phone & iPhone ★',
+                          style: TextStyle(fontSize: 11.5, color: Colors.white60, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 38,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black38,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppTheme.neonYellow.withValues(alpha: 0.5), width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: QrImageView(
+                            data: playUrl,
+                            version: QrVersions.auto,
+                            size: 80,
+                            backgroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                'SCAN TO JOIN NOW',
+                                style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'ROOM: $_displayRoomCode',
+                                style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 17, letterSpacing: 2),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Search "Bar Rooms Trivia" on Google Play Store',
+                                style: TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Renders a host-uploaded custom advertisement slide (Base64 image or network URL)
+  Widget _buildCustomAdSlide(Map<String, dynamic> slide) {
+    final playUrl = _getPlayUrl();
+    final dataUrl = slide['dataUrl']?.toString() ?? slide['url']?.toString() ?? '';
+    final slideName = slide['name']?.toString() ?? 'VENUE AD';
+
+    Uint8List? imageBytes;
+    if (dataUrl.startsWith('data:image')) {
+      try {
+        final commaIdx = dataUrl.indexOf(',');
+        if (commaIdx != -1) {
+          final b64 = dataUrl.substring(commaIdx + 1);
+          imageBytes = base64Decode(b64);
+        }
+      } catch (_) {}
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 16, 28, 56),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header Venue Tag
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                ),
+                child: Text(
+                  '📢 ${slideName.toUpperCase()} 📢',
+                  style: const TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 1.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Text(
+                'FEATURED VENUE PROMOTION',
+                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Main Slide Image Display
+          Expanded(
+            flex: 74,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
+                ),
+                child: imageBytes != null
+                    ? Image.memory(
+                        imageBytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
+                      )
+                    : (dataUrl.startsWith('http')
+                        ? Image.network(
+                            dataUrl,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
+                          )
+                        : _buildSlideImageFallback(slideName)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Bottom Join Banner with QR code
+          Expanded(
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO PLAY BAR ROOMS TRIVIA FROM YOUR TABLE!'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlideImageFallback(String title) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.campaign_rounded, size: 64, color: AppTheme.neonCyan),
+          const SizedBox(height: 12),
+          Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Signage Slide 2: 3 Easy Steps to Play (Smartphone Walkthrough Poster)
+  Widget _buildFullscreenSlide2() {
+    final playUrl = _getPlayUrl();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                ),
+                child: const Text(
+                  '📱 100% FREE TO PLAY • NO APP DOWNLOAD REQUIRED 📱',
+                  style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5),
+                ),
+              ),
+              const Text(
+                'FAST & EASY SETUP',
+                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'HOW TO PLAY ON YOUR MOBILE PHONE',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2,
+              shadows: [
+                Shadow(color: AppTheme.neonCyan.withValues(alpha: 0.6), blurRadius: 18),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'JOIN THE GAME SHOW IN UNDER 30 SECONDS RIGHT FROM YOUR TABLE!',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 68,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '1',
+                    '📷',
+                    'SCAN THE QR CODE',
+                    AppTheme.neonCyan,
+                    'Point your smartphone camera at the QR code on the TV screen. Tap the link to open Bar Rooms Trivia in your mobile browser immediately.',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '2',
+                    '🏷️',
+                    'CHOOSE NICKNAME',
+                    AppTheme.neonYellow,
+                    'Type your player nickname or team handle. Your name appears instantly on the big screen TV lobby ready for the action!',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '3',
+                    '⏱️',
+                    'BUZZ IN & WIN',
+                    AppTheme.neonGreen,
+                    '4 multiple-choice answers display on your phone. Tap your answer fast! Faster correct answers earn maximum speed bonus points.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'NO APPS TO INSTALL • WORKS ON ANY SMARTPHONE CAMERA'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Signage Slide 3: Live Tournament Leaderboard & Championship Glory Flyer
+  Widget _buildFullscreenSlide3() {
+    final playUrl = _getPlayUrl();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonPurple.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonPurple, width: 1.5),
+                ),
+                child: const Text(
+                  '🏆 REAL-TIME TOURNAMENT & LEADERBOARD 🏆',
+                  style: TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5),
+                ),
+              ),
+              const Text(
+                'LIVE COMPETITIVE SCORING',
+                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'CLIMB THE LIVE TV LEADERBOARD',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2,
+              shadows: [
+                Shadow(color: AppTheme.neonPurple.withValues(alpha: 0.6), blurRadius: 18),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'ACCURACY & LIGHTNING SPEED WIN THE ROUND PODIUM AND GLORY!',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonCyan),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 68,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildVenuePosterCard(
+                    '⚡',
+                    'SPEED MULTIPLIERS',
+                    AppTheme.neonCyan,
+                    'FAST BUZZERS SCORE MORE',
+                    [
+                      'Answer within the first few seconds for max points',
+                      'Every second counts against opposing teams',
+                      'Chain correct answers for streak bonuses',
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildVenuePosterCard(
+                    '🥇',
+                    'ROUND PODIUMS',
+                    AppTheme.neonYellow,
+                    'END-OF-ROUND CELEBRATION',
+                    [
+                      'Top 3 players celebrated on the TV screen',
+                      'Fanfare sound effects and victory animations',
+                      'Live score tallies update in real time',
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildVenuePosterCard(
+                    '👑',
+                    'PUB CHAMPIONS',
+                    AppTheme.neonPurple,
+                    'BECOME THE TRIVIA LEGEND',
+                    [
+                      'Compete against friends and the entire room',
+                      'Show off your general knowledge mastery',
+                      'Claim the #1 spot and win tonight\'s title',
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO JOIN BEFORE THE NEXT QUESTION BEGINS!'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper card for 6-feature grid on Slide 0
+  Widget _buildSignageFeatureCard(String icon, String title, Color color, String desc) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1.2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Text(icon, style: const TextStyle(fontSize: 18)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12.5, letterSpacing: 0.8),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  desc,
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.2),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper card for venue food/drinks/prizes poster cards
+  Widget _buildVenuePosterCard(String icon, String badge, Color color, String title, List<String> bulletPoints) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 16, spreadRadius: 1),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withValues(alpha: 0.5)),
+                ),
+                child: Text(icon, style: const TextStyle(fontSize: 22)),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 10.5, letterSpacing: 1),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.8),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: bulletPoints.map((pt) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('• ', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Expanded(
+                      child: Text(
+                        pt,
+                        style: const TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.2),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper card for 3 step cards on Slide 2
+  Widget _buildSignageStepCard(String stepNum, String icon, String title, Color color, String desc) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 16, spreadRadius: 1),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'STEP $stepNum',
+                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1),
+                ),
+              ),
+              Text(icon, style: const TextStyle(fontSize: 24)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 0.8),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Text(
+              desc,
+              style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper banner for bottom of Slides 1, 2, and 3
+  Widget _buildSignageBottomJoinBanner(String playUrl, String hookText) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black38,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: QrImageView(
+              data: playUrl,
+              version: QrVersions.auto,
+              size: 55,
+              backgroundColor: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  hookText,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Text('ROOM: ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text(
+                      _displayRoomCode,
+                      style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
+                    ),
+                    const SizedBox(width: 14),
+                    const Text('•  Scan with phone camera to join instantly!', style: TextStyle(color: AppTheme.neonCyan, fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mini colored tag chip
+  Widget _buildMiniTag(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 10),
       ),
     );
   }
@@ -2508,15 +3564,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     TimerRing(
                       size: 58,
                       progress: _isInterQuestionPhase
-                          ? (_interQuestionSecondsRemaining / (_totalInterQuestionDuration > 0 ? _totalInterQuestionDuration : 15.0)).clamp(0.0, 1.0)
-                          : progress,
+                          ? (_gamePlayMode == 'Manual'
+                              ? 1.0
+                              : (_interQuestionSecondsRemaining / (_totalInterQuestionDuration > 0 ? _totalInterQuestionDuration : 15.0)).clamp(0.0, 1.0))
+                          : (!_isQuestionTimerRunning ? 1.0 : progress),
                       remainingSeconds: _isInterQuestionPhase
-                          ? _interQuestionSecondsRemaining
-                          : _remainingSeconds,
+                          ? (_gamePlayMode == 'Manual' ? 0 : _interQuestionSecondsRemaining)
+                          : (!_isQuestionTimerRunning ? _totalDuration : _remainingSeconds),
                       label: _isInterQuestionPhase
                           ? (_gamePlayMode == 'Manual' ? 'WAIT HOST' : 'Next Question')
-                          : 'SECONDS',
-                      customColor: _isInterQuestionPhase ? AppTheme.neonCyan : null,
+                          : (!_isQuestionTimerRunning ? 'READY' : 'SECONDS'),
+                      customColor: _isInterQuestionPhase
+                          ? AppTheme.neonCyan
+                          : (!_isQuestionTimerRunning ? AppTheme.neonGreen : null),
                     ),
                   ],
                 ),

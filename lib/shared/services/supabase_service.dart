@@ -360,6 +360,14 @@ class SupabaseService {
             onConflict: 'room_code, player_uid',
           )
           .timeout(const Duration(milliseconds: 600));
+
+      // Also ensure any existing DB record with matching nickname and room starts at 0
+      await _client
+          .from('players')
+          .update({'cumulative_score': 0, 'is_connected': true})
+          .eq('room_code', normRoom)
+          .ilike('nickname', nickname)
+          .timeout(const Duration(milliseconds: 600));
     } catch (_) {}
   }
 
@@ -505,11 +513,14 @@ class SupabaseService {
       if (validPlayers.isNotEmpty) {
         validPlayers.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
         final winner = validPlayers.first;
-        updatePlayerScoreDirectly(
-          roomCode: normRoom,
-          nickname: winner.nickname,
-          score: winner.cumulativeScore + bonusPoints,
-        );
+        // Strictly only award round bonus if the winner actually scored points (> 0)
+        if (winner.cumulativeScore > 0) {
+          updatePlayerScoreDirectly(
+            roomCode: normRoom,
+            nickname: winner.nickname,
+            score: winner.cumulativeScore + bonusPoints,
+          );
+        }
       }
     }
     return getTop3RoundWinners(roomCode);
@@ -621,7 +632,7 @@ class SupabaseService {
       final res = await _client
           .from('players')
           .select()
-          .or('room_code.eq.$normRoom,room_code.eq.TRIV')
+          .eq('room_code', normRoom)
           .order('cumulative_score', ascending: false)
           .timeout(const Duration(milliseconds: 350));
       if (res.isNotEmpty) {

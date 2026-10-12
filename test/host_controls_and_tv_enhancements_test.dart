@@ -229,5 +229,102 @@ void main() {
       expect(mainJsContent.contains('linearRampToValueAtTime'), isTrue,
           reason: 'Web client must use stable linear ramps to prevent IndexSizeError');
     });
+
+    test('17. Host Sound Effects toggle synchronizes and mutes TV display sounds', () {
+      final hostContent = File('lib/host/views/host_dashboard_view.dart').readAsStringSync();
+      final soundServiceContent = File('lib/shared/services/sound_service.dart').readAsStringSync();
+      final realtimeContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
+
+      // SoundService master toggle verification
+      expect(soundServiceContent.contains('static bool isSoundEffectsEnabled = true;'), isTrue,
+          reason: 'SoundService must have static isSoundEffectsEnabled master flag');
+      expect(soundServiceContent.contains('if (!isSoundEffectsEnabled) return;'), isTrue,
+          reason: 'SoundService.playSound must immediately return if sound effects are disabled');
+
+      // RealtimeService broadcast and listener verification
+      expect(realtimeContent.contains('broadcastSoundEffectsToggled'), isTrue,
+          reason: 'RealtimeService must implement broadcastSoundEffectsToggled');
+      expect(realtimeContent.contains('onSoundEffectsToggledBroadcast'), isTrue,
+          reason: 'RealtimeService.joinRoomChannel must support onSoundEffectsToggledBroadcast');
+
+      // Host Dashboard verification
+      expect(hostContent.contains('_buildSoundEffectsModeSwitch()'), isTrue,
+          reason: 'Host Dashboard must build the Game Sound Effects toggle switch');
+      expect(hostContent.contains('GAME SOUND EFFECTS'), isTrue,
+          reason: 'Host Dashboard switch must display GAME SOUND EFFECTS label');
+      expect(hostContent.contains('broadcastSoundEffectsToggled'), isTrue,
+          reason: 'Host Dashboard must broadcast sound effects toggle');
+
+      // TV Display verification
+      expect(tvDisplayContent.contains('_isSoundEffectsEnabled'), isTrue,
+          reason: 'TV Display must track _isSoundEffectsEnabled state');
+      expect(tvDisplayContent.contains('onSoundEffectsToggledBroadcast:'), isTrue,
+          reason: 'TV Display must listen to onSoundEffectsToggledBroadcast');
+      expect(tvDisplayContent.contains("res.containsKey('is_sound_effects_enabled')"), isTrue,
+          reason: 'TV Display must poll is_sound_effects_enabled from game_sessions');
+
+      // Web verification
+      expect(mainJsContent.contains("is_sound_effects_enabled: isSoundEffectsEnabled"), isTrue,
+          reason: 'Web setSoundEffectsEnabled must persist is_sound_effects_enabled to game_sessions');
+      expect(mainJsContent.contains("broadcastRealtimeEvent('sound_effects_toggled'"), isTrue,
+          reason: 'Web client must broadcast sound_effects_toggled');
+    });
+
+    test('11. Game pause and re-play resumes where left off without restarting round', () {
+      final gameEngineContent = File('lib/shared/services/game_engine.dart').readAsStringSync();
+      final realtimeContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
+
+      // Web main.js verification
+      expect(mainJsContent.contains('function pauseGameEngine()'), isTrue,
+          reason: 'main.js must define pauseGameEngine()');
+      expect(mainJsContent.contains('function resumeGameEngine()'), isTrue,
+          reason: 'main.js must define resumeGameEngine()');
+      expect(mainJsContent.contains('pausedRemainingQuestionSeconds'), isTrue,
+          reason: 'main.js must preserve pausedRemainingQuestionSeconds');
+      expect(mainJsContent.contains('pausedHostEngineState'), isTrue,
+          reason: 'main.js must preserve pausedHostEngineState');
+      expect(mainJsContent.contains("currentGameState === 'PAUSED'") && mainJsContent.contains("resumeGameEngine();"), isTrue,
+          reason: 'Host controls must track paused state and resume where left off via resumeGameEngine');
+
+      // TV Display verification
+      expect(tvDisplayContent.contains('!_isGamePaused &&'), isTrue,
+          reason: 'tv_display_view must not echo-ignore resumed questions');
+      expect(tvDisplayContent.contains('_remainingSeconds = ((_targetTimerEndsAtMs! - now) / 1000).ceil()'), isTrue,
+          reason: 'tv_display_view must capture remaining seconds on pause');
+
+      // Flutter GameEngine and RealtimeService verification
+      expect(gameEngineContent.contains('_resumeCurrentQuestion'), isTrue,
+          reason: 'GameEngine must implement _resumeCurrentQuestion');
+      expect(gameEngineContent.contains('currentQuestionIndex >= 10'), isTrue,
+          reason: '_resumeCurrentQuestion must handle round completion when question 10 is resumed');
+      expect(realtimeContent.contains("'status': 'paused'"), isTrue,
+          reason: 'RealtimeService broadcastGamePaused must upsert paused status to game_sessions');
+      expect(realtimeContent.contains("'status': 'resuming'"), isTrue,
+          reason: 'RealtimeService broadcastGameResuming must upsert resuming status to game_sessions');
+    });
+
+    test('12. Host Controls Start Game button is greyed out and not functional when game is paused', () {
+      final hostContent = File('lib/host/views/host_dashboard_view.dart').readAsStringSync();
+      final freshMainJs = File('src/main.js').readAsStringSync();
+
+      // Web main.js verification
+      expect(freshMainJs.contains('const shouldDisableStart = isRunning || isPaused;'), isTrue,
+          reason: 'updateHostEngineUI must disable Start Game button when game is running or paused');
+      expect(freshMainJs.contains('btnStartAuto.disabled = shouldDisableStart;'), isTrue,
+          reason: 'btnStartAuto.disabled must be set to shouldDisableStart');
+      expect(freshMainJs.contains("btnStartAuto.classList.add('disabled', 'btn-greyed-out');"), isTrue,
+          reason: 'btnStartAuto must receive disabled and btn-greyed-out classes when paused');
+      expect(freshMainJs.contains("if (isAutomatedEngineRunning || currentGameState === 'PAUSED')"), isTrue,
+          reason: 'btnStartAuto click listener must return early and be non-functional when paused');
+
+      // Flutter host_dashboard_view.dart verification
+      expect(hostContent.contains('final bool isStartDisabled = _isEngineRunning || _isPreGameCountdownActive || isPaused;'), isTrue,
+          reason: 'Flutter host must compute isStartDisabled including isPaused');
+      expect(hostContent.contains('onPressed: isStartDisabled ? null : _handleStartOrToggleGame'), isTrue,
+          reason: 'Flutter host Start Game button must be disabled (null onPressed) when paused');
+      expect(hostContent.contains('_resumeGameEngine') && hostContent.contains('RESUME GAME'), isTrue,
+          reason: 'Flutter host Resume button must handle resuming when game is paused');
+    });
   });
 }
+

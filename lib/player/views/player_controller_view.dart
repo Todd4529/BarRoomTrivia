@@ -57,12 +57,16 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   int _interQuestionSecondsRemaining = 30;
   Timer? _interQuestionTimer;
   String _gamePlayMode = 'Auto';
+  bool _isQuestionTimerRunning = true;
   bool _isScoredForThisQuestion = false;
+  bool _wasCurrentQuestionCorrect = false;
+  String? _lastGradedQuestionKey;
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   bool _isInterRoundPhase = false;
   int _interRoundSecondsRemaining = 15;
   Timer? _interRoundTimer;
+  Timer? _roundWinnersOverlayTimer;
   bool _showResultOverlay = false;
   Timer? _resultOverlayTimer;
   Timer? _playerSessionPollingTimer;
@@ -159,9 +163,17 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             payload['timerEndsAtMs'] ??
             payload['timer_ends_at'] ??
             payload['timerEndsAtEpochMs'];
-        final timerEndsAtEpochMs = (rawTimerEnds is num)
-            ? rawTimerEnds.toInt()
-            : int.tryParse('$rawTimerEnds');
+        int? timerEndsAtEpochMs;
+        if (rawTimerEnds is num) {
+          timerEndsAtEpochMs = rawTimerEnds.toInt();
+        } else if (rawTimerEnds is String) {
+          final dt = DateTime.tryParse(rawTimerEnds);
+          if (dt != null) {
+            timerEndsAtEpochMs = dt.millisecondsSinceEpoch;
+          } else {
+            timerEndsAtEpochMs = int.tryParse(rawTimerEnds);
+          }
+        }
         final qIndex = (payload['question_index'] as num?)?.toInt() ?? 1;
 
         Question? question;
@@ -187,23 +199,38 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               (payload['time_limit_seconds'] as num?)?.toInt() ??
               20;
 
-          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+          final mode = (payload['game_play_mode'] ?? payload['gamePlayMode'])?.toString() ?? _gamePlayMode;
+          _gamePlayMode = mode;
+          final timerState = payload['timer_state']?.toString();
+          final questionPhase = payload['question_phase']?.toString();
+          final isIdleTimer = timerState == 'idle' || questionPhase == 'reading';
+
+          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
               ? timerEndsAtEpochMs
               : (nowMs + fallbackDuration * 1000);
-          _targetTimerEndsAtMs = targetEndsAt;
+          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
 
           final remainingMs = targetEndsAt - nowMs;
-          int durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
-
-          // Check if this broadcast is simply a state-sync or re-broadcast of the active question
-          final isSameQuestion = _currentQuestion != null &&
-              (_currentQuestion!.id == question.id ||
-                  (_currentQuestion!.questionText.isNotEmpty &&
-                      _currentQuestion!.questionText == question.questionText));
+          int durationSec = isIdleTimer ? fallbackDuration : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
 
           final qNumInRound = (payload['question_number_in_round'] as num?)?.toInt() ??
               (payload['questionNumberInRound'] as num?)?.toInt() ??
               (((qIndex - 1) % 10) + 1);
+
+          final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
+              (payload['roundNumber'] as num?)?.toInt() ??
+              (payload['current_round'] as num?)?.toInt();
+          final incomingRound = (rFromPayload != null && rFromPayload > 0) ? rFromPayload : _currentRound;
+
+          // Check if this broadcast is simply a state-sync or re-broadcast of the active question
+          final isSameRound = incomingRound == _currentRound;
+          final isSameIndex = qNumInRound == _questionNumberInRound;
+          final isSameQuestion = isSameRound &&
+              isSameIndex &&
+              _currentQuestion != null &&
+              (_currentQuestion!.id == question.id ||
+                  (_currentQuestion!.questionText.isNotEmpty &&
+                      _currentQuestion!.questionText == question.questionText));
 
           if (isSameQuestion && _selectedOption != null) {
             // Player already locked in their answer! Keep their answer and locked inputs intact.
@@ -211,15 +238,30 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               _isGamePaused = false;
               _isResumeCountdownActive = false;
               _remainingSeconds = durationSec;
-              final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
-                  (payload['roundNumber'] as num?)?.toInt() ??
-                  (payload['current_round'] as num?)?.toInt();
-              if (rFromPayload != null && rFromPayload > 0) {
-                _currentRound = rFromPayload;
-              }
+              _isQuestionTimerRunning = !isIdleTimer;
+              _currentRound = incomingRound;
               _questionNumberInRound = qNumInRound;
             });
             return;
+          }
+
+          if (isSameQuestion && (_isReviewPhase || _showResultOverlay)) {
+            // Player is currently reviewing the exact same question.
+            return;
+          }
+
+          if (!isSameQuestion) {
+            // A NEW question has arrived! Cancel all review and transition overlays immediately.
+            _resultOverlayTimer?.cancel();
+            _interQuestionTimer?.cancel();
+            _interRoundTimer?.cancel();
+          }
+
+          if (_isInterRoundPhase || _showRoundWinnersOverlay) {
+            if (incomingRound <= _currentRound && isSameIndex) {
+              // Ignore stale question event during intermission
+              return;
+            }
           }
 
           _questionStartedAt = DateTime.now();
@@ -242,6 +284,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _inputsLocked = false;
             _isReviewPhase = false;
             _isScoredForThisQuestion = false;
+            _isQuestionTimerRunning = !isIdleTimer;
             final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
                 (payload['roundNumber'] as num?)?.toInt() ??
                 (payload['current_round'] as num?)?.toInt();
@@ -252,18 +295,71 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _questionNumberInRound = qNumInRound;
           });
 
-          _startLocalCountdown();
+          if (!isIdleTimer) {
+            _startLocalCountdown();
+          }
         }
+      },
+      onManualTimerStartedBroadcast: (payload) {
+        if (!mounted || _currentQuestion == null) return;
+        final rawEndsAt = payload['timer_ends_at_epoch_ms'] ?? payload['timerEndsAtMs'] ?? payload['timer_ends_at'];
+        int? timerEndsAtEpochMs;
+        if (rawEndsAt is num) {
+          timerEndsAtEpochMs = rawEndsAt.toInt();
+        } else if (rawEndsAt is String) {
+          final dt = DateTime.tryParse(rawEndsAt);
+          if (dt != null) {
+            timerEndsAtEpochMs = dt.millisecondsSinceEpoch;
+          } else {
+            timerEndsAtEpochMs = int.tryParse(rawEndsAt);
+          }
+        }
+        final duration = (payload['duration_seconds'] as num?)?.toInt() ?? _remainingSeconds;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs)
+            ? timerEndsAtEpochMs
+            : (nowMs + duration * 1000);
+
+        _targetTimerEndsAtMs = targetEndsAt;
+        final remSec = max(0, ((targetEndsAt - nowMs) / 1000).ceil().clamp(0, 180));
+
+        setState(() {
+          _remainingSeconds = remSec;
+          _isQuestionTimerRunning = true;
+          _isInterQuestionPhase = false;
+          _isReviewPhase = false;
+        });
+
+        _startLocalCountdown();
       },
       onTimerExpiredBroadcast: (payload) {
         _lockInputsAndReveal(payload['correct_option'] as String?);
 
         final mode = payload['game_play_mode'] as String? ?? 'Auto';
-        final nextStartsAt = (payload['next_question_starts_at_epoch_ms'] as int?) ??
-            (payload['nextQuestionStartsAtEpochMs'] as int?) ??
-            (DateTime.now().millisecondsSinceEpoch + 15000);
+        final rawNext = payload['next_question_starts_at_epoch_ms'] ?? payload['nextQuestionStartsAtEpochMs'];
+        int? nextStartsAt;
+        if (rawNext is num) {
+          nextStartsAt = rawNext.toInt();
+        } else if (rawNext is String) {
+          final dt = DateTime.tryParse(rawNext);
+          nextStartsAt = dt != null ? dt.millisecondsSinceEpoch : int.tryParse(rawNext);
+        }
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        final remaining = ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 15);
+        final targetNext = (nextStartsAt != null && nextStartsAt > nowMs)
+            ? nextStartsAt
+            : (nowMs + 15000);
+        final remaining = max(0, ((targetNext - nowMs) / 1000).ceil().clamp(0, 30));
+
+        final isLastQuestion = _questionNumberInRound == 10;
+        if (isLastQuestion) {
+          _interQuestionTimer?.cancel();
+          setState(() {
+            _isInterQuestionPhase = false;
+            _interQuestionSecondsRemaining = 0;
+            _gamePlayMode = mode;
+          });
+          return;
+        }
 
         setState(() {
           _isInterQuestionPhase = true;
@@ -275,7 +371,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         if (mode == 'Auto') {
           _interQuestionTimer = Timer.periodic(const Duration(milliseconds: 500), (t) {
             final now = DateTime.now().millisecondsSinceEpoch;
-            final rem = ((nextStartsAt - now) / 1000).ceil();
+            final rem = ((targetNext - now) / 1000).ceil();
             if (rem > 0) {
               if (mounted) {
                 if (_interQuestionSecondsRemaining != rem || (rem <= 5 && _showResultOverlay)) {
@@ -294,17 +390,28 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   _isInterQuestionPhase = false;
                   _interQuestionSecondsRemaining = 0;
                   _showResultOverlay = false;
+                  _isReviewPhase = false;
                 });
+                _realtimeService.broadcastSyncRequest(roomCode: _player?.roomCode ?? 'TRIV');
               }
             }
           });
         }
       },
       onPreGameCountdownBroadcast: (payload) {
-        final startsAt = payload['starts_at_epoch_ms'] as int? ?? (DateTime.now().millisecondsSinceEpoch + 30000);
+        final rawStarts = payload['starts_at_epoch_ms'] ?? payload['startsAtMs'];
+        int? startsAt;
+        if (rawStarts is num) {
+          startsAt = rawStarts.toInt();
+        } else if (rawStarts is String) {
+          final dt = DateTime.tryParse(rawStarts);
+          startsAt = dt != null ? dt.millisecondsSinceEpoch : int.tryParse(rawStarts);
+        }
         final now = DateTime.now().millisecondsSinceEpoch;
-        final diffMs = startsAt - now;
-        final remainingSec = (diffMs / 1000).ceil().clamp(1, 30);
+        final targetStartsAt = (startsAt != null && (startsAt - now) > 2000)
+            ? startsAt
+            : (now + 10000);
+        final remainingSec = ((targetStartsAt - now) / 1000).ceil().clamp(1, 30);
         final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt() ??
             (payload['current_round'] as num?)?.toInt();
@@ -377,6 +484,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 _isResumeCountdownActive = false;
                 _inputsLocked = false;
               });
+              _targetTimerEndsAtMs = DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000);
               _startLocalCountdown();
             }
           }
@@ -454,10 +562,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         }
 
         final nextStartsAt = (payload['next_round_starts_at_epoch_ms'] as num?)?.toInt() ??
-            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt();
+            (payload['nextRoundStartsAtEpochMs'] as num?)?.toInt() ??
+            (payload['starts_at_epoch_ms'] as num?)?.toInt();
         final delaySec = nextStartsAt != null
             ? (((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(5, 660))
-            : (payload['delaySeconds'] as num?)?.toInt() ?? 60;
+            : (payload['delaySeconds'] as num?)?.toInt() ??
+                (payload['delay_seconds'] as num?)?.toInt() ??
+                (payload['duration_seconds'] as num?)?.toInt() ??
+                120;
         final completedR = (payload['completed_round'] as num?)?.toInt() ??
             (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt() ??
@@ -510,21 +622,35 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _isScoredForThisQuestion = false;
         });
 
+        // Dismiss Top 3 Winners overlay after 20s so player view shows clean countdown card
+        final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;
+        _roundWinnersOverlayTimer?.cancel();
+        _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
+          if (mounted && _showRoundWinnersOverlay) {
+            setState(() {
+              _showRoundWinnersOverlay = false;
+            });
+          }
+        });
+
+        _interRoundTimer?.cancel();
         _interRoundTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted) {
             timer.cancel();
             return;
           }
-          if (_interRoundSecondsRemaining > 1) {
+          final rem = nextStartsAt != null
+              ? max(0, ((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil())
+              : (_interRoundSecondsRemaining - 1);
+          if (rem > 0) {
             setState(() {
-              _interRoundSecondsRemaining--;
+              _interRoundSecondsRemaining = rem;
             });
           } else {
             timer.cancel();
             if (mounted) {
               setState(() {
                 _interRoundSecondsRemaining = 0;
-                // Keep transition popup active until onQuestionBroadcast starts the next round!
               });
             }
           }
@@ -596,12 +722,51 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       if (!mounted || _player == null) return;
       try {
         final roomCode = _player!.roomCode;
+        final myNick = _player!.nickname.trim();
+
+        // 1. Sync score from local repository or remote Supabase DB if updated (e.g., round winner bonus)
+        final localLeaderboard = SupabaseService.getLocalPlayersJson(roomCode);
+        for (final item in localLeaderboard) {
+          if (item is Map && (item['nickname']?.toString().toLowerCase() == myNick.toLowerCase())) {
+            final rawScore = item['cumulative_score'] ?? item['score'];
+            final s = (rawScore is num) ? rawScore.toInt() : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
+            if (s > _myScore) {
+              if (mounted) {
+                setState(() {
+                  _myScore = s;
+                  _player = _player!.copyWith(cumulativeScore: s);
+                });
+              }
+            }
+            break;
+          }
+        }
+
+        try {
+          final pRow = await SupabaseConfig.client
+              .from('players')
+              .select('cumulative_score')
+              .eq('room_code', roomCode.toUpperCase())
+              .ilike('nickname', myNick)
+              .maybeSingle()
+              .timeout(const Duration(seconds: 2));
+          if (pRow != null && mounted) {
+            final dbScore = (pRow['cumulative_score'] as num?)?.toInt() ?? 0;
+            if (dbScore > _myScore) {
+              setState(() {
+                _myScore = dbScore;
+                _player = _player!.copyWith(cumulativeScore: dbScore);
+              });
+            }
+          }
+        } catch (_) {}
+
         final res = await SupabaseConfig.client
             .from('game_sessions')
             .select()
             .eq('room_code', roomCode)
             .maybeSingle()
-            .timeout(const Duration(seconds: 1));
+            .timeout(const Duration(seconds: 3));
 
         if (res != null && mounted) {
           final status = res['status'] as String?;
@@ -618,7 +783,18 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
 
           if (status == 'question_active') {
-            final timerEndsAt = (res['timer_ends_at'] as num?)?.toInt();
+            final rawEnds = res['timer_ends_at'];
+            int? timerEndsAt;
+            if (rawEnds is num) {
+              timerEndsAt = rawEnds.toInt();
+            } else if (rawEnds is String) {
+              final dt = DateTime.tryParse(rawEnds);
+              if (dt != null) {
+                timerEndsAt = dt.millisecondsSinceEpoch;
+              } else {
+                timerEndsAt = int.tryParse(rawEnds);
+              }
+            }
             final now = DateTime.now().millisecondsSinceEpoch;
             // Only sync active question if timer is not heavily expired
             if (timerEndsAt != null && (now - timerEndsAt) > 60000) {
@@ -626,8 +802,17 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             }
             final qData = res['question_data'] as Map<String, dynamic>?;
             if (qData != null) {
+              if (_isInterRoundPhase || _showRoundWinnersOverlay) {
+                final sessionRound = rNum ?? _currentRound;
+                if (sessionRound <= _currentRound) {
+                  return;
+                }
+              }
               final q = Question.fromJson(qData);
+              final sessionR = rNum ?? _currentRound;
               final isNewQuestion = _currentQuestion == null ||
+                  sessionR != _currentRound ||
+                  calcQNum != _questionNumberInRound ||
                   (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText);
 
               if (isNewQuestion) {
@@ -677,6 +862,18 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               }
             }
           } else if (status == 'round_summary' || status == 'inter_round') {
+            final rawEnds = res['timer_ends_at'] ?? res['starts_at'];
+            int? targetMs;
+            if (rawEnds is num) {
+              targetMs = rawEnds.toInt();
+            } else if (rawEnds is String) {
+              final dt = DateTime.tryParse(rawEnds);
+              if (dt != null) targetMs = dt.millisecondsSinceEpoch;
+            }
+            final remSec = targetMs != null
+                ? (((targetMs - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(1, 660))
+                : ((res['duration_seconds'] as num?)?.toInt() ?? 120);
+
             if (!_isInterRoundPhase && !_showRoundWinnersOverlay) {
               setState(() {
                 _isInterRoundPhase = true;
@@ -684,7 +881,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 _questionNumberInRound = 1;
                 _showRoundWinnersOverlay = true;
                 _inputsLocked = true;
+                _interRoundSecondsRemaining = remSec;
               });
+            } else if (_isInterRoundPhase && targetMs != null) {
+              _interRoundSecondsRemaining = remSec;
             }
           }
         }
@@ -694,6 +894,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   void _startLocalCountdown() {
     _localTimer?.cancel();
+    if (_targetTimerEndsAtMs == null && _remainingSeconds > 0) {
+      _targetTimerEndsAtMs = DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000);
+    }
     _localTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -717,14 +920,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _lockInputsAndReveal(null);
         }
       } else {
-        if (_remainingSeconds > 0) {
-          setState(() {
-            _remainingSeconds--;
-          });
-        } else {
-          timer.cancel();
-          _lockInputsAndReveal(null);
-        }
+        timer.cancel();
+        _lockInputsAndReveal(null);
       }
     });
   }
@@ -748,10 +945,18 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   void _lockInputsAndReveal(String? serverCorrectOption) {
     if (mounted) {
-      final correct = serverCorrectOption ?? _currentQuestion?.correctOption;
-      final wasCorrect = _selectedOption != null &&
+      final currentQKey = _currentQuestion?.id ?? '${_currentRound}_$_questionNumberInRound';
+      if (_lastGradedQuestionKey == currentQKey && _isScoredForThisQuestion) {
+        // Already evaluated and locked in for this exact question; do not flip result or re-score
+        return;
+      }
+
+      final correct = serverCorrectOption?.trim().toUpperCase() ??
+          _currentQuestion?.correctOption.trim().toUpperCase();
+      final playerChoice = _selectedOption?.trim().toUpperCase();
+      final wasCorrect = playerChoice != null &&
           correct != null &&
-          _selectedOption!.trim().toUpperCase() == correct.trim().toUpperCase();
+          playerChoice == correct;
 
       setState(() {
         _inputsLocked = true;
@@ -759,11 +964,29 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _isInterQuestionPhase = true;
         _showResultOverlay = true;
         _correctOption = correct;
+        _wasCurrentQuestionCorrect = wasCorrect;
+        _lastGradedQuestionKey = currentQKey;
         if (!_isScoredForThisQuestion && wasCorrect) {
           _isScoredForThisQuestion = true;
-          _myScore += 10;
           final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
           final nick = _player?.nickname ?? _nicknameController.text.trim();
+
+          // Incorporate any round winner bonuses (+20) from leaderboard before calculating +10
+          if (room.isNotEmpty && nick.isNotEmpty) {
+            final localPlayers = SupabaseService.getLocalPlayersJson(room);
+            for (final p in localPlayers) {
+              if (p is Map && (p['nickname']?.toString().toLowerCase() == nick.toLowerCase())) {
+                final rawS = p['cumulative_score'] ?? p['score'];
+                final s = (rawS is num) ? rawS.toInt() : (int.tryParse(rawS?.toString() ?? '') ?? 0);
+                if (s > _myScore) {
+                  _myScore = s;
+                }
+                break;
+              }
+            }
+          }
+
+          _myScore += 10;
           if (room.isNotEmpty && nick.isNotEmpty) {
             if (_player != null) {
               _player = _player!.copyWith(cumulativeScore: _myScore);
@@ -841,6 +1064,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     _localTimer?.cancel();
     _interQuestionTimer?.cancel();
     _interRoundTimer?.cancel();
+    _roundWinnersOverlayTimer?.cancel();
     _preGameTimer?.cancel();
     _resumeTimer?.cancel();
     _nicknameController.dispose();
@@ -926,6 +1150,31 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.0,
                                   color: Colors.white70,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.neonCyan.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.timer_rounded, color: AppTheme.neonCyan, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'NEXT ROUND IN ${_interRoundSecondsRemaining >= 60 ? "${_interRoundSecondsRemaining ~/ 60} MINUTES" : "$_interRoundSecondsRemaining SECONDS"}',
+                                      style: const TextStyle(
+                                        color: AppTheme.neonCyan,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 13,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 18),
@@ -1043,7 +1292,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   }
 
   Widget _buildResultOverlay() {
-    final wasCorrect = _selectedOption != null && _selectedOption == _correctOption;
+    final wasCorrect = _wasCurrentQuestionCorrect;
     final correctOpt = _correctOption ?? _currentQuestion?.correctOption ?? 'A';
     String correctText = '';
     if (correctOpt == 'A') {
@@ -1069,7 +1318,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         },
         child: Container(
-          color: Colors.black.withOpacity(0.85),
+          color: Colors.black.withOpacity(0.96),
           alignment: Alignment.center,
           padding: const EdgeInsets.only(top: 126, left: 20, right: 20, bottom: 20),
           child: Stack(
@@ -1087,13 +1336,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                     color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
                     width: 2.5,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (wasCorrect ? const Color(0xFF10B981) : Colors.redAccent).withOpacity(0.35),
-                      blurRadius: 28,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  boxShadow: wasCorrect
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withOpacity(0.35),
+                            blurRadius: 28,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.55),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1931,6 +2188,31 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                         ),
                       ),
                     )
+                  else if (!_isQuestionTimerRunning && !_isReviewPhase)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonGreen.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.6)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.mic_rounded, size: 14, color: AppTheme.neonGreen),
+                          SizedBox(width: 4),
+                          Text(
+                            'HOST READING QUESTION',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              color: AppTheme.neonGreen,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
                   else ...[
                     Icon(
                       _inputsLocked ? Icons.lock : Icons.timer,
@@ -2049,7 +2331,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   : (isSelected ? Colors.white : Colors.transparent),
               width: isCorrect ? 4 : (isSelected ? 3.5 : 1),
             ),
-            boxShadow: (isCorrect || isSelected)
+            boxShadow: ((isCorrect || isSelected) && !_showResultOverlay)
                 ? [
                     BoxShadow(
                       color: bg.withOpacity(0.55),

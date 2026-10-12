@@ -22,12 +22,16 @@ class GameEngineManager {
   int selectedTimerSeconds = 60;
   int currentQuestionIndex = 0;
   int currentRound = 1;
+  int interRoundDurationSeconds = 120;
   List<String> selectedGenres = [];
   String gamePlayMode = 'Auto'; // 'Auto' (default) or 'Manual'
 
   Question? activeQuestion;
   int activeQuestionTimerEndsAtEpochMs = 0;
   int remainingQuestionSeconds = 60;
+  bool isQuestionTimerRunning = false;
+  bool isReviewPhase = false;
+  bool isRoundCompletedWaitingForNext = false;
 
   Timer? _preGameTimer;
   Timer? _questionTimer;
@@ -46,6 +50,9 @@ class GameEngineManager {
     isPreGameCountdownActive = true;
     isGamePaused = false;
     isResumeCountdownActive = false;
+    isQuestionTimerRunning = false;
+    isReviewPhase = false;
+    isRoundCompletedWaitingForNext = false;
     preGameSecondsRemaining = durationSeconds;
 
     final startsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (durationSeconds * 1000);
@@ -80,14 +87,42 @@ class GameEngineManager {
     if (!isEngineRunning) return;
     isGamePaused = false;
     isResumeCountdownActive = false;
+    isReviewPhase = false;
+    isRoundCompletedWaitingForNext = false;
 
     final question = TriviaRepository.getQuestionForGenres(selectedGenres, currentQuestionIndex);
     activeQuestion = question;
-    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (selectedTimerSeconds * 1000);
-    activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
     remainingQuestionSeconds = selectedTimerSeconds;
 
     final cumulativeIndex = ((currentRound - 1) * 10) + currentQuestionIndex + 1;
+
+    if (gamePlayMode == 'Manual') {
+      // In Manual Mode, host starts in READING phase: hold the timer until host triggers 'START TIMER'
+      isQuestionTimerRunning = false;
+      activeQuestionTimerEndsAtEpochMs = 0;
+
+      _realtimeService.broadcastQuestion(
+        roomCode: roomCode,
+        questionIndex: cumulativeIndex,
+        question: question,
+        durationSeconds: selectedTimerSeconds,
+        timerEndsAtEpochMs: 0,
+        roundNumber: currentRound,
+        totalQuestions: 10,
+        gamePlayMode: 'Manual',
+        questionPhase: 'reading',
+        timerState: 'idle',
+      );
+
+      _questionTimer?.cancel();
+      currentQuestionIndex++;
+      return;
+    }
+
+    // In Auto Mode: start countdown immediately
+    isQuestionTimerRunning = true;
+    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (selectedTimerSeconds * 1000);
+    activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
 
     _realtimeService.broadcastQuestion(
       roomCode: roomCode,
@@ -97,6 +132,9 @@ class GameEngineManager {
       timerEndsAtEpochMs: timerEndsAtEpochMs,
       roundNumber: currentRound,
       totalQuestions: 10,
+      gamePlayMode: 'Auto',
+      questionPhase: 'countdown',
+      timerState: 'running',
     );
 
     // Simulate active gameplay for mock players during this question
@@ -109,8 +147,102 @@ class GameEngineManager {
 
     _questionTimer?.cancel();
     _questionTimer = Timer(Duration(seconds: selectedTimerSeconds), () {
-      if (!isEngineRunning) return;
+      _handleQuestionTimerExpiration(roomCode: roomCode, question: question);
+    });
+  }
 
+  /// Manually starts countdown in Manual Mode
+  void startManualTimer({required String roomCode}) {
+    if (!isEngineRunning || activeQuestion == null || isQuestionTimerRunning) return;
+
+    final question = activeQuestion!;
+    isQuestionTimerRunning = true;
+    isReviewPhase = false;
+    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (selectedTimerSeconds * 1000);
+    activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
+    remainingQuestionSeconds = selectedTimerSeconds;
+
+    _realtimeService.broadcastManualTimerStarted(
+      roomCode: roomCode,
+      timerEndsAtEpochMs: timerEndsAtEpochMs,
+      durationSeconds: selectedTimerSeconds,
+      questionIndex: currentQuestionIndex,
+      roundNumber: currentRound,
+    );
+
+    // Simulate mock player answers during manual timer countdown
+    SupabaseService.simulateMockAnswersForQuestion(
+      roomCode: roomCode,
+      correctOption: question.correctOption,
+    );
+
+    _questionTimer?.cancel();
+    _questionTimer = Timer(Duration(seconds: selectedTimerSeconds), () {
+      _handleQuestionTimerExpiration(roomCode: roomCode, question: question);
+    });
+  }
+
+  /// Manually skips or expires the active timer in Manual Mode
+  void expireTimerManual({required String roomCode}) {
+    if (!isEngineRunning || activeQuestion == null) return;
+    _questionTimer?.cancel();
+    _handleQuestionTimerExpiration(roomCode: roomCode, question: activeQuestion!);
+  }
+
+  void _handleQuestionTimerExpiration({required String roomCode, required Question question}) {
+    if (!isEngineRunning) return;
+    isQuestionTimerRunning = false;
+    // Check if 10-question round has completed
+    if (currentQuestionIndex >= 10) {
+      currentQuestionIndex = 0;
+      final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
+      final interRoundSecs = interRoundDurationSeconds > 0 ? interRoundDurationSeconds : 120;
+      final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (interRoundSecs * 1000);
+      final nextRound = currentRound + 1;
+
+      _realtimeService.broadcastRoundCompleted(
+        roomCode: roomCode,
+        top3Winners: top3,
+        roundNumber: currentRound,
+        nextRound: nextRound,
+        nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
+        delaySeconds: interRoundSecs,
+      );
+
+      _realtimeService.broadcastLeaderboardUpdated(
+        roomCode: roomCode,
+        players: SupabaseService.getLocalPlayersJson(roomCode),
+      );
+
+      currentRound = nextRound;
+
+      // Rotate to the next genre for the upcoming round
+      if (selectedGenres.length > 1) {
+        final completedGenre = selectedGenres.removeAt(0);
+        selectedGenres.add(completedGenre);
+      } else if (selectedGenres.isEmpty) {
+        selectedGenres = List.from(TriviaGenres.allGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)'));
+      }
+
+      if (gamePlayMode == 'Auto') {
+        // Schedule inter-round delay before Question 1 of next round in Auto Mode
+        _questionTimer = Timer(Duration(seconds: interRoundSecs), () {
+          if (isEngineRunning) {
+            isEngineRunning = false;
+            startPreGame(
+              roomCode: roomCode,
+              timerSeconds: selectedTimerSeconds,
+              genres: selectedGenres,
+              durationSeconds: 10,
+            );
+          }
+        });
+      } else {
+        // Manual mode: hold on round summary until host taps 'START NEXT ROUND'
+        isRoundCompletedWaitingForNext = true;
+      }
+    } else {
+      isReviewPhase = true;
       final nextQuestionStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
       _realtimeService.broadcastTimerExpired(
         roomCode: roomCode,
@@ -122,49 +254,7 @@ class GameEngineManager {
         roundNumber: currentRound,
       );
 
-      // Check if 10-question round has completed
-      if (currentQuestionIndex >= 10) {
-        currentQuestionIndex = 0;
-        final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
-        final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
-        final nextRound = currentRound + 1;
-
-        _realtimeService.broadcastRoundCompleted(
-          roomCode: roomCode,
-          top3Winners: top3,
-          roundNumber: currentRound,
-          nextRound: nextRound,
-          nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
-        );
-
-        _realtimeService.broadcastLeaderboardUpdated(
-          roomCode: roomCode,
-          players: SupabaseService.getLocalPlayersJson(roomCode),
-        );
-
-        currentRound = nextRound;
-
-        // Rotate to the next genre for the upcoming round
-        if (selectedGenres.length > 1) {
-          final completedGenre = selectedGenres.removeAt(0);
-          selectedGenres.add(completedGenre);
-        } else if (selectedGenres.isEmpty) {
-          selectedGenres = List.from(TriviaGenres.allGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)'));
-        }
-
-        // Schedule inter-round delay before Question 1 of next round
-        _questionTimer = Timer(const Duration(seconds: 15), () {
-          if (isEngineRunning) {
-            isEngineRunning = false;
-            startPreGame(
-              roomCode: roomCode,
-              timerSeconds: selectedTimerSeconds,
-              genres: selectedGenres,
-              durationSeconds: 10,
-            );
-          }
-        });
-      } else if (gamePlayMode == 'Auto') {
+      if (gamePlayMode == 'Auto') {
         // 15-Second Review phase before proceeding to next question automatically in Auto mode
         _questionTimer = Timer(const Duration(seconds: 15), () {
           if (isEngineRunning) {
@@ -172,13 +262,26 @@ class GameEngineManager {
           }
         });
       }
-    });
+    }
   }
 
   void nextQuestionManual({required String roomCode}) {
     if (!isEngineRunning) return;
     _questionTimer?.cancel();
+    isReviewPhase = false;
     broadcastNextQuestion(roomCode: roomCode);
+  }
+
+  void startNextRoundManual({required String roomCode}) {
+    _questionTimer?.cancel();
+    isRoundCompletedWaitingForNext = false;
+    isEngineRunning = false;
+    startPreGame(
+      roomCode: roomCode,
+      timerSeconds: selectedTimerSeconds,
+      genres: selectedGenres,
+      durationSeconds: 10,
+    );
   }
 
   void pauseGame({String roomCode = 'TRIV'}) {
@@ -196,7 +299,12 @@ class GameEngineManager {
     isEngineRunning = false;
     isGamePaused = true;
     isResumeCountdownActive = false;
-    _realtimeService.broadcastGamePaused(roomCode: roomCode);
+    _realtimeService.broadcastGamePaused(
+      roomCode: roomCode,
+      remainingQuestionSeconds: remainingQuestionSeconds,
+      roundNumber: currentRound,
+      questionIndex: currentQuestionIndex,
+    );
   }
 
   void resumeGame({String roomCode = 'TRIV'}) {
@@ -210,6 +318,8 @@ class GameEngineManager {
       roomCode: roomCode,
       startsAtEpochMs: startsAtEpochMs,
       remainingQuestionSeconds: remainingQuestionSeconds > 0 ? remainingQuestionSeconds : selectedTimerSeconds,
+      roundNumber: currentRound,
+      questionIndex: currentQuestionIndex,
     );
 
     _resumeTimer?.cancel();
@@ -252,26 +362,7 @@ class GameEngineManager {
 
     _questionTimer?.cancel();
     _questionTimer = Timer(Duration(seconds: durationSec), () {
-      if (!isEngineRunning) return;
-
-      final nextQuestionStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
-      _realtimeService.broadcastTimerExpired(
-        roomCode: roomCode,
-        correctOption: question.correctOption,
-        nextQuestionStartsAtEpochMs: nextQuestionStartsAtEpochMs,
-        gamePlayMode: gamePlayMode,
-        questionId: question.id,
-        questionIndex: currentQuestionIndex,
-        roundNumber: currentRound,
-      );
-
-      if (gamePlayMode == 'Auto') {
-        _questionTimer = Timer(const Duration(seconds: 15), () {
-          if (isEngineRunning) {
-            broadcastNextQuestion(roomCode: roomCode);
-          }
-        });
-      }
+      _handleQuestionTimerExpiration(roomCode: roomCode, question: question);
     });
   }
 

@@ -6,7 +6,9 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#121212">
+  <meta name="apple-mobile-web-app-title" content="Trivia Host">
+  <meta name="application-name" content="Trivia Host">
+  <meta name="theme-color" content="#0f111a">
   <title>Bar Rooms Trivia - Real-Time Cross-Platform Trivia</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -208,11 +210,6 @@
             <img id="tv-ad-slide-img" class="tv-ad-slide-img" src="" alt="Venue Advertisement">
           </div>
 
-          <!-- Slide Countdown Progress Bar -->
-          <div class="tv-ad-progress-track">
-            <div id="tv-ad-progress-fill" class="tv-ad-progress-fill"></div>
-          </div>
-
           <!-- Slide Counter Pill -->
           <div class="tv-ad-slide-counter">
             <span id="tv-ad-slide-counter-text">Ad 1 of 1</span>
@@ -333,10 +330,9 @@
               </div>
             </div>
 
-            <div class="tv-next-round-timer-box">
-              <span>NEXT ROUND STARTS IN</span>
-              <strong id="tv-winner-next-round-timer">15</strong>
-              <span>SECONDS</span>
+            <div class="tv-next-round-timer-box" style="padding: 12px 24px; border-radius: 18px; border: 2px solid var(--accent-cyan); background: rgba(0, 229, 255, 0.12); margin-top: 8px;">
+              <span style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND IN</span>
+              <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">2 MINUTES</strong>
             </div>
           </div>
         </div>
@@ -591,6 +587,18 @@
           </div>
         </header>
 
+        <!-- PWA INSTALL BANNER (Shown in browser, hidden when already installed in standalone mode) -->
+        <div id="host-pwa-install-banner" class="hidden" style="margin: 8px 12px; padding: 10px 14px; background: rgba(0, 229, 255, 0.1); border: 1.5px solid var(--neon-cyan); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div style="font-size: 13px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">📲</span>
+            <span>Install Host App for full screen & zero address bars!</span>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+            <button type="button" id="btn-banner-install-pwa" style="padding: 6px 14px; background: var(--neon-cyan); color: #000; font-weight: 800; border-radius: 8px; border: none; font-size: 12px; cursor: pointer;">Install</button>
+            <button type="button" id="btn-banner-dismiss-pwa" style="background: transparent; color: #888; border: none; font-size: 16px; cursor: pointer; padding: 4px;" title="Dismiss">✕</button>
+          </div>
+        </div>
+
         <!-- B. COMPACT GAME STATUS & METRICS BAR -->
         <div class="host-status-ribbon">
           <div id="host-engine-status" class="engine-badge badge-idle">Game Status: NOT STARTED</div>
@@ -812,6 +820,21 @@
           <!-- TAB 4: RULES, TIMER & VENUE SETTINGS -->
           <div id="host-pane-settings" class="host-tab-pane">
             <div class="host-card settings-card">
+              <!-- GAME PLAY MODE (AUTO VS MANUAL) -->
+              <div class="settings-subgroup">
+                <div class="config-label">
+                  <span class="icon">🎮</span>
+                  <div>
+                    <span class="lbl-title">GAME PLAY MODE</span>
+                    <span class="lbl-desc">Choose between hands-free autonomous play or live host MC controls</span>
+                  </div>
+                </div>
+                <div class="mode-chips" id="game-mode-chips-container" style="display: flex; gap: 10px; margin-top: 10px;">
+                  <button type="button" class="btn btn-secondary mode-chip active" id="btn-mode-auto" data-mode="Auto" style="flex: 1; padding: 12px; font-weight: 800; border-radius: 12px; border: 1.5px solid var(--neon-cyan);">🤖 AUTO (Hands-Free)</button>
+                  <button type="button" class="btn btn-secondary mode-chip" id="btn-mode-manual" data-mode="Manual" style="flex: 1; padding: 12px; font-weight: 800; border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.2);">🎤 MANUAL (Live MC)</button>
+                </div>
+              </div>
+
               <!-- DIFFICULTY LEVEL SELECTOR -->
               <div class="settings-subgroup">
                 <div class="config-label">
@@ -879,7 +902,7 @@
                 </div>
 
                 <div id="host-ad-settings-content" class="ad-settings-content">
-                  <!-- File Upload Dropzone (PDF or Images) -->
+                  <!-- File Upload Dropzone & Active Ad Slides Container -->
                   <div class="ad-upload-section">
                     <label for="host-ad-files-input" class="ad-dropzone" id="host-ad-dropzone">
                       <span class="dropzone-icon">📄</span>
@@ -891,6 +914,19 @@
                     </label>
                     <input type="file" id="host-ad-files-input" accept="application/pdf,image/png,image/jpeg,image/webp" multiple class="hidden">
                     <div id="host-ad-upload-status" class="ad-upload-status hidden"></div>
+
+                    <!-- Ad Slides Gallery / Manager (Nested within Upload Box) -->
+                    <div class="ad-gallery-section">
+                      <div class="gallery-header">
+                        <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">1</span>)</span>
+                        <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear Custom Ads</button>
+                      </div>
+                      <div id="host-ad-gallery" class="ad-gallery-strip">
+                        <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
+                          <span>Upload custom drink specials, food menus, or event flyers above to rotate alongside the official Bar Rooms Trivia ad!</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Ad Rotation Duration -->
@@ -905,19 +941,6 @@
                       <button type="button" class="ad-dur-chip" data-dur="45">45s</button>
                       <button type="button" class="ad-dur-chip" data-dur="60">60s</button>
                       <button type="button" class="ad-dur-chip" data-dur="90">90s</button>
-                    </div>
-                  </div>
-
-                  <!-- Ad Slides Gallery / Manager -->
-                  <div class="ad-gallery-section">
-                    <div class="gallery-header">
-                      <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">1</span>)</span>
-                      <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear Custom Ads</button>
-                    </div>
-                    <div id="host-ad-gallery" class="ad-gallery-strip">
-                      <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
-                        <span>Upload custom drink specials, food menus, or event flyers above to rotate alongside the official Bar Rooms Trivia ad!</span>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -937,6 +960,29 @@
                     <input type="checkbox" id="host-toggle-sound" checked>
                     <span class="slider round"></span>
                   </label>
+                </div>
+              </div>
+
+              <!-- PWA FULL-SCREEN HOST APP INSTALLATION -->
+              <div class="settings-subgroup pwa-install-subgroup" id="host-pwa-subgroup">
+                <div class="config-label">
+                  <span class="icon">📲</span>
+                  <div>
+                    <span class="lbl-title">FULL-SCREEN HOST APP</span>
+                    <span class="lbl-desc">Install onto your phone or tablet for full-screen mode without browser address bars</span>
+                  </div>
+                </div>
+                <div class="pwa-install-actions" id="host-pwa-actions-container" style="margin-top: 12px;">
+                  <button type="button" class="btn btn-secondary" id="btn-install-pwa-host" style="width: 100%; padding: 14px; font-weight: 800; border-radius: 12px; border: 1.5px solid var(--neon-cyan); background: rgba(0, 229, 255, 0.1); color: var(--neon-cyan); cursor: pointer;">
+                    📲 Install Host Controls to Home Screen
+                  </button>
+                  <div id="host-pwa-ios-instructions" class="hidden" style="margin-top: 10px; padding: 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 13px; color: #ccc; line-height: 1.4;">
+                    <strong style="color: #fff; display: block; margin-bottom: 4px;">🍏 iPhone / iPad Setup:</strong>
+                    Tap Safari's <strong>Share</strong> button <svg style="vertical-align: middle; display: inline;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> at the bottom of the screen, then tap <strong>"Add to Home Screen"</strong> to run as a full-screen app!
+                  </div>
+                  <div id="host-pwa-installed-badge" class="hidden" style="margin-top: 10px; padding: 12px; border-radius: 10px; background: rgba(0, 230, 118, 0.1); border: 1px solid var(--neon-green); font-size: 13px; color: var(--neon-green); font-weight: 700; text-align: center;">
+                    ✅ Running in Full-Screen Standalone App Mode
+                  </div>
                 </div>
               </div>
 
@@ -962,6 +1008,13 @@
 
         <!-- E. STICKY BOTTOM ACTION DOCK (Thumb Ergonomics) -->
         <div class="host-sticky-bottom-dock">
+          <!-- Contextual Manual Control Action Bar (Visible in Manual Mode) -->
+          <div id="host-manual-dock-banner" class="hidden" style="margin-bottom: 8px; width: 100%;">
+            <button type="button" id="btn-manual-primary" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 15px; font-weight: 900; letter-spacing: 0.8px; border-radius: 14px; background: var(--neon-green); color: #000; box-shadow: 0 0 20px rgba(0, 230, 118, 0.4);">
+              ⏱️ START QUESTION TIMER
+            </button>
+          </div>
+
           <div class="dock-actions-flex">
             <button type="button" id="btn-start-auto" class="btn btn-success btn-dock-primary" title="Start Game">
               <span class="btn-dock-icon-wrapper">
@@ -988,6 +1041,23 @@
               </span>
               <span class="btn-dock-text" id="btn-reset-text">Reset</span>
             </button>
+          </div>
+        <!-- HOST AD UPLOAD PROMPT MODAL -->
+        <div id="host-ad-upload-prompt-modal" class="result-modal-backdrop hidden" style="z-index: 600;">
+          <div class="result-modal-card" style="max-width: 480px; text-align: center; border-color: var(--neon-cyan); box-shadow: 0 0 40px rgba(0, 229, 255, 0.35); padding: 28px;">
+            <div style="font-size: 44px; margin-bottom: 12px;">📺📄</div>
+            <h2 style="font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 8px; letter-spacing: 0.5px;">AD DISPLAY SIGNAGE MODE ACTIVE</h2>
+            <p style="font-size: 14px; color: rgba(255, 255, 255, 0.85); line-height: 1.5; margin-bottom: 22px;">
+              Please upload photos or PDF files for your venue ads, drink specials, food menus, or event flyers to rotate on the TV screen.
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+              <button type="button" id="btn-prompt-upload-ads" class="btn btn-primary" style="padding: 12px 22px; font-weight: 800; font-size: 14px; border-radius: 12px; background: var(--neon-cyan); color: #000; border: none; cursor: pointer;">
+                📁 Upload Photos / PDF
+              </button>
+              <button type="button" id="btn-prompt-dismiss-ads" class="btn btn-secondary" style="padding: 12px 18px; font-weight: 700; font-size: 14px; border-radius: 12px; cursor: pointer;">
+                Maybe Later
+              </button>
+            </div>
           </div>
         </div>
 

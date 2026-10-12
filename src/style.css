@@ -1732,8 +1732,8 @@ body[data-view="player"] .logo-container {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(15, 15, 20, 0.88);
-  backdrop-filter: blur(10px);
+  background-color: rgba(10, 11, 16, 0.97);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1774,7 +1774,7 @@ body[data-view="player"] .logo-container {
 
 .result-modal-card.is-wrong {
   border-color: #ff5252 !important;
-  box-shadow: 0 20px 60px rgba(255, 82, 82, 0.4) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7) !important;
 }
 
 .result-icon {
@@ -3537,9 +3537,14 @@ body.auth-mode .main-container {
   background-color: #0f0f14;
 }
 
-/* Ad Upload Dropzone */
+/* Ad Upload & Active Slides Container Box */
 .ad-upload-section {
   margin-top: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .ad-dropzone {
@@ -3549,7 +3554,7 @@ body.auth-mode .main-container {
   gap: 14px;
   padding: 16px 18px;
   background: rgba(255, 255, 255, 0.03);
-  border: 2px dashed rgba(0, 229, 255, 0.3);
+  border: 2px dashed rgba(0, 229, 255, 0.35);
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -3560,6 +3565,13 @@ body.auth-mode .main-container {
   background: rgba(0, 229, 255, 0.08);
   border-color: var(--accent-cyan);
   transform: translateY(-1px);
+}
+
+.ad-dropzone.highlight-pulse {
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.5) !important;
+  background: rgba(0, 229, 255, 0.12) !important;
+  transform: scale(1.01);
 }
 
 .dropzone-icon {

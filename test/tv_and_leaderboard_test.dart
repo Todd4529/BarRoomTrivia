@@ -628,6 +628,20 @@ void main() {
       expect(players[1].nickname, 'Alice');
       expect(players[1].cumulativeScore, 20); // Alice did not win, stays at 20
     });
+
+    test('Does not award round winner bonus if players have 0 points (did not answer questions)', () async {
+      SupabaseService.clearLocalPlayers('TRIV');
+      SupabaseService.registerIncomingPlayer('TRIV', 'IdlePlayer', 0);
+
+      // Round 1 ends - IdlePlayer has 0 pts, must NOT receive +20 bonus
+      final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3('TRIV', 20);
+      expect(top3.first['nickname'], 'IdlePlayer');
+      expect(top3.first['score'], 0); // Must remain 0
+
+      final players = await SupabaseService().getLeaderboard('TRIV');
+      expect(players[0].nickname, 'IdlePlayer');
+      expect(players[0].cumulativeScore, 0); // Stays at 0
+    });
   });
 
   group('Continuous Round Numbering Across Genres', () {

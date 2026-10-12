@@ -55,9 +55,11 @@ class MainActivity : FlutterActivity() {
                         // Classic authoritative game show buzzer (dissonant 150Hz + 158Hz)
                         playDissonantBuzzer(150.0, 158.0, 360, 0.85)
                     }
-                    "correct", "clapping_fanfare", "fanfare" -> {
-                        // Celebratory clapping fanfare sound with crowd applause & brass chords
-                        playClappingFanfareSound()
+                    "correct", "clapping_fanfare" -> {
+                        playClappingCheeringSound(isGrandFanfare = false)
+                    }
+                    "fanfare" -> {
+                        playClappingCheeringSound(isGrandFanfare = true)
                     }
                     else -> playPulseTone(800.0, 60, 0.6)
                 }
@@ -186,74 +188,123 @@ class MainActivity : FlutterActivity() {
         playBuffer(buffer, sampleRate)
     }
 
-    private fun playClappingFanfareSound() {
+    private fun playClappingCheeringSound(isGrandFanfare: Boolean = true) {
         val sampleRate = 44100
-        val totalMs = 1400
+        val totalMs = if (isGrandFanfare) 3600 else 1650
         val totalSamples = (sampleRate * totalMs) / 1000
         val buffer = ShortArray(totalSamples)
         val random = java.util.Random(1337L)
 
-        // LAYER 1: Crowd Applause (18 staggered acoustic handclaps)
-        val clapDelaysMs = intArrayOf(
-            0, 40, 90, 140, 190, 250, 310, 380,
-            450, 530, 610, 700, 800, 900, 1010, 1120, 1230, 1340
-        )
-        for ((idx, delayMs) in clapDelaysMs.withIndex()) {
-            val offset = (sampleRate * delayMs) / 1000
-            val clapDurationMs = 22
-            val clapSamples = (sampleRate * clapDurationMs) / 1000
-            val clapFreq = 1200.0 + ((idx % 5) * 220.0)
-            val clapVol = 0.35 + ((idx % 3) * 0.08)
+        // LAYER 1: Realistic Multi-Person Acoustic Handclapping (palm-on-palm flesh impact)
+        val numClappers = if (isGrandFanfare) 24 else 16
+        for (p in 0 until numClappers) {
+            val clapRateMs = 250 + (random.nextInt(120))
+            var currentMs = (random.nextInt(220))
+            val fBody = 370.0 + random.nextInt(110)
+            val fCavity = 1000.0 + random.nextInt(300)
+            val pVol = 0.45 + (random.nextDouble() * 0.35)
 
-            for (i in 0 until clapSamples) {
-                val bufIdx = offset + i
-                if (bufIdx >= totalSamples) break
-                val t = i.toDouble() / sampleRate
-                val noise = (random.nextDouble() * 2.0 - 1.0)
-                val clapWave = (noise * 0.7 + sin(2.0 * Math.PI * clapFreq * t) * 0.3) * Math.exp(-t * 140.0)
-                val sampleVal = (clapWave * clapVol * 0.45 * Short.MAX_VALUE).toInt()
-                val existing = buffer[bufIdx].toInt()
-                buffer[bufIdx] = (existing + sampleVal).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            while (currentMs < totalMs - 120) {
+                val offset = (sampleRate * currentMs) / 1000
+                val clapDurationMs = 45
+                val clapSamples = (sampleRate * clapDurationMs) / 1000
+
+                val roomEnv = if (currentMs < 300) {
+                    currentMs.toDouble() / 300.0
+                } else if (currentMs < (totalMs - 1100)) {
+                    1.0
+                } else {
+                    Math.max(0.0, 1.0 - (currentMs - (totalMs - 1100)).toDouble() / 1000.0)
+                }
+                val clapGain = pVol * roomEnv * (0.75 + random.nextDouble() * 0.5)
+
+                for (i in 0 until clapSamples) {
+                    val bufIdx = offset + i
+                    if (bufIdx >= totalSamples) break
+                    val t = i.toDouble() / sampleRate
+
+                    val snap = if (t < 0.008) (random.nextDouble() * 2.0 - 1.0) * Math.exp(-t * 650.0) * 0.5 else 0.0
+                    val mainSlap = if (t >= 0.004) (random.nextDouble() * 2.0 - 1.0) * Math.exp(-(t - 0.004) * 140.0) * 0.7 else 0.0
+                    val bodyThump = sin(2.0 * Math.PI * fBody * t) * Math.exp(-t * 180.0) * 0.4
+                    val cavity = sin(2.0 * Math.PI * fCavity * t) * Math.exp(-t * 240.0) * 0.3
+
+                    val sampleVal = ((snap + mainSlap + bodyThump + cavity) * clapGain * 0.16 * Short.MAX_VALUE).toInt()
+                    val existing = buffer[bufIdx].toInt()
+                    buffer[bufIdx] = (existing + sampleVal).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+
+                currentMs += clapRateMs + random.nextInt(30)
             }
         }
 
-        // LAYER 2: Celebratory Brass Fanfare Progression
-        data class FanfareNote(val freqs: DoubleArray, val startMs: Int, val durationMs: Int, val volume: Double)
-        val notes = listOf(
-            FanfareNote(doubleArrayOf(392.00), 0, 120, 0.40),
-            FanfareNote(doubleArrayOf(523.25), 110, 120, 0.42),
-            FanfareNote(doubleArrayOf(659.25), 230, 140, 0.45),
-            FanfareNote(doubleArrayOf(783.99), 360, 160, 0.48),
-            // Triumphant Grand Finale Chord: C5 (523.25) + E5 (659.25) + G5 (783.99) + C6 (1046.50)
-            FanfareNote(doubleArrayOf(523.25, 659.25, 783.99, 1046.50), 520, 850, 0.65)
+        // LAYER 2: Collective Crowd Vocal Roar
+        var noiseFilter = 0.0
+        val roarSustain = if (isGrandFanfare) 1.8 else 0.8
+        val roarDecay = if (isGrandFanfare) 1.5 else 0.7
+        for (i in 0 until totalSamples) {
+            val t = i.toDouble() / sampleRate
+            val roarEnv = if (t < 0.28) {
+                t / 0.28
+            } else if (t < roarSustain) {
+                1.0
+            } else {
+                Math.max(0.0, 1.0 - (t - roarSustain) / roarDecay)
+            }
+            if (roarEnv > 0.0) {
+                val rawNoise = random.nextDouble() * 2.0 - 1.0
+                noiseFilter = noiseFilter * 0.88 + rawNoise * 0.12
+
+                val v1 = sin(2.0 * Math.PI * 650.0 * t) * noiseFilter * 0.5
+                val v2 = sin(2.0 * Math.PI * 1250.0 * t) * noiseFilter * 0.35
+                val wash = (noiseFilter * 0.6 + v1 + v2) * roarEnv * 0.15
+
+                val sampleVal = (wash * Short.MAX_VALUE).toInt()
+                val existing = buffer[i].toInt()
+                buffer[i] = (existing + sampleVal).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+        }
+
+        // LAYER 3: Multiple Vocal Shouts ("WOOO!", "YEAAAH!", "WHOO-HOO!")
+        data class CheerVoice(val startMs: Int, val durationMs: Int, val f0: Double, val f1: Double, val fEnd: Double, val formants: List<Double>, val vol: Double)
+        val voices = if (isGrandFanfare) listOf(
+            CheerVoice(80, 1150, 230.0, 340.0, 280.0, listOf(680.0, 1300.0, 2500.0), 0.16),
+            CheerVoice(180, 1350, 190.0, 270.0, 210.0, listOf(750.0, 1600.0, 2700.0), 0.17),
+            CheerVoice(320, 950, 280.0, 410.0, 330.0, listOf(620.0, 1150.0, 2400.0), 0.14),
+            CheerVoice(450, 1250, 165.0, 220.0, 180.0, listOf(580.0, 1050.0, 2200.0), 0.15)
+        ) else listOf(
+            CheerVoice(60, 850, 220.0, 310.0, 260.0, listOf(720.0, 1450.0, 2600.0), 0.15),
+            CheerVoice(140, 950, 185.0, 250.0, 200.0, listOf(680.0, 1300.0, 2500.0), 0.16)
         )
 
-        for (fn in notes) {
-            val offset = (sampleRate * fn.startMs) / 1000
-            val noteSamples = (sampleRate * fn.durationMs) / 1000
-            val attack = Math.min(noteSamples / 10, 800)
-            val decay = noteSamples - attack
+        for (v in voices) {
+            val offset = (sampleRate * v.startMs) / 1000
+            val voiceSamples = (sampleRate * v.durationMs) / 1000
 
-            for (i in 0 until noteSamples) {
+            for (i in 0 until voiceSamples) {
                 val bufIdx = offset + i
                 if (bufIdx >= totalSamples) break
+                val sT = i.toDouble() / voiceSamples
                 val t = i.toDouble() / sampleRate
-                val env = if (i < attack) {
-                    i.toDouble() / attack
-                } else {
-                    1.0 - ((i - attack).toDouble() / decay)
+
+                val pitch = v.f0 + (v.f1 - v.f0) * sin(sT * Math.PI * 0.85)
+                val vibrato = sin(2.0 * Math.PI * 5.8 * t) * 4.5
+                val instFreq = pitch + vibrato
+
+                val ph = 2.0 * Math.PI * instFreq * t
+                val glottal = sin(ph) * 0.5 + sin(ph * 2.0) * 0.25 + sin(ph * 3.0) * 0.12
+
+                var vocalFormant = 0.0
+                val weights = doubleArrayOf(0.5, 0.35, 0.2)
+                for ((fIdx, fVal) in v.formants.withIndex()) {
+                    val w = if (fIdx < weights.size) weights[fIdx] else 0.2
+                    vocalFormant += sin(2.0 * Math.PI * fVal * t) * w
                 }
 
-                var chordWave = 0.0
-                for (freq in fn.freqs) {
-                    val fundamental = sin(2.0 * Math.PI * freq * t)
-                    val secondHarmonic = sin(4.0 * Math.PI * freq * t) * 0.35
-                    val thirdHarmonic = sin(6.0 * Math.PI * freq * t) * 0.15
-                    chordWave += (fundamental + secondHarmonic + thirdHarmonic)
-                }
-                chordWave /= fn.freqs.size
+                val breath = (random.nextDouble() * 2.0 - 1.0) * 0.18
+                val amp = if (sT < 0.15) (sT / 0.15) else if (sT < 0.75) 1.0 else (1.0 - (sT - 0.75) / 0.25)
+                val voice = (glottal * 0.45 + vocalFormant * glottal * 0.45 + breath) * amp * v.vol
 
-                val sampleVal = (chordWave * env * fn.volume * 0.55 * Short.MAX_VALUE).toInt()
+                val sampleVal = (voice * Short.MAX_VALUE).toInt()
                 val existing = buffer[bufIdx].toInt()
                 buffer[bufIdx] = (existing + sampleVal).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
             }

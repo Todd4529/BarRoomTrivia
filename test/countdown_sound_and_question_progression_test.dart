@@ -96,5 +96,26 @@ void main() {
       expect(tvFile.contains('// If this exact question is already actively playing and counting down on TV, ignore redundant echo'), isTrue,
           reason: 'Must ignore duplicate active question broadcasts to avoid resetting timer');
     });
+
+    test('9. TV display plays answer reveal sound ONLY ONCE per question', () {
+      final tvFile = File('lib/tv/views/tv_display_view.dart').readAsStringSync();
+      expect(tvFile.contains('_lastAnswerRevealSoundQuestionId'), isTrue,
+          reason: 'Must track question ID to guard against repeated fanfare sound triggers');
+      expect(tvFile.contains('!alreadyRevealed && _lastAnswerRevealSoundQuestionId != currentQId'), isTrue,
+          reason: 'Must only play sound once per question when answer is displayed');
+    });
+
+    test('10. MainActivity.kt implements authentic clapping & cheering sound synthesis', () {
+      final mainActivityFile = File('android/app/src/main/kotlin/com/barroomstrivia/myapp/MainActivity.kt').readAsStringSync();
+      expect(mainActivityFile.contains('playClappingCheeringSound'), isTrue);
+      expect(mainActivityFile.contains('Crowd Applause'), isTrue);
+      expect(mainActivityFile.contains('Crowd Cheering'), isTrue);
+    });
+
+    test('11. main.js implements authentic crowd clapping and cheering synthesis', () {
+      final mainJsFile = File('src/main.js').readAsStringSync();
+      expect(mainJsFile.contains('CLAPPING AND CHEERING'), isTrue);
+      expect(mainJsFile.contains('cheerVoices'), isTrue);
+    });
   });
 }

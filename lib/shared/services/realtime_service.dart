@@ -70,6 +70,7 @@ class RealtimeService {
     required String roomCode,
     required void Function(Map<String, dynamic> payload) onQuestionBroadcast,
     required void Function(Map<String, dynamic> payload) onTimerExpiredBroadcast,
+    void Function(Map<String, dynamic> payload)? onManualTimerStartedBroadcast,
     void Function(Map<String, dynamic> payload)? onPreGameCountdownBroadcast,
     void Function(Map<String, dynamic>)? onGamePausedBroadcast,
     void Function(Map<String, dynamic>)? onGameResumingBroadcast,
@@ -78,6 +79,8 @@ class RealtimeService {
     void Function(Map<String, dynamic>)? onLeaderboardUpdatedBroadcast,
     void Function(Map<String, dynamic>)? onRequestStateSyncBroadcast,
     void Function(Map<String, dynamic>)? onAdModeToggledBroadcast,
+    void Function(Map<String, dynamic>)? onAdSlidesUpdatedBroadcast,
+    void Function(Map<String, dynamic>)? onSoundEffectsToggledBroadcast,
   }) {
     void handleEvent(dynamic rawData) {
       if (rawData is Map<String, dynamic>) {
@@ -100,6 +103,8 @@ class RealtimeService {
           onPreGameCountdownBroadcast(data);
         } else if (event == 'question_start') {
           onQuestionBroadcast(data);
+        } else if (event == 'manual_timer_started' && onManualTimerStartedBroadcast != null) {
+          onManualTimerStartedBroadcast(data);
         } else if (event == 'timer_expired') {
           onTimerExpiredBroadcast(data);
         } else if (event == 'game_paused' && onGamePausedBroadcast != null) {
@@ -112,6 +117,10 @@ class RealtimeService {
           onRoundCompletedBroadcast(data);
         } else if (event == 'ad_mode_toggled' && onAdModeToggledBroadcast != null) {
           onAdModeToggledBroadcast(data);
+        } else if (event == 'ad_slides_updated' && onAdSlidesUpdatedBroadcast != null) {
+          onAdSlidesUpdatedBroadcast(data);
+        } else if ((event == 'sound_toggled' || event == 'sound_effects_toggled') && onSoundEffectsToggledBroadcast != null) {
+          onSoundEffectsToggledBroadcast(data);
         } else if (event == 'request_state_sync' && onRequestStateSyncBroadcast != null) {
           onRequestStateSyncBroadcast(data);
         } else if (event == 'player_joined') {
@@ -171,6 +180,14 @@ class RealtimeService {
           .onBroadcast(
             event: 'question_start',
             callback: (payload) => onQuestionBroadcast(normalizeClockSkew(payload)),
+          )
+          .onBroadcast(
+            event: 'manual_timer_started',
+            callback: (payload) {
+              if (onManualTimerStartedBroadcast != null) {
+                onManualTimerStartedBroadcast(normalizeClockSkew(payload));
+              }
+            },
           )
           .onBroadcast(
             event: 'timer_expired',
@@ -260,6 +277,38 @@ class RealtimeService {
               }
               if (onLeaderboardUpdatedBroadcast != null) {
                 onLeaderboardUpdatedBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'ad_mode_toggled',
+            callback: (payload) {
+              if (onAdModeToggledBroadcast != null) {
+                onAdModeToggledBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'ad_slides_updated',
+            callback: (payload) {
+              if (onAdSlidesUpdatedBroadcast != null) {
+                onAdSlidesUpdatedBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'sound_effects_toggled',
+            callback: (payload) {
+              if (onSoundEffectsToggledBroadcast != null) {
+                onSoundEffectsToggledBroadcast(payload);
+              }
+            },
+          )
+          .onBroadcast(
+            event: 'sound_toggled',
+            callback: (payload) {
+              if (onSoundEffectsToggledBroadcast != null) {
+                onSoundEffectsToggledBroadcast(payload);
               }
             },
           )
@@ -412,6 +461,9 @@ class RealtimeService {
     required int timerEndsAtEpochMs,
     int totalQuestions = 10,
     int roundNumber = 1,
+    String gamePlayMode = 'Auto',
+    String questionPhase = 'countdown',
+    String timerState = 'running',
   }) async {
     final payload = {
       'event': 'question_start',
@@ -458,6 +510,10 @@ class RealtimeService {
       },
       'correct_option': question.correctOption,
       'time_limit_seconds': durationSeconds,
+      'game_play_mode': gamePlayMode,
+      'gamePlayMode': gamePlayMode,
+      'question_phase': questionPhase,
+      'timer_state': timerState,
     };
 
     _localEventBus.add(payload);
@@ -477,12 +533,60 @@ class RealtimeService {
       final norm = roomCode.toUpperCase().trim();
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
-        'status': 'question_active',
+        'status': questionPhase == 'reading' ? 'active_reading' : 'question_active',
         'current_question_index': questionIndex,
         'current_round': roundNumber,
         'round_number': roundNumber,
         'current_question_data': payload,
         'question_data': payload,
+        'duration_seconds': durationSeconds,
+        'timer_ends_at': timerEndsAtEpochMs,
+        'game_play_mode': gamePlayMode,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
+  }
+
+  /// Broadcast manual timer started event when host taps 'START TIMER' in Manual Mode
+  Future<void> broadcastManualTimerStarted({
+    required String roomCode,
+    required int timerEndsAtEpochMs,
+    required int durationSeconds,
+    int? questionIndex,
+    int? roundNumber,
+  }) async {
+    final payload = {
+      'event': 'manual_timer_started',
+      'room_code': roomCode,
+      'timer_ends_at_epoch_ms': timerEndsAtEpochMs,
+      'timerEndsAtMs': timerEndsAtEpochMs,
+      'duration_seconds': durationSeconds,
+      'question_phase': 'countdown',
+      'timer_state': 'running',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      if (questionIndex != null) 'question_index': questionIndex,
+      if (roundNumber != null) 'round_number': roundNumber,
+    };
+
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(roomCode, payload);
+
+    try {
+      final ch = _getChannel(roomCode);
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'manual_timer_started',
+        payload: payload,
+      );
+    } catch (_) {}
+
+    try {
+      final norm = roomCode.toUpperCase().trim();
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'status': 'question_active',
+        'timer_ends_at': timerEndsAtEpochMs,
         'duration_seconds': durationSeconds,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
@@ -529,10 +633,20 @@ class RealtimeService {
   }
 
   /// Broadcast game paused event
-  Future<void> broadcastGamePaused({required String roomCode}) async {
+  Future<void> broadcastGamePaused({
+    required String roomCode,
+    int? remainingQuestionSeconds,
+    int? roundNumber,
+    int? questionIndex,
+  }) async {
     final payload = {
       'event': 'game_paused',
       'room_code': roomCode,
+      if (remainingQuestionSeconds != null) 'remaining_question_seconds': remainingQuestionSeconds,
+      if (roundNumber != null) 'round_number': roundNumber,
+      if (roundNumber != null) 'roundNumber': roundNumber,
+      if (questionIndex != null) 'question_index': questionIndex,
+      if (questionIndex != null) 'questionIndex': questionIndex,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -548,6 +662,17 @@ class RealtimeService {
         payload: payload,
       );
     } catch (_) {}
+
+    try {
+      await SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase(),
+        'status': 'paused',
+        if (remainingQuestionSeconds != null) 'remaining_question_seconds': remainingQuestionSeconds,
+        if (roundNumber != null) 'current_round': roundNumber,
+        if (questionIndex != null) 'current_question_index': questionIndex,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
   }
 
   /// Broadcast game resuming event (10-second countdown before continuing current question)
@@ -555,12 +680,18 @@ class RealtimeService {
     required String roomCode,
     required int startsAtEpochMs,
     required int remainingQuestionSeconds,
+    int? roundNumber,
+    int? questionIndex,
   }) async {
     final payload = {
       'event': 'game_resuming',
       'room_code': roomCode,
       'starts_at_epoch_ms': startsAtEpochMs,
       'remaining_question_seconds': remainingQuestionSeconds,
+      if (roundNumber != null) 'round_number': roundNumber,
+      if (roundNumber != null) 'roundNumber': roundNumber,
+      if (questionIndex != null) 'question_index': questionIndex,
+      if (questionIndex != null) 'questionIndex': questionIndex,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -575,6 +706,18 @@ class RealtimeService {
         event: 'game_resuming',
         payload: payload,
       );
+    } catch (_) {}
+
+    try {
+      await SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase(),
+        'status': 'resuming',
+        'starts_at': startsAtEpochMs,
+        'remaining_question_seconds': remainingQuestionSeconds,
+        if (roundNumber != null) 'current_round': roundNumber,
+        if (questionIndex != null) 'current_question_index': questionIndex,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
     } catch (_) {}
   }
 
@@ -698,9 +841,11 @@ class RealtimeService {
     required int nextRoundStartsAtEpochMs,
     int? roundNumber,
     int? nextRound,
+    int? delaySeconds,
   }) async {
     final curR = roundNumber ?? 1;
     final upR = nextRound ?? (curR + 1);
+    final delay = delaySeconds ?? 120;
     final payload = {
       'event': 'round_completed',
       'room_code': roomCode,
@@ -712,6 +857,9 @@ class RealtimeService {
       'completed_round': curR,
       'next_round': upR,
       'nextRound': upR,
+      'delaySeconds': delay,
+      'delay_seconds': delay,
+      'duration_seconds': delay,
       'next_round_starts_at_epoch_ms': nextRoundStartsAtEpochMs,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
@@ -736,7 +884,9 @@ class RealtimeService {
         'status': 'round_summary',
         'current_round': upR,
         'round_number': upR,
+        'duration_seconds': delay,
         'starts_at': nextRoundStartsAtEpochMs,
+        'timer_ends_at': nextRoundStartsAtEpochMs,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
@@ -771,6 +921,74 @@ class RealtimeService {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
         'is_ad_mode_active': isAdModeActive,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
+  }
+
+  Future<void> broadcastAdSlidesUpdated({
+    required String roomCode,
+    required List<dynamic> slides,
+    required bool isAdModeActive,
+    int? adSlideDurationSeconds,
+  }) async {
+    final norm = roomCode.toUpperCase().trim();
+    final payload = {
+      'event': 'ad_slides_updated',
+      'slides': slides,
+      'isAdModeActive': isAdModeActive,
+      'is_ad_mode_active': isAdModeActive,
+      'ad_slide_duration_seconds': adSlideDurationSeconds ?? 15,
+      'slidesCount': slides.length,
+      'room_code': norm,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(norm, payload);
+
+    try {
+      final ch = _getChannel(norm);
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'ad_slides_updated',
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> broadcastSoundEffectsToggled({
+    required String roomCode,
+    required bool isSoundEffectsEnabled,
+  }) async {
+    final norm = roomCode.toUpperCase().trim();
+    final payload = {
+      'event': 'sound_effects_toggled',
+      'isSoundEffectsEnabled': isSoundEffectsEnabled,
+      'is_sound_effects_enabled': isSoundEffectsEnabled,
+      'is_sound_enabled': isSoundEffectsEnabled,
+      'sound_effects_enabled': isSoundEffectsEnabled,
+      'soundEffectsEnabled': isSoundEffectsEnabled,
+      'room_code': norm,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+    _localEventBus.add(payload);
+    BroadcastSync.postEvent(payload);
+    _publishMqtt(norm, payload);
+
+    try {
+      final ch = _getChannel(norm);
+      ch.subscribe();
+      await ch.sendBroadcastMessage(
+        event: 'sound_effects_toggled',
+        payload: payload,
+      );
+    } catch (_) {}
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': norm,
+        'is_sound_effects_enabled': isSoundEffectsEnabled,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}

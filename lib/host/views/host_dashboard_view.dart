@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../shared/config/supabase_config.dart';
 import '../../shared/models/game_session.dart';
 import '../../shared/services/game_engine.dart';
 import '../../shared/services/realtime_service.dart';
+import '../../shared/services/sound_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/data/trivia_genres.dart';
@@ -37,6 +39,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
 
   // 30-Second Pre-Game Countdown & Active Question State
   bool _isAdSignageModeActive = false;
+  bool _isSoundEffectsEnabled = true;
   bool _isPreGameCountdownActive = false;
   int _preGameSecondsRemaining = 30;
   Timer? _preGameTimer;
@@ -99,16 +102,32 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       onQuestionBroadcast: (payload) {
         final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
         final qIndex = payload['question_index'] as int?;
+        final timerState = payload['timer_state'] as String?;
         if (mounted) {
           setState(() {
             if (qIndex != null) _currentQuestionIndex = qIndex;
+            _isReviewPhase = false;
+            _isEngineRunning = true;
+            if (timerState == 'idle' || timerEndsAtEpochMs == null || timerEndsAtEpochMs <= 0) {
+              _questionSecondsRemaining = _selectedTimerSeconds;
+              _questionCountdownTimer?.cancel();
+            }
           });
         }
-        if (timerEndsAtEpochMs != null && mounted) {
+        if (timerEndsAtEpochMs != null && timerEndsAtEpochMs > 0 && timerState != 'idle' && mounted) {
           _startQuestionCountdown(timerEndsAtEpochMs);
         }
         final room = payload['room_code']?.toString() ?? _targetRoomCode;
         _navigateToTvGameMode(roomCode: room);
+      },
+      onManualTimerStartedBroadcast: (payload) {
+        final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
+        if (timerEndsAtEpochMs != null && mounted) {
+          setState(() {
+            _isReviewPhase = false;
+          });
+          _startQuestionCountdown(timerEndsAtEpochMs);
+        }
       },
       onTimerExpiredBroadcast: (_) {
         if (mounted) {
@@ -131,6 +150,18 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             _isReviewPhase = false;
           });
         }
+      },
+      onSoundEffectsToggledBroadcast: (payload) {
+        if (!mounted) return;
+        final enabled = payload['isSoundEffectsEnabled'] == true ||
+            payload['is_sound_effects_enabled'] == true ||
+            payload['is_sound_enabled'] == true ||
+            payload['sound_effects_enabled'] == true ||
+            payload['soundEffectsEnabled'] == true;
+        setState(() {
+          _isSoundEffectsEnabled = enabled;
+        });
+        SoundService.isSoundEffectsEnabled = enabled;
       },
     );
   }
@@ -204,8 +235,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
 
     final engine = GameEngineManager.instance;
     if (_isGamePaused || engine.isGamePaused) {
-      _resumeGameEngine();
-      _navigateToTvGameMode();
+      // Game is paused; Start button must remain inactive to prevent starting a new round
       return;
     }
 
@@ -567,6 +597,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   const SizedBox(height: 16),
                   _buildAdSignageModeSwitch(),
                   const SizedBox(height: 16),
+                  _buildSoundEffectsModeSwitch(),
+                  const SizedBox(height: 16),
                   _buildDifficultySegmentedControl(),
                   const SizedBox(height: 16),
                   _buildTimerDurationScrollWheel(),
@@ -827,14 +859,20 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 final label = mode == 'Auto' ? 'AUTO (HANDS-FREE)' : 'MANUAL (HOST DRIVEN)';
                 return Expanded(
                   child: GestureDetector(
-                    onTap: (_isEngineRunning || _isPreGameCountdownActive)
-                        ? null
-                        : () {
-                            setState(() {
-                              _selectedGameMode = mode;
-                              GameEngineManager.instance.gamePlayMode = mode;
-                            });
-                          },
+                    onTap: () {
+                      setState(() {
+                        _selectedGameMode = mode;
+                        GameEngineManager.instance.gamePlayMode = mode;
+                      });
+                      try {
+                        final room = _activeSession?.roomCode ?? _targetRoomCode;
+                        SupabaseConfig.client.from('game_sessions').upsert({
+                          'room_code': room.toUpperCase(),
+                          'game_play_mode': mode,
+                          'updated_at': DateTime.now().toIso8601String(),
+                        });
+                      } catch (_) {}
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       height: 48,
@@ -935,6 +973,106 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               RealtimeService().broadcastAdModeToggled(
                 roomCode: 'TRIV',
                 isAdModeActive: val,
+              );
+              if (val) {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppTheme.cardSurface,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: Row(
+                      children: const [
+                        Icon(Icons.campaign_rounded, color: AppTheme.neonCyan),
+                        SizedBox(width: 8),
+                        Text('Ad Signage Enabled', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    content: const Text(
+                      'Ad Display Signage Mode is now active. Please upload photos (PNG, JPG) or PDF files for your venue sponsor ads to be rotated on screen.',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('OK', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSoundEffectsModeSwitch() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isSoundEffectsEnabled ? AppTheme.neonPink.withValues(alpha: 0.5) : Colors.white.withOpacity(0.06),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonPink.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _isSoundEffectsEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  color: AppTheme.neonPink,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'GAME SOUND EFFECTS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tick countdown, buzzers, cheering on TV',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Switch(
+            value: _isSoundEffectsEnabled,
+            activeColor: AppTheme.neonPink,
+            activeTrackColor: AppTheme.neonPink.withValues(alpha: 0.4),
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: Colors.white.withOpacity(0.1),
+            onChanged: (val) {
+              setState(() {
+                _isSoundEffectsEnabled = val;
+              });
+              SoundService.isSoundEffectsEnabled = val;
+              RealtimeService().broadcastSoundEffectsToggled(
+                roomCode: _targetRoomCode.isNotEmpty ? _targetRoomCode : 'TRIV',
+                isSoundEffectsEnabled: val,
               );
             },
           ),
@@ -1297,11 +1435,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     final bool isPaused = _isGamePaused || GameEngineManager.instance.isGamePaused;
 
     String primaryButtonText;
-    if (_isResumeCountdownActive) {
-      primaryButtonText = 'RESUMING (${_resumeSecondsRemaining}s)';
-    } else if (isPaused) {
-      primaryButtonText = 'RESUME GAME';
-    } else if (_isPreGameCountdownActive) {
+    if (_isPreGameCountdownActive) {
       primaryButtonText = 'STARTING (${_preGameSecondsRemaining}s)';
     } else if (_isEngineRunning) {
       primaryButtonText = 'RUNNING';
@@ -1309,13 +1443,11 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       primaryButtonText = 'START GAME';
     }
 
+    final bool isStartDisabled = _isEngineRunning || _isPreGameCountdownActive || isPaused;
+
     Color primaryBorderColor;
-    if (isPaused) {
-      primaryBorderColor = AppTheme.neonGreen;
-    } else if (_isPreGameCountdownActive) {
-      primaryBorderColor = AppTheme.neonYellow;
-    } else if (_isEngineRunning) {
-      primaryBorderColor = AppTheme.neonCyan.withOpacity(0.3);
+    if (isStartDisabled) {
+      primaryBorderColor = Colors.white.withOpacity(0.1);
     } else {
       primaryBorderColor = AppTheme.neonCyan;
     }
@@ -1325,19 +1457,55 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       children: [
         Row(
           children: [
-            // START GAME / RESUME GAME BUTTON
+            // START GAME BUTTON (Greyed out & non-functional when running or paused)
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: (_isEngineRunning && !isPaused) ? null : _handleStartOrToggleGame,
+                onPressed: isStartDisabled ? null : _handleStartOrToggleGame,
                 icon: Icon(
-                  isPaused
-                      ? Icons.play_arrow_rounded
-                      : (_isPreGameCountdownActive ? Icons.timer : Icons.play_arrow_rounded),
-                  color: isPaused ? AppTheme.neonGreen : AppTheme.neonCyan,
+                  _isPreGameCountdownActive ? Icons.timer : Icons.play_arrow_rounded,
+                  color: isStartDisabled ? Colors.white38 : AppTheme.neonCyan,
                   size: 22,
                 ),
                 label: Text(
                   primaryButtonText,
+                  style: TextStyle(
+                    color: isStartDisabled ? Colors.white38 : Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isStartDisabled ? AppTheme.darkBackground.withOpacity(0.5) : AppTheme.cardSurfaceElevated,
+                  disabledBackgroundColor: AppTheme.darkBackground.withOpacity(0.5),
+                  foregroundColor: Colors.white,
+                  side: BorderSide(
+                    color: primaryBorderColor,
+                    width: 1.5,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: isStartDisabled ? 0 : 2,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // PAUSE / RESUME BUTTON
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: isPaused
+                    ? (_isResumeCountdownActive ? null : _resumeGameEngine)
+                    : ((_isEngineRunning || _isPreGameCountdownActive) ? _pauseGameEngine : null),
+                icon: Icon(
+                  isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                  color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
+                  size: 22,
+                ),
+                label: Text(
+                  _isResumeCountdownActive
+                      ? 'RESUMING (${_resumeSecondsRemaining}s)'
+                      : (isPaused ? 'RESUME GAME' : 'PAUSE GAME'),
                   style: TextStyle(
                     color: isPaused ? AppTheme.neonGreen : Colors.white,
                     fontWeight: FontWeight.w900,
@@ -1350,42 +1518,12 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   disabledBackgroundColor: AppTheme.darkBackground.withOpacity(0.5),
                   foregroundColor: Colors.white,
                   side: BorderSide(
-                    color: primaryBorderColor,
+                    color: isPaused
+                        ? AppTheme.neonGreen
+                        : ((_isEngineRunning || _isPreGameCountdownActive)
+                            ? AppTheme.neonYellow
+                            : Colors.white.withOpacity(0.1)),
                     width: isPaused ? 2.0 : 1.5,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 2,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-
-            // PAUSE BUTTON
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: (_isEngineRunning || _isPreGameCountdownActive) && !isPaused
-                    ? _pauseGameEngine
-                    : null,
-                icon: const Icon(Icons.pause_rounded, color: AppTheme.neonYellow, size: 22),
-                label: const Text(
-                  'PAUSE GAME',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.cardSurfaceElevated,
-                  disabledBackgroundColor: AppTheme.darkBackground.withOpacity(0.5),
-                  foregroundColor: Colors.white,
-                  side: BorderSide(
-                    color: (_isEngineRunning || _isPreGameCountdownActive) && !isPaused
-                        ? AppTheme.neonYellow
-                        : Colors.white.withOpacity(0.1),
-                    width: 1.5,
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -1396,40 +1534,130 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           ],
         ),
         if (_isEngineRunning && _selectedGameMode == 'Manual' && !isPaused) ...[
-          const SizedBox(height: 10),
-          ElevatedButton.icon(
-            onPressed: _isReviewPhase
-                ? () {
-                    GameEngineManager.instance.nextQuestionManual(roomCode: 'TRIV');
-                  }
-                : null,
-            icon: Icon(
-              Icons.skip_next_rounded,
-              color: _isReviewPhase ? AppTheme.neonCyan : Colors.white38,
-              size: 24,
-            ),
-            label: Text(
-              _isReviewPhase ? 'NEXT QUESTION' : 'WAITING FOR QUESTION TIMER...',
-              style: TextStyle(
-                color: _isReviewPhase ? Colors.white : Colors.white38,
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
-                letterSpacing: 0.8,
+          const SizedBox(height: 12),
+          // If Round is completed and waiting for next round:
+          if (GameEngineManager.instance.isRoundCompletedWaitingForNext) ...[
+            ElevatedButton.icon(
+              onPressed: () {
+                GameEngineManager.instance.startNextRoundManual(
+                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                );
+                _startPreGameTimer();
+              },
+              icon: const Icon(
+                Icons.rocket_launch_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+              label: Text(
+                'START ROUND ${GameEngineManager.instance.currentRound}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonPurple,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
               ),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _isReviewPhase ? AppTheme.cardSurfaceElevated : AppTheme.darkBackground.withOpacity(0.5),
-              disabledBackgroundColor: AppTheme.darkBackground.withOpacity(0.5),
-              foregroundColor: Colors.white,
-              side: BorderSide(
-                color: _isReviewPhase ? AppTheme.neonCyan : Colors.white.withOpacity(0.1),
-                width: _isReviewPhase ? 2.0 : 1.0,
+          ] else if (!GameEngineManager.instance.isQuestionTimerRunning && !_isReviewPhase) ...[
+            // Host Reading Phase -> START TIMER button
+            ElevatedButton.icon(
+              onPressed: () {
+                GameEngineManager.instance.startManualTimer(
+                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                );
+              },
+              icon: const Icon(
+                Icons.play_circle_fill_rounded,
+                color: Colors.black87,
+                size: 26,
               ),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              elevation: _isReviewPhase ? 4 : 0,
+              label: const Text(
+                'START QUESTION TIMER',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonGreen,
+                foregroundColor: Colors.black87,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+              ),
             ),
-          ),
+          ] else if (GameEngineManager.instance.isQuestionTimerRunning && !_isReviewPhase) ...[
+            // Active Countdown Phase -> Allow host to SKIP / EXPIRE TIMER
+            ElevatedButton.icon(
+              onPressed: () {
+                GameEngineManager.instance.expireTimerManual(
+                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                );
+              },
+              icon: const Icon(
+                Icons.fast_forward_rounded,
+                color: AppTheme.neonYellow,
+                size: 24,
+              ),
+              label: const Text(
+                'END TIMER EARLY (REVEAL ANSWER)',
+                style: TextStyle(
+                  color: AppTheme.neonYellow,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.cardSurfaceElevated,
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: AppTheme.neonYellow, width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 2,
+              ),
+            ),
+          ] else if (_isReviewPhase) ...[
+            // Review phase -> NEXT QUESTION button
+            ElevatedButton.icon(
+              onPressed: () {
+                GameEngineManager.instance.nextQuestionManual(
+                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                );
+              },
+              icon: const Icon(
+                Icons.skip_next_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+              label: const Text(
+                'NEXT QUESTION',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+              ),
+            ),
+          ],
         ],
         const SizedBox(height: 10),
 
