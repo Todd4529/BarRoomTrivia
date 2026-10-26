@@ -199,7 +199,7 @@
 
             <!-- CLEAN BOTTOM CARD WITH FLUCTUATING TEXT -->
             <div class="promo-cta-box-centered">
-              <span class="fluctuating-text">WAITING FOR HOST TO START GAME</span>
+              <span class="fluctuating-text" id="promo-fluctuating-text">WAITING FOR HOST TO START GAME</span>
             </div>
           </div>
         </div>
@@ -218,6 +218,12 @@
           <!-- Bottom Rotation Progress Indicator -->
           <div class="tv-ad-progress-track">
             <div id="tv-ad-progress-fill" class="tv-ad-progress-fill"></div>
+          </div>
+
+          <!-- Floating Intermission Countdown Banner (Visible during Intermission) -->
+          <div id="tv-ad-intermission-banner" class="hidden" style="position: absolute; top: 24px; right: 28px; z-index: 100; background: rgba(10, 15, 30, 0.92); border: 2px solid var(--accent-yellow); border-radius: 20px; padding: 10px 22px; color: var(--accent-yellow); font-weight: 900; font-size: 16px; letter-spacing: 1.5px; box-shadow: 0 0 20px rgba(255, 214, 0, 0.4); display: flex; align-items: center; gap: 8px;">
+            <span>⏱️ NEXT ROUND IN</span>
+            <span id="tv-ad-round-timer" style="color: #fff;">2:00</span>
           </div>
         </div>
 

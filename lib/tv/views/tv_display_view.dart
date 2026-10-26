@@ -77,6 +77,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _roundWinnersOverlayTimer;
   Timer? _interRoundCountdownTimer;
   int _interRoundDurationSeconds = 120;
+  bool _isInterRoundPhase = false;
+  int _interRoundSecondsRemaining = 120;
   bool _isExitDialogOpen = false;
   bool _isAdSignageModeActive = false;
   bool _isSoundEffectsEnabled = true;
@@ -282,6 +284,54 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               });
               _startTimer();
             }
+          } else if ((status == 'round_summary' || status == 'inter_round') && !_isInterRoundPhase) {
+            final rawEnds = res['timer_ends_at'] ?? res['starts_at'];
+            int? endsAt;
+            if (rawEnds is num) {
+              endsAt = rawEnds.toInt();
+            } else if (rawEnds is String) {
+              final dt = DateTime.tryParse(rawEnds);
+              endsAt = dt?.millisecondsSinceEpoch ?? int.tryParse(rawEnds);
+            }
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final remSec = endsAt != null ? max(1, ((endsAt - now) / 1000).ceil()) : 120;
+            final targetEpoch = endsAt ?? (now + remSec * 1000);
+            final nextR = (res['current_round'] as int?) ?? (res['round_number'] as int?) ?? (_currentRound + 1);
+
+            setState(() {
+              _isGameActive = false;
+              _currentQuestion = null;
+              _isTimerExpired = false;
+              _isInterQuestionPhase = false;
+              _isInterRoundPhase = true;
+              _interRoundSecondsRemaining = remSec;
+              _currentRound = nextR;
+            });
+
+            _interRoundCountdownTimer?.cancel();
+            _interRoundCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (!mounted) {
+                timer.cancel();
+                return;
+              }
+              final currentNow = DateTime.now().millisecondsSinceEpoch;
+              final rem = ((targetEpoch - currentNow) / 1000).ceil();
+              if (rem > 0) {
+                if (_interRoundSecondsRemaining != rem) {
+                  setState(() => _interRoundSecondsRemaining = rem);
+                }
+              } else {
+                timer.cancel();
+                setState(() {
+                  _isInterRoundPhase = false;
+                  _showRoundWinnersOverlay = false;
+                  _isPreGameCountdown = true;
+                  _preGameSeconds = 5;
+                });
+                _startPreGameTimer();
+              }
+            });
+            _startAdSlideTimer();
           }
         }
       } catch (_) {}
@@ -305,6 +355,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       onPreGameCountdownBroadcast: (payload) {
         _adSlideTimer?.cancel();
         _interQuestionTimer?.cancel();
+        _interRoundCountdownTimer?.cancel();
         _timer?.cancel();
         final startsAtEpochMs = payload['starts_at_epoch_ms'] as int?;
         final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -320,6 +371,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
         setState(() {
           _isPreGameCountdown = true;
+          _isInterRoundPhase = false;
           _preGameSeconds = remaining > 0 ? remaining : 10;
           _isGameActive = false;
           _isTimerExpired = false;
@@ -421,10 +473,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _adSlideTimer?.cancel();
           _preGameTimer?.cancel();
           _interQuestionTimer?.cancel();
+          _interRoundCountdownTimer?.cancel();
+          _roundWinnersOverlayTimer?.cancel();
           _timer?.cancel();
 
           setState(() {
             _currentQuestion = question;
+            _isInterRoundPhase = false;
+            _showRoundWinnersOverlay = false;
             _totalDuration = duration;
             _remainingSeconds = durationSec;
             _questionIndex = qInRound;
@@ -609,6 +665,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           final nextR = (payload['next_round'] as num?)?.toInt() ??
               (payload['nextRound'] as num?)?.toInt() ??
               (completedR + 1);
+          final interRoundTargetEpochMs = nextStartsAt ?? (DateTime.now().millisecondsSinceEpoch + delaySec * 1000);
           setState(() {
             _isGameActive = false;
             _currentQuestion = null;
@@ -616,6 +673,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isTimerExpired = false;
             _isInterQuestionPhase = false;
             _interQuestionSecondsRemaining = 0;
+            _isInterRoundPhase = true;
+            _interRoundSecondsRemaining = delaySec;
             _top3Winners = parsed;
             _showRoundWinnersOverlay = parsed.isNotEmpty;
             _currentRound = nextR;
@@ -636,10 +695,25 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             }
           });
 
-          // Maintain ad signage display for the entire intermission time (e.g. 2 minutes)
-          _interRoundCountdownTimer = Timer(Duration(seconds: delaySec), () {
-            if (mounted) {
+          // Maintain countdown timer for the entire intermission time (e.g. 2 minutes)
+          _interRoundCountdownTimer?.cancel();
+          _interRoundCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final rem = ((interRoundTargetEpochMs - now) / 1000).ceil();
+            if (rem > 0) {
+              if (_interRoundSecondsRemaining != rem) {
+                setState(() {
+                  _interRoundSecondsRemaining = rem;
+                });
+              }
+            } else {
+              timer.cancel();
               setState(() {
+                _isInterRoundPhase = false;
                 _showRoundWinnersOverlay = false;
                 _isTimerExpired = false;
                 _isInterQuestionPhase = false;
@@ -1125,6 +1199,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       _isTimerExpired = false;
       _isInterQuestionPhase = false;
       _isGameActive = false;
+      _isInterRoundPhase = true;
+      _interRoundSecondsRemaining = interRoundSec;
       _interQuestionSecondsRemaining = 0;
       _top3Winners = winners;
       _showRoundWinnersOverlay = true;
@@ -1171,11 +1247,25 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       }
     });
 
-    // Run the full intermission between rounds (e.g. 2 minutes / 120s) displaying ad signage uncovered
+    // Run the full intermission countdown between rounds (e.g. 2 minutes / 120s) displaying ad signage with active timer
     _interRoundCountdownTimer?.cancel();
-    _interRoundCountdownTimer = Timer(Duration(seconds: interRoundSec), () {
-      if (mounted) {
+    _interRoundCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final rem = ((nextStartsAt - now) / 1000).ceil();
+      if (rem > 0) {
+        if (_interRoundSecondsRemaining != rem) {
+          setState(() {
+            _interRoundSecondsRemaining = rem;
+          });
+        }
+      } else {
+        timer.cancel();
         setState(() {
+          _isInterRoundPhase = false;
           _showRoundWinnersOverlay = false;
           _isTimerExpired = false;
           _isInterQuestionPhase = false;
@@ -2003,7 +2093,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                               const Icon(Icons.timer_rounded, color: AppTheme.neonCyan, size: 22),
                               const SizedBox(width: 8),
                               Text(
-                                'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundDurationSeconds)}',
+                                'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
                                 style: const TextStyle(
                                   color: AppTheme.neonCyan,
                                   fontWeight: FontWeight.w900,
@@ -2136,7 +2226,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
                 const SizedBox(height: 12),
 
-                // Lowered & Centered Waiting for host banner with generous spacing
+                // Lowered & Centered Intermission Countdown or Waiting for host banner with generous spacing
                 Align(
                   alignment: Alignment.center,
                   child: Container(
@@ -2144,29 +2234,34 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     decoration: BoxDecoration(
                       color: AppTheme.darkBackground,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.neonCyan, width: 2),
+                      border: Border.all(
+                        color: _isInterRoundPhase ? AppTheme.neonYellow : AppTheme.neonCyan,
+                        width: 2,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.neonCyan.withValues(alpha: 0.45),
+                          color: (_isInterRoundPhase ? AppTheme.neonYellow : AppTheme.neonCyan).withValues(alpha: 0.45),
                           blurRadius: 20,
                           spreadRadius: 2,
                         ),
                       ],
                     ),
-                    child: const Text(
-                      'WAITING FOR HOST TO START GAME',
+                    child: Text(
+                      _isInterRoundPhase
+                          ? 'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}'
+                          : 'WAITING FOR HOST TO START GAME',
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white,
+                        color: _isInterRoundPhase ? AppTheme.neonYellow : Colors.white,
                         letterSpacing: 1.5,
                         shadows: [
                           Shadow(
-                            color: AppTheme.neonCyan,
+                            color: _isInterRoundPhase ? AppTheme.neonYellow : AppTheme.neonCyan,
                             blurRadius: 14,
                           ),
                           Shadow(
-                            color: AppTheme.neonCyan,
+                            color: _isInterRoundPhase ? AppTheme.neonYellow : AppTheme.neonCyan,
                             blurRadius: 28,
                           ),
                         ],
@@ -2270,6 +2365,42 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
+
+            if (_isInterRoundPhase)
+              Positioned(
+                top: 24,
+                right: 28,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkBackground.withOpacity(0.92),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.neonYellow, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.neonYellow.withOpacity(0.4),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.timer_rounded, color: AppTheme.neonYellow, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
+                        style: const TextStyle(
+                          color: AppTheme.neonYellow,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

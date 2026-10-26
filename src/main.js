@@ -5121,6 +5121,14 @@ function onQuestionStart(payload) {
   clearInterval(preGameCountdownInterval);
   clearInterval(modalCountdownInterval);
   clearInterval(playerReviewInterval);
+  clearInterval(winnerCountdownInterval);
+  const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
+  if (promoFluctuating) {
+    promoFluctuating.textContent = 'WAITING FOR HOST TO START GAME';
+    promoFluctuating.style.color = '';
+  }
+  const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+  if (tvAdBanner) tvAdBanner.classList.add('hidden');
 
   const btnTvBack = document.getElementById('btn-tv-back');
   if (btnTvBack) btnTvBack.classList.add('question-hidden');
@@ -6060,16 +6068,33 @@ function onRoundWinner(payload) {
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     const currentSecs = targetEpoch ? Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000)) : Math.max(0, --remWinnerSecs);
-    if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadgeText(currentSecs);
-    if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(currentSecs);
+    const badgeText = formatIntermissionBadgeText(currentSecs);
+    const roundTimerText = formatRoundTimer(currentSecs);
+
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
+    if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
     const cardTimer = document.getElementById('player-card-round-timer');
-    if (cardTimer) cardTimer.textContent = formatIntermissionBadgeText(currentSecs);
+    if (cardTimer) cardTimer.textContent = badgeText;
+
+    // Actively display the countdown timer on the TV promo bottom banner and ad signage
+    const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
+    if (promoFluctuating) {
+      promoFluctuating.textContent = `NEXT ROUND IN ${badgeText}`;
+      promoFluctuating.style.color = 'var(--accent-yellow)';
+    }
+
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    const tvAdTimer = document.getElementById('tv-ad-round-timer');
+    if (tvAdBanner) tvAdBanner.classList.remove('hidden');
+    if (tvAdTimer) tvAdTimer.textContent = badgeText;
 
     if (currentSecs <= 0) {
       clearInterval(winnerCountdownInterval);
       if (tvNextRoundTimer) tvNextRoundTimer.textContent = 'STARTING NOW';
       if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
       if (cardTimer) cardTimer.textContent = 'STARTING NOW';
+      if (promoFluctuating) promoFluctuating.textContent = 'STARTING NEXT ROUND...';
+      if (tvAdTimer) tvAdTimer.textContent = 'STARTING NOW';
     }
   }, 1000);
 
@@ -6091,7 +6116,16 @@ function hideWinnerModals() {
   clearTimeout(tvWinnerOverlayTimeout);
   if (tvWinnerOverlay) tvWinnerOverlay.classList.add('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.add('hidden');
-  clearInterval(winnerCountdownInterval);
+  if (currentGameState !== 'ROUND_SUMMARY') {
+    clearInterval(winnerCountdownInterval);
+    const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
+    if (promoFluctuating) {
+      promoFluctuating.textContent = 'WAITING FOR HOST TO START GAME';
+      promoFluctuating.style.color = '';
+    }
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) tvAdBanner.classList.add('hidden');
+  }
 }
 
 function onRoundSummary(payload) {
