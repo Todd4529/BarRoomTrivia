@@ -248,6 +248,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       roomCode: _activeSession!.roomCode,
       timerSeconds: _selectedTimerSeconds,
       genres: _selectedGenreQueue,
+      isNewGame: true,
+      roundNumber: 1,
     );
 
     _startPreGameTimer();

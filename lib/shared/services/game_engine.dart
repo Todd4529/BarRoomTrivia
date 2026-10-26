@@ -42,8 +42,18 @@ class GameEngineManager {
     required int timerSeconds,
     List<String> genres = const [],
     int durationSeconds = 30,
+    bool isNewGame = false,
+    int? roundNumber,
   }) {
     if (isPreGameCountdownActive || isEngineRunning) return;
+
+    if (isNewGame || roundNumber == 1) {
+      currentRound = 1;
+      currentQuestionIndex = 0;
+    } else if (roundNumber != null && roundNumber > 0) {
+      currentRound = roundNumber;
+      currentQuestionIndex = (roundNumber - 1) * 10;
+    }
 
     selectedTimerSeconds = timerSeconds;
     selectedGenres = List.from(genres);

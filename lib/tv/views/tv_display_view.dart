@@ -254,7 +254,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               final sessionRound = (res['current_round'] as int?) ??
                   (res['round_number'] as int?) ??
                   ((rawQ - 1) ~/ totalQ) + 1;
-              final roundNum = sessionRound > _currentRound ? sessionRound : _currentRound;
+              final roundNum = sessionRound;
               final cat = qData['category']?.toString() ?? res['category']?.toString();
               final nowMs = DateTime.now().millisecondsSinceEpoch;
               final targetEndsAt = (timerEndsAt != null && timerEndsAt > nowMs)
@@ -329,7 +329,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _currentQuestion = null; // Stale question flushed
           _questionIndex = 0;
           if (rNum != null && rNum > 0) {
-            _currentRound = max(_currentRound, rNum);
+            _currentRound = rNum;
           }
           if (incomingGenre != null && incomingGenre.isNotEmpty) {
             _activeGenre = incomingGenre;

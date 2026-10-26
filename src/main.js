@@ -1808,7 +1808,12 @@ function handleIncomingPreGameCountdown(rawPayload) {
 
   const rNum = Number(payload.round_number || payload.roundNumber);
   if (rNum && rNum > 0) {
-    currentRound = Math.max(currentRound, rNum);
+    if (rNum === 1) {
+      currentRound = 1;
+      currentQuestionIndex = 0;
+    } else {
+      currentRound = Math.max(currentRound, rNum);
+    }
   }
 
   hideResultModal();
@@ -2954,10 +2959,11 @@ function initHostControls() {
     }
     isAutomatedEngineRunning = true;
     currentRoundQuestions = [];
-    if (currentGameState === 'LOBBY' || currentGameState === 'NOT_STARTED' || currentQuestionIndex === 0) {
-      currentQuestionIndex = 0;
-      currentRound = 1;
-    }
+    currentQuestionIndex = 0;
+    currentRound = 1;
+    currentQuestionData = null;
+    playerChoiceSubmitted = null;
+    isCurrentQuestionScored = false;
     updateHostEngineUI('IN PROGRESS');
 
     // 1. Determine active genre and broadcast pre-game countdown (10s) immediately to TV and players
@@ -3009,6 +3015,8 @@ function initHostControls() {
         status: 'pre_game_countdown',
         starts_at: startsAtMs,
         current_question_index: 0,
+        current_round: 1,
+        round_number: 1,
         question_data: null,
         current_question_data: null,
         genre: initialGenre,
@@ -4479,11 +4487,7 @@ async function runNextAutomatedStep() {
   if (!isAutomatedEngineRunning) return;
 
   try {
-    const calculatedRound = Math.floor(currentQuestionIndex / 10) + 1;
-    currentRound = Math.max(currentRound, calculatedRound);
-    if (Math.floor(currentQuestionIndex / 10) + 1 < currentRound) {
-      currentQuestionIndex = (currentRound - 1) * 10;
-    }
+    currentRound = Math.floor(currentQuestionIndex / 10) + 1;
     const questionInRound = (currentQuestionIndex % 10) + 1;
 
     let activeRoundGenre = 'Auto Select';
@@ -6258,7 +6262,12 @@ function initPlayerControls() {
           }
           const rNum = Number(session.current_round || session.round_number || 0);
           if (rNum > 0) {
-            currentRound = Math.max(currentRound, rNum);
+            if (session.status === 'pre_game_countdown' && rNum === 1) {
+              currentRound = 1;
+              currentQuestionIndex = 0;
+            } else {
+              currentRound = Math.max(currentRound, rNum);
+            }
           }
           if (session.status === 'pre_game_countdown') {
             let startsAt = session.starts_at;
