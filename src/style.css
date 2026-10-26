@@ -4177,5 +4177,44 @@ body.auth-mode .main-container {
   border-radius: 16px;
 }
 
+/* Host Refresh Players Button & Spin Animation */
+#btn-refresh-players {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1.5px solid rgba(0, 229, 255, 0.4);
+  background: rgba(0, 229, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#btn-refresh-players:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.25);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+#btn-refresh-players:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+#btn-refresh-players.refreshing .spin-icon {
+  display: inline-block;
+  animation: refreshSpin 0.75s linear infinite;
+}
+
+@keyframes refreshSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
 
 

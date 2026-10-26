@@ -20,8 +20,8 @@
   <link rel="manifest" href="/BarRoomTrivia/assets/manifest--2K9kbVy.webmanifest">
   <link rel="apple-touch-icon" href="./app_logo.png">
   <link rel="icon" type="image/png" href="./app_logo.png">
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-D0KgEqKl.js"></script>
-  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-CCKThfyS.css">
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-CxzLCLia.js"></script>
+  <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-Z-MI-y78.css">
 </head>
 <body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
@@ -792,7 +792,7 @@
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.loadInitialPlayers ? window.loadInitialPlayers() : (window.renderLeaderboard && window.renderLeaderboard())">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.refreshHostPlayers ? window.refreshHostPlayers() : (window.loadInitialPlayers && window.loadInitialPlayers())" title="Refresh Live Players Roster">🔄 Refresh</button>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
 

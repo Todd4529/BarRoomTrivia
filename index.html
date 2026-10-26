@@ -791,7 +791,7 @@
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.loadInitialPlayers ? window.loadInitialPlayers() : (window.renderLeaderboard && window.renderLeaderboard())">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.refreshHostPlayers ? window.refreshHostPlayers() : (window.loadInitialPlayers && window.loadInitialPlayers())" title="Refresh Live Players Roster">🔄 Refresh</button>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
 

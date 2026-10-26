@@ -737,38 +737,96 @@ function isFictitiousPlayer(nickname) {
 // INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY
 let playersLeaderboard = [];
 
-function loadInitialPlayers() {
-  const normRoom = (currentRoomCode || 'TRIV').toUpperCase();
+async function refreshHostPlayers() {
+  const btnRefresh = document.getElementById('btn-refresh-players');
+  if (btnRefresh) {
+    btnRefresh.disabled = true;
+    btnRefresh.innerHTML = '<span class="spin-icon">🔄</span> Refreshing...';
+    btnRefresh.classList.add('refreshing');
+  }
 
-  // Purge any fictitious / host users from memory
-  playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+  const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
 
+  // 1. Broadcast request state sync so connected player devices immediately re-announce themselves
   try {
-    supabase.from('players')
-      .select('*')
-      .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
-      .order('cumulative_score', { ascending: false })
-      .then(({ data, error }) => {
-        if (!error && data) {
-          const realPlayers = data.filter(p => !isFictitiousPlayer(p.nickname));
-          playersLeaderboard = realPlayers.map(p => ({
-            id: p.id || p.nickname,
-            player_uid: p.player_uid || p.nickname,
-            room_code: normRoom,
-            nickname: p.nickname,
-            score: Number(p.cumulative_score ?? p.score ?? 0),
-            cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
-            streak: p.streak || 0,
-            is_connected: p.is_connected !== false
-          }));
-          renderLeaderboard();
-          updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
-        }
-      }).catch((err) => {
-        console.warn('[Leaderboard] Load players error:', err);
-      });
+    channel.postMessage({ type: 'REQUEST_STATE_SYNC', payload: { room_code: normRoom } });
+    broadcastRealtimeEvent('request_state_sync', { room_code: normRoom });
   } catch (_) {}
+
+  // 2. Fetch fresh roster from Supabase players table
+  try {
+    if (supabase) {
+      let { data, error } = await supabase
+        .from('players')
+        .select('*')
+        .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
+        .order('cumulative_score', { ascending: false });
+
+      if (error || !data || data.length === 0) {
+        const fallbackRes = await supabase
+          .from('players')
+          .select('*')
+          .eq('room_code', 'TRIV')
+          .order('cumulative_score', { ascending: false });
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
+          error = null;
+        }
+      }
+
+      if (!error && Array.isArray(data)) {
+        const realPlayers = data.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+        for (const p of realPlayers) {
+          const nick = (p.nickname || '').trim();
+          if (!nick) continue;
+          const score = Number(p.cumulative_score ?? p.score ?? 0);
+          const existing = playersLeaderboard.find(x => x.nickname.toLowerCase() === nick.toLowerCase());
+          if (existing) {
+            existing.score = Math.max(Number(existing.score || 0), score);
+            existing.cumulative_score = Math.max(Number(existing.cumulative_score || 0), score);
+            existing.streak = p.streak || existing.streak || 0;
+            existing.is_connected = p.is_connected !== false;
+          } else {
+            playersLeaderboard.push({
+              id: p.id || nick,
+              player_uid: p.player_uid || nick,
+              room_code: normRoom,
+              nickname: nick,
+              score: score,
+              cumulative_score: score,
+              streak: p.streak || 0,
+              is_connected: p.is_connected !== false,
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Leaderboard] Refresh players error:', err);
+  }
+
+  // 3. Purge any fictitious players & re-render host roster and leaderboard
+  playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+  renderLeaderboard();
+  renderHostPlayersRoster();
+  updateHostEngineUI(currentGameState);
+
+  const hostPlayersRoom = document.getElementById('host-players-room-code');
+  if (hostPlayersRoom) hostPlayersRoom.textContent = normRoom;
+
+  setTimeout(() => {
+    if (btnRefresh) {
+      btnRefresh.disabled = false;
+      btnRefresh.innerHTML = '🔄 Refresh';
+      btnRefresh.classList.remove('refreshing');
+    }
+  }, 600);
 }
+
+function loadInitialPlayers() {
+  refreshHostPlayers();
+}
+window.refreshHostPlayers = refreshHostPlayers;
 window.loadInitialPlayers = loadInitialPlayers;
 
 // PROGRESSIVE WEB APP (PWA) SUPPORT & INSTALL PROMPTS
@@ -2509,6 +2567,7 @@ function initHostControls() {
 
     if (tabName === 'players') {
       renderHostPlayersRoster();
+      refreshHostPlayers();
     }
   }
 
@@ -3062,6 +3121,12 @@ function initHostControls() {
     } else {
       pauseGameEngine();
     }
+  });
+
+  const btnRefreshPlayers = document.getElementById('btn-refresh-players');
+  btnRefreshPlayers?.addEventListener('click', (e) => {
+    e.preventDefault();
+    refreshHostPlayers();
   });
 
   btnResetGame?.addEventListener('click', () => {
