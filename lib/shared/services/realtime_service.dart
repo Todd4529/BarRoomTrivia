@@ -468,6 +468,9 @@ class RealtimeService {
     } catch (_) {}
   }
 
+  /// Convenience wrapper for state synchronization request
+  Future<void> requestStateSync(String roomCode) => broadcastSyncRequest(roomCode: roomCode);
+
   /// Broadcast question start payload from Host to all connected player & TV views
   Future<void> broadcastQuestion({
     required String roomCode,

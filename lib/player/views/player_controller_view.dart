@@ -764,12 +764,21 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         } catch (_) {}
 
-        final res = await SupabaseConfig.client
+        var res = await SupabaseConfig.client
             .from('game_sessions')
             .select()
-            .eq('room_code', roomCode)
+            .ilike('room_code', roomCode.trim())
             .maybeSingle()
             .timeout(const Duration(seconds: 3));
+
+        if (res == null && roomCode.trim().toUpperCase() != 'TRIV') {
+          res = await SupabaseConfig.client
+              .from('game_sessions')
+              .select()
+              .eq('room_code', 'TRIV')
+              .maybeSingle()
+              .timeout(const Duration(seconds: 3));
+        }
 
         if (res != null && mounted) {
           final status = res['status'] as String?;
@@ -1038,6 +1047,34 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           });
         }
       });
+
+      // Start autonomous inter-question countdown fallback so player is never stuck waiting on host
+      if (_interQuestionTimer == null || !_interQuestionTimer!.isActive) {
+        final isLastQ = _questionNumberInRound == 10;
+        if (!isLastQ) {
+          _interQuestionSecondsRemaining = 15;
+          _interQuestionTimer?.cancel();
+          _interQuestionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
+            if (_interQuestionSecondsRemaining > 1) {
+              setState(() {
+                _interQuestionSecondsRemaining--;
+              });
+            } else {
+              timer.cancel();
+              setState(() {
+                _isInterQuestionPhase = false;
+                _interQuestionSecondsRemaining = 0;
+              });
+              final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
+              _realtimeService.requestStateSync(room);
+            }
+          });
+        }
+      }
     }
   }
 

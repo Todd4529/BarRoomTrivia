@@ -4627,12 +4627,13 @@ async function runNextAutomatedStep() {
     }
   } catch (loopErr) {
     console.error('[Automated Engine] Recovering from step error:', loopErr);
-    setTimeout(() => {
+    clearTimeout(autoEngineTimeout);
+    const fallbackDuration = Number(selectedQuestionDuration) || 20;
+    autoEngineTimeout = setTimeout(() => {
       if (isAutomatedEngineRunning) {
-        currentQuestionIndex++;
-        runNextAutomatedStep();
+        checkHostEngineTick();
       }
-    }, 3000);
+    }, fallbackDuration * 1000);
   }
 }
 
@@ -5097,6 +5098,8 @@ function onQuestionStart(payload) {
   if (durationSeconds <= 4 && totalTimerDuration > 4) {
     durationSeconds = totalTimerDuration;
   }
+  const roundNumber = Number(payload.roundNumber || payload.round_number || payload.current_round || currentRound || 1);
+  const questionNumberInRound = Number(payload.questionNumberInRound || payload.question_number_in_round || ((currentQuestionIndex % 10) + 1));
   const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
 
   currentQuestionData = questionData;
@@ -5274,46 +5277,50 @@ function onQuestionStart(payload) {
   hideInterQuestionCountdown();
 
   // Update Player Phone Display & Difficulty Pill
-  const playerDispRoom = document.getElementById('player-disp-room');
-  const playerCategoryPill = document.getElementById('player-category-pill');
-  const playerDiffPill = document.getElementById('player-difficulty-pill');
-  const playerQuestionText = document.getElementById('player-question-text');
-  const playerStatusBadge = document.getElementById('player-status-badge');
-  const answerBtns = document.querySelectorAll('.btn-answer');
+  try {
+    const playerDispRoom = document.getElementById('player-disp-room');
+    const playerCategoryPill = document.getElementById('player-category-pill');
+    const playerDiffPill = document.getElementById('player-difficulty-pill');
+    const playerQuestionText = document.getElementById('player-question-text');
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    const answerBtns = document.querySelectorAll('.btn-answer');
 
-  updatePlayerHeaderCard(roundNumber || currentRound || 1, questionNumberInRound || 1);
-  if (playerCategoryPill) playerCategoryPill.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
-  if (playerDiffPill) {
-    playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
-    playerDiffPill.textContent = `${diffEmojiMap[activeDifficulty] || '🎯'} ${activeDifficulty.toUpperCase()}`;
-  }
-  if (playerQuestionText) playerQuestionText.textContent = cleanQText;
-
-  const pOptA = document.getElementById('p-opt-a');
-  if (pOptA) pOptA.textContent = questionData.options.A;
-  const pOptB = document.getElementById('p-opt-b');
-  if (pOptB) pOptB.textContent = questionData.options.B;
-  const pOptC = document.getElementById('p-opt-c');
-  if (pOptC) pOptC.textContent = questionData.options.C;
-  const pOptD = document.getElementById('p-opt-d');
-  if (pOptD) pOptD.textContent = questionData.options.D;
-
-  if (playerStatusBadge) {
-    if (isIdle) {
-      playerStatusBadge.className = 'status-badge status-active';
-      playerStatusBadge.innerHTML = `<span id="status-icon">🎤</span> HOST READING QUESTION`;
-    } else {
-      playerStatusBadge.className = 'status-badge status-active';
-      playerStatusBadge.innerHTML = `<span id="status-icon">⏱️</span> UNLOCKED`;
+    updatePlayerHeaderCard(roundNumber || currentRound || 1, questionNumberInRound || 1);
+    if (playerCategoryPill) playerCategoryPill.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
+    if (playerDiffPill) {
+      playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
+      playerDiffPill.textContent = `${diffEmojiMap[activeDifficulty] || '🎯'} ${activeDifficulty.toUpperCase()}`;
     }
-  }
+    if (playerQuestionText) playerQuestionText.textContent = cleanQText;
 
-  answerBtns.forEach(btn => {
-    btn.disabled = false;
-    btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
-    const existingBadge = btn.querySelector('.player-correct-badge');
-    if (existingBadge) existingBadge.remove();
-  });
+    const pOptA = document.getElementById('p-opt-a');
+    if (pOptA) pOptA.textContent = questionData.options.A;
+    const pOptB = document.getElementById('p-opt-b');
+    if (pOptB) pOptB.textContent = questionData.options.B;
+    const pOptC = document.getElementById('p-opt-c');
+    if (pOptC) pOptC.textContent = questionData.options.C;
+    const pOptD = document.getElementById('p-opt-d');
+    if (pOptD) pOptD.textContent = questionData.options.D;
+
+    if (playerStatusBadge) {
+      if (isIdle) {
+        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.innerHTML = `<span id="status-icon">🎤</span> HOST READING QUESTION`;
+      } else {
+        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.innerHTML = `<span id="status-icon">⏱️</span> UNLOCKED`;
+      }
+    }
+
+    answerBtns.forEach(btn => {
+      btn.disabled = false;
+      btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+      const existingBadge = btn.querySelector('.player-correct-badge');
+      if (existingBadge) existingBadge.remove();
+    });
+  } catch (playerErr) {
+    console.warn('[onQuestionStart] Player display update non-fatal error:', playerErr);
+  }
 }
 
 function startCountdown(seconds) {
