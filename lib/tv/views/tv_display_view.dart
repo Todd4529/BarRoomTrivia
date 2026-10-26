@@ -927,7 +927,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         'round_number': _currentRound,
         'genre': _activeGenre,
         'duration_seconds': duration,
-        'timer_ends_at': timerEndsAtEpochMs,
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
         'question_data': question.toJson(),
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code');
@@ -1229,8 +1229,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         'round_number': nextRound,
         'current_question_index': (nextRound - 1) * _totalQuestionsInRound,
         'duration_seconds': interRoundSec,
-        'starts_at': nextStartsAt,
-        'timer_ends_at': nextStartsAt,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(nextStartsAt).toIso8601String(),
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(nextStartsAt).toIso8601String(),
         'genre': nextGenre,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code');
@@ -1352,7 +1352,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         'round_number': _currentRound,
         'genre': _activeGenre,
         'duration_seconds': duration,
-        'timer_ends_at': timerEndsAtEpochMs,
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
         'question_data': question.toJson(),
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code');

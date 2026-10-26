@@ -573,13 +573,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 (payload['delay_seconds'] as num?)?.toInt() ??
                 (payload['duration_seconds'] as num?)?.toInt() ??
                 120;
-        final completedR = (payload['completed_round'] as num?)?.toInt() ??
+        final rawCompleted = (payload['completed_round'] as num?)?.toInt() ??
             (payload['round_number'] as num?)?.toInt() ??
-            (payload['roundNumber'] as num?)?.toInt() ??
-            _currentRound;
-        final nextR = (payload['next_round'] as num?)?.toInt() ??
-            (payload['nextRound'] as num?)?.toInt() ??
-            (completedR + 1);
+            (payload['roundNumber'] as num?)?.toInt();
+        final rawNext = (payload['next_round'] as num?)?.toInt() ??
+            (payload['nextRound'] as num?)?.toInt();
+        final nextR = rawNext ?? (rawCompleted != null ? rawCompleted + 1 : _currentRound);
         _currentRound = nextR;
 
         if (parsedWinners.isNotEmpty) {
@@ -654,7 +653,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             if (mounted) {
               setState(() {
                 _interRoundSecondsRemaining = 0;
+                _isInterRoundPhase = false;
+                _showRoundWinnersOverlay = false;
               });
+              final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
+              if (room.isNotEmpty) {
+                _realtimeService.broadcastSyncRequest(roomCode: room);
+                _realtimeService.requestStateSync(room);
+              }
             }
           }
         });
@@ -824,6 +830,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               final sessionR = rNum ?? _currentRound;
               final isNewQuestion = _currentQuestion == null ||
                   _isInterQuestionPhase ||
+                  _isInterRoundPhase ||
+                  _showRoundWinnersOverlay ||
                   _isReviewPhase ||
                   sessionR != _currentRound ||
                   calcQNum != _questionNumberInRound ||

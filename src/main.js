@@ -1920,6 +1920,9 @@ function handleIncomingQuestionStart(rawPayload) {
   }
 
   // A question_start event indicates active gameplay; dismiss all intermission and countdown overlays
+  currentGameState = 'QUESTION_ACTIVE';
+  clearInterval(winnerCountdownInterval);
+  winnerCountdownInterval = null;
   hideWinnerModals();
   hideResultModal();
   hideInterQuestionCountdown();
@@ -2090,7 +2093,9 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'timer_expired') {
     handleIncomingTimerExpired(payload);
   } else if (normEvent === 'round_completed' || normEvent === 'round_winner') {
-    const nextR = Number(payload?.next_round || payload?.nextRound || ((payload?.round_number || currentRound) + 1));
+    const rawCompleted = payload?.completed_round || payload?.round_number || payload?.roundNumber;
+    const rawNext = payload?.next_round || payload?.nextRound;
+    const nextR = Number(rawNext || (rawCompleted ? Number(rawCompleted) + 1 : currentRound));
     currentRound = Math.max(currentRound, nextR);
     const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
     const delaySecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 60);
@@ -6077,6 +6082,12 @@ function onRoundWinner(payload) {
   const btnTvBack = document.getElementById('btn-tv-back');
   if (btnTvBack) btnTvBack.classList.remove('question-hidden');
 
+  const answerBtns = document.querySelectorAll('.btn-answer');
+  answerBtns.forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+  });
+
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     const currentSecs = targetEpoch ? Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000)) : Math.max(0, --remWinnerSecs);
@@ -6102,11 +6113,26 @@ function onRoundWinner(payload) {
 
     if (currentSecs <= 0) {
       clearInterval(winnerCountdownInterval);
+      winnerCountdownInterval = null;
+      hideWinnerModals();
+      if (currentGameState === 'ROUND_SUMMARY') {
+        currentGameState = 'COUNTDOWN';
+      }
       if (tvNextRoundTimer) tvNextRoundTimer.textContent = 'STARTING NOW';
       if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
       if (cardTimer) cardTimer.textContent = 'STARTING NOW';
       if (promoFluctuating) promoFluctuating.textContent = 'STARTING NEXT ROUND...';
       if (tvAdTimer) tvAdTimer.textContent = 'STARTING NOW';
+
+      // Immediately request state sync from host / TV display
+      broadcastRealtimeEvent('request_state_sync', {
+        room_code: currentRoomCode,
+        client: 'player',
+        timestamp: Date.now()
+      });
+      if (typeof triggerActiveSessionSync === 'function') {
+        triggerActiveSessionSync();
+      }
     }
   }, 1000);
 
@@ -6329,9 +6355,14 @@ function initPlayerControls() {
           } else if ((session.status === 'question_active' || session.status === 'active_reading') && session.question_data) {
             const isIntermissionActive = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
             const sessionRound = Number(session.current_round || session.round_number || session.question_data.round_number || session.question_data.roundNumber || currentRound);
-            // Stale check: Only skip if session round is strictly less than current round
-            if (isIntermissionActive && sessionRound < currentRound) {
-              return;
+            if (isIntermissionActive) {
+              if (sessionRound < currentRound) {
+                return;
+              }
+              currentGameState = 'QUESTION_ACTIVE';
+              clearInterval(winnerCountdownInterval);
+              winnerCountdownInterval = null;
+              hideWinnerModals();
             }
             const qData = session.question_data;
             const now = Date.now();

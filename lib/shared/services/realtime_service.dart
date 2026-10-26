@@ -397,7 +397,7 @@ class RealtimeService {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
         'status': 'pre_game_countdown',
-        'starts_at': startsAtEpochMs,
+        'starts_at': startsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String() : null,
         if (roundNumber != null) 'current_round': roundNumber,
         if (roundNumber != null) 'round_number': roundNumber,
         if (genre != null) 'genre': genre,
@@ -559,7 +559,7 @@ class RealtimeService {
         'current_question_data': payload,
         'question_data': payload,
         'duration_seconds': durationSeconds,
-        'timer_ends_at': timerEndsAtEpochMs,
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
         'game_play_mode': gamePlayMode,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
@@ -605,7 +605,7 @@ class RealtimeService {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
         'status': 'question_active',
-        'timer_ends_at': timerEndsAtEpochMs,
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
         'duration_seconds': durationSeconds,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
@@ -731,7 +731,7 @@ class RealtimeService {
       await SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': roomCode.toUpperCase(),
         'status': 'resuming',
-        'starts_at': startsAtEpochMs,
+        'starts_at': startsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String() : null,
         'remaining_question_seconds': remainingQuestionSeconds,
         if (roundNumber != null) 'current_round': roundNumber,
         if (questionIndex != null) 'current_question_index': questionIndex,
@@ -904,8 +904,8 @@ class RealtimeService {
         'current_round': upR,
         'round_number': upR,
         'duration_seconds': delay,
-        'starts_at': nextRoundStartsAtEpochMs,
-        'timer_ends_at': nextRoundStartsAtEpochMs,
+        'starts_at': nextRoundStartsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String() : null,
+        'timer_ends_at': nextRoundStartsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String() : null,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
