@@ -423,7 +423,7 @@ function playSound(type) {
     try {
       const now = Math.max(ctx.currentTime, 0.005);
 
-      if (type === 'tick' || type === 'tick_tock') { // if (type === 'tick')
+      if (type === 'tick') {
         // Authentic mechanical ticking clock sound (escapement click + acoustic body + gear catch)
         const remaining = typeof param === 'number' ? param : 5;
         const isTick = (remaining % 2 !== 0); // Alternate Tick / Tock like a clock pendulum
@@ -476,7 +476,8 @@ function playSound(type) {
         gain2.connect(ctx.destination);
         osc2.start(rebTime);
         osc2.stop(rebTime + 0.012);
-      } else if (type === 'tap') {
+      }
+      if (type === 'tap') {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'triangle';
@@ -488,7 +489,8 @@ function playSound(type) {
         gain.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + 0.06);
-      } else if (type === 'question_start' || type === 'start') {
+      }
+      if (type === 'question_start' || type === 'start') {
         // Uplifting 3-tone game show chord stinger: C5 (523Hz), E5 (659Hz), G5 (784Hz)
         [ { f: 523.25, t: 0, d: 0.10, g: 0.35 }, { f: 659.25, t: 0.08, d: 0.12, g: 0.38 }, { f: 783.99, t: 0.16, d: 0.28, g: 0.42 } ].forEach(n => {
           const osc = ctx.createOscillator();
@@ -503,7 +505,8 @@ function playSound(type) {
           osc.start(now + n.t);
           osc.stop(now + n.t + n.d);
         });
-      } else if (type === 'fanfare') {
+      }
+      if (type === 'fanfare') {
         // GRAND INTER-ROUND VICTORY CELEBRATION: Realistic crowd cheering & human handclapping
         const buffer = getCrowdApplauseBuffer(ctx, true);
         const src = ctx.createBufferSource();
@@ -513,7 +516,8 @@ function playSound(type) {
         src.connect(gNode);
         gNode.connect(ctx.destination);
         src.start(now);
-      } else if (type === 'correct' || type === 'clapping_fanfare') {
+      }
+      if (type === 'correct') {
         // CORRECT ANSWER CELEBRATION: Realistic crowd applause & cheer
         const buffer = getCrowdApplauseBuffer(ctx, false);
         const src = ctx.createBufferSource();
@@ -523,7 +527,8 @@ function playSound(type) {
         src.connect(gNode);
         gNode.connect(ctx.destination);
         src.start(now);
-      } else if (type === 'wrong') {
+      }
+      if (type === 'wrong') {
         // Classic descending buzzer (240Hz -> 140Hz)
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -536,7 +541,8 @@ function playSound(type) {
         gain.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + 0.28);
-      } else if (type === 'buzz') {
+      }
+      if (type === 'buzz') {
         // Authoritative game-show buzzer: dual dissonant sawtooth (150Hz + 158Hz)
         [150, 158].forEach(freq => {
           const osc = ctx.createOscillator();
@@ -2014,7 +2020,11 @@ function handleIncomingQuestionStart(rawPayload) {
     timerEndsAtGlobalMs = now + (durationSeconds * 1000);
   }
 
-  if (isSameQuestion && !isUiWaiting && playerChoiceSubmitted !== null) {
+  if (isUiWaiting) {
+    // Current UI is stuck on waiting or blank - clear submitted choice so question displays immediately
+    playerChoiceSubmitted = null;
+  }
+  if (isSameQuestion && !isUiWaiting && playerChoiceSubmitted !== null) { // if (isSameQuestion && playerChoiceSubmitted !== null)
     // Current question is already active and answer submitted.
     // Preserve their answer selection and do not wipe question scored state
     currentQuestionData = questionData;
@@ -3853,7 +3863,6 @@ function getOfficialBarRoomsTriviaAdSlide() {
 
 function getAllActiveAdSlides() {
   const officialAd = getOfficialBarRoomsTriviaAdSlide();
-  if (!officialAd) return [...customAdSlides];
   return [officialAd, ...customAdSlides];
 }
 
@@ -3884,7 +3893,9 @@ function syncTvSignageDisplay() {
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
     if (btnPromo) btnPromo.classList.add('active');
     if (btnLive) btnLive.classList.remove('active');
-    startTvAdSignageRotation();
+    if (!adRotationTimeout) {
+      startTvAdSignageRotation();
+    }
 
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) {
@@ -4138,13 +4149,24 @@ function onAdModeToggled(payload) {
 
 async function onAdSlidesUpdated(payload) {
   onAdModeToggled(payload);
-  if (payload && Array.isArray(payload.slides)) {
+  if (payload && Array.isArray(payload.slides) && payload.slides.length > 0) {
     customAdSlides = payload.slides;
     await idbAdStorage.saveSlides(customAdSlides);
+    try {
+      safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
+    } catch (_) {}
   } else {
     customAdSlides = await idbAdStorage.loadSlides();
+    if (!customAdSlides || customAdSlides.length === 0) {
+      try {
+        const fallback = safeStorage.getItem('bar_trivia_custom_ad_slides');
+        if (fallback) customAdSlides = JSON.parse(fallback);
+      } catch (_) {}
+    }
   }
   renderHostAdGallery();
+  stopTvAdSignageRotation();
+  startTvAdSignageRotation();
   syncTvSignageDisplay();
 }
 
@@ -4167,45 +4189,7 @@ function initHostAdSettings() {
       safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
       broadcastAdModeChange();
       syncTvSignageDisplay();
-
-      // Once toggled on prompt the user to upload photos or pdf files for ads
-      if (isAdModeActive) {
-        showAdUploadPromptModal();
-      }
     });
-  }
-
-  function showAdUploadPromptModal() {
-    const promptModal = document.getElementById('host-ad-upload-prompt-modal');
-    if (!promptModal) return;
-    promptModal.classList.remove('hidden');
-
-    const btnUpload = document.getElementById('btn-prompt-upload-ads');
-    const btnDismiss = document.getElementById('btn-prompt-dismiss-ads');
-
-    const handleUploadClick = (e) => {
-      e?.preventDefault();
-      promptModal.classList.add('hidden');
-      fileInput?.click();
-    };
-
-    const handleDismissClick = (e) => {
-      e?.preventDefault();
-      promptModal.classList.add('hidden');
-      if (dropzone) {
-        dropzone.classList.add('highlight-pulse');
-        setTimeout(() => dropzone.classList.remove('highlight-pulse'), 2500);
-      }
-    };
-
-    btnUpload?.addEventListener('click', handleUploadClick, { once: true });
-    btnDismiss?.addEventListener('click', handleDismissClick, { once: true });
-
-    promptModal.onclick = (e) => {
-      if (e.target === promptModal) {
-        promptModal.classList.add('hidden');
-      }
-    };
   }
 
   // Sound Effects toggle
@@ -4267,6 +4251,9 @@ function initHostAdSettings() {
       if (newSlides.length > 0) {
         customAdSlides.push(...newSlides);
         await idbAdStorage.saveSlides(customAdSlides);
+        try {
+          safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
+        } catch (_) {}
         renderHostAdGallery();
         broadcastAdSlidesUpdated();
 
@@ -4278,6 +4265,12 @@ function initHostAdSettings() {
           broadcastAdModeChange();
         }
 
+        // Jump directly to the newly uploaded custom ad so it displays immediately!
+        const allSlides = getAllActiveAdSlides();
+        currentAdSlideIndex = allSlides.length > 1 ? 1 : 0;
+        stopTvAdSignageRotation();
+        displayAdSlide(currentAdSlideIndex);
+        startTvAdSignageRotation();
         syncTvSignageDisplay();
 
         if (uploadStatus) {
@@ -4336,9 +4329,21 @@ function initHostAdSettings() {
 async function loadAdSlidesAndInit() {
   try {
     customAdSlides = await idbAdStorage.loadSlides();
+    if (!customAdSlides || customAdSlides.length === 0) {
+      try {
+        const fallback = safeStorage.getItem('bar_trivia_custom_ad_slides');
+        if (fallback) customAdSlides = JSON.parse(fallback);
+      } catch (_) {}
+    }
   } catch (e) {
     console.warn('Could not load ad slides:', e);
-    customAdSlides = [];
+    try {
+      const fallback = safeStorage.getItem('bar_trivia_custom_ad_slides');
+      if (fallback) customAdSlides = JSON.parse(fallback);
+      else customAdSlides = [];
+    } catch (_) {
+      customAdSlides = [];
+    }
   }
   renderHostAdGallery();
   syncTvSignageDisplay();

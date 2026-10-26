@@ -143,6 +143,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
 
   void _startAdSlideTimer() {
+    if (_adSlideTimer != null && _adSlideTimer!.isActive) return;
     _adSlideTimer?.cancel();
     final total = _totalAdSlides;
     if (total <= 1) {
@@ -2417,13 +2418,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   /// If no slides are uploaded, only the official default ad is displayed.
   Widget _buildFullscreenAdSlide(int index) {
     if (_customAdSlides.isNotEmpty) {
-      if (index == 0) {
-        return _buildFullscreenSlide0();
+      if (index < _customAdSlides.length) {
+        return _buildCustomAdSlide(_customAdSlides[index]);
       }
-      final customIdx = index - 1;
-      if (customIdx >= 0 && customIdx < _customAdSlides.length) {
-        return _buildCustomAdSlide(_customAdSlides[customIdx]);
-      }
+      return _buildFullscreenSlide0();
     }
     // Default ad for this game
     return _buildFullscreenSlide0();

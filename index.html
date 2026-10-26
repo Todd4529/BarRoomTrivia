@@ -598,18 +598,6 @@
           </div>
         </header>
 
-        <!-- PWA INSTALL BANNER (Shown in browser, hidden when already installed in standalone mode) -->
-        <div id="host-pwa-install-banner" class="hidden" style="margin: 8px 12px; padding: 10px 14px; background: rgba(0, 229, 255, 0.1); border: 1.5px solid var(--neon-cyan); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-          <div style="font-size: 13px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">📲</span>
-            <span>Install Host App for full screen & zero address bars!</span>
-          </div>
-          <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
-            <button type="button" id="btn-banner-install-pwa" style="padding: 6px 14px; background: var(--neon-cyan); color: #000; font-weight: 800; border-radius: 8px; border: none; font-size: 12px; cursor: pointer;">Install</button>
-            <button type="button" id="btn-banner-dismiss-pwa" style="background: transparent; color: #888; border: none; font-size: 16px; cursor: pointer; padding: 4px;" title="Dismiss">✕</button>
-          </div>
-        </div>
-
         <!-- B. COMPACT GAME STATUS & METRICS BAR -->
         <div class="host-status-ribbon">
           <div id="host-engine-status" class="engine-badge badge-idle">Game Status: NOT STARTED</div>
@@ -1052,23 +1040,6 @@
               </span>
               <span class="btn-dock-text" id="btn-reset-text">Reset</span>
             </button>
-          </div>
-        <!-- HOST AD UPLOAD PROMPT MODAL -->
-        <div id="host-ad-upload-prompt-modal" class="result-modal-backdrop hidden" style="z-index: 600;">
-          <div class="result-modal-card" style="max-width: 480px; text-align: center; border-color: var(--neon-cyan); box-shadow: 0 0 40px rgba(0, 229, 255, 0.35); padding: 28px;">
-            <div style="font-size: 44px; margin-bottom: 12px;">📺📄</div>
-            <h2 style="font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 8px; letter-spacing: 0.5px;">AD DISPLAY SIGNAGE MODE ACTIVE</h2>
-            <p style="font-size: 14px; color: rgba(255, 255, 255, 0.85); line-height: 1.5; margin-bottom: 22px;">
-              Please upload photos or PDF files for your venue ads, drink specials, food menus, or event flyers to rotate on the TV screen.
-            </p>
-            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-              <button type="button" id="btn-prompt-upload-ads" class="btn btn-primary" style="padding: 12px 22px; font-weight: 800; font-size: 14px; border-radius: 12px; background: var(--neon-cyan); color: #000; border: none; cursor: pointer;">
-                📁 Upload Photos / PDF
-              </button>
-              <button type="button" id="btn-prompt-dismiss-ads" class="btn btn-secondary" style="padding: 12px 18px; font-weight: 700; font-size: 14px; border-radius: 12px; cursor: pointer;">
-                Maybe Later
-              </button>
-            </div>
           </div>
         </div>
 
