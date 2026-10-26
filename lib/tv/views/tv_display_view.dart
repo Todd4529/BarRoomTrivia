@@ -1041,21 +1041,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _interQuestionTimer?.cancel();
 
     final isRoundEndingQuestion = _questionIndex > 0 && (_questionIndex % _totalQuestionsInRound == 0);
-    if (isRoundEndingQuestion) {
-      if (GameEngineManager.instance.isEngineRunning) {
-        GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
-      } else {
-        _completeRoundAutonomously();
-      }
-      return;
-    }
+    final reviewSeconds = isRoundEndingQuestion ? 20 : 15;
 
     final mode = payload?['game_play_mode'] as String? ?? 'Auto';
+    final fallbackNext = isRoundEndingQuestion
+        ? (DateTime.now().millisecondsSinceEpoch + 20000)
+        : (DateTime.now().millisecondsSinceEpoch + 15000);
     final nextStartsAt = (payload?['next_question_starts_at_epoch_ms'] as int?) ??
         (payload?['nextQuestionStartsAtEpochMs'] as int?) ??
-        (DateTime.now().millisecondsSinceEpoch + 15000);
+        fallbackNext;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final remaining = ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, 15);
+    final remaining = ((nextStartsAt - nowMs) / 1000).ceil().clamp(1, reviewSeconds);
 
     // If TV ended timer locally (payload was null), broadcast timer_expired so player screens immediately sync!
     if (payload == null) {
@@ -1105,11 +1101,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _interQuestionSecondsRemaining = 0;
             });
 
-            // Cleanly advance to the next question without state-sync echo looping
-            if (GameEngineManager.instance.isEngineRunning) {
-              GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
+            if (isRoundEndingQuestion) {
+              if (GameEngineManager.instance.isEngineRunning) {
+                GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
+              } else {
+                _completeRoundAutonomously();
+              }
             } else {
-              _advanceNextQuestionAutonomously();
+              // Cleanly advance to the next question without state-sync echo looping
+              if (GameEngineManager.instance.isEngineRunning) {
+                GameEngineManager.instance.nextQuestionManual(roomCode: _displayRoomCode);
+              } else {
+                _advanceNextQuestionAutonomously();
+              }
             }
           }
         }
@@ -3705,7 +3709,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           ? (_gamePlayMode == 'Manual' ? 0 : _interQuestionSecondsRemaining)
                           : (!_isQuestionTimerRunning ? _totalDuration : _remainingSeconds),
                       label: _isInterQuestionPhase
-                          ? (_gamePlayMode == 'Manual' ? 'WAIT HOST' : 'Next Question')
+                          ? (_gamePlayMode == 'Manual'
+                              ? 'WAIT HOST'
+                              : (_questionIndex > 0 && (_questionIndex % _totalQuestionsInRound == 0)
+                                  ? 'Round Results'
+                                  : 'Next Question'))
                           : (!_isQuestionTimerRunning ? 'READY' : 'SECONDS'),
                       customColor: _isInterQuestionPhase
                           ? AppTheme.neonCyan

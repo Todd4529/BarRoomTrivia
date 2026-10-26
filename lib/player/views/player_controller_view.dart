@@ -347,22 +347,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           final dt = DateTime.tryParse(rawNext);
           nextStartsAt = dt != null ? dt.millisecondsSinceEpoch : int.tryParse(rawNext);
         }
+        final isLastQuestion = _questionNumberInRound == 10;
+        final targetDurationSecs = isLastQuestion ? 20 : 15;
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         final targetNext = (nextStartsAt != null && nextStartsAt > nowMs)
             ? nextStartsAt
-            : (nowMs + 15000);
+            : (nowMs + (targetDurationSecs * 1000));
         final remaining = max(0, ((targetNext - nowMs) / 1000).ceil().clamp(0, 30));
-
-        final isLastQuestion = _questionNumberInRound == 10;
-        if (isLastQuestion) {
-          _interQuestionTimer?.cancel();
-          setState(() {
-            _isInterQuestionPhase = false;
-            _interQuestionSecondsRemaining = 0;
-            _gamePlayMode = mode;
-          });
-          return;
-        }
 
         setState(() {
           _isInterQuestionPhase = true;
@@ -377,10 +368,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             final rem = ((targetNext - now) / 1000).ceil();
             if (rem > 0) {
               if (mounted) {
-                if (_interQuestionSecondsRemaining != rem || (rem <= 5 && _showResultOverlay)) {
+                if (_interQuestionSecondsRemaining != rem || (!isLastQuestion && rem <= 5 && _showResultOverlay)) {
                   setState(() {
                     _interQuestionSecondsRemaining = rem;
-                    if (rem <= 5 && _showResultOverlay) {
+                    if (!isLastQuestion && rem <= 5 && _showResultOverlay) {
                       _showResultOverlay = false;
                     }
                   });
@@ -1488,8 +1479,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                       ),
                       child: Text(
                         _gamePlayMode == 'Manual'
-                            ? '⏳ Next Question, waiting on host...'
-                            : '⏳ Next Question in ${_interQuestionSecondsRemaining}s...',
+                            ? (_questionNumberInRound == 10
+                                ? '⏱️ Round Results, waiting on host...'
+                                : '⏳ Next Question, waiting on host...')
+                            : (_questionNumberInRound == 10
+                                ? '⏱️ Round Results in ${_interQuestionSecondsRemaining}s...'
+                                : '⏳ Next Question in ${_interQuestionSecondsRemaining}s...'),
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -1971,7 +1966,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               Text(
                 _gamePlayMode == 'Manual'
                     ? 'WAITING ON HOST'
-                    : 'NEXT QUESTION IN',
+                    : (isLastQ ? 'ROUND RESULTS IN' : 'NEXT QUESTION IN'),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 16,
@@ -2003,7 +1998,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 ),
                 child: Text(
                   isLastQ
-                      ? 'Round $_currentRound Final Question Completed'
+                      ? 'Round $_currentRound Final Question Complete • Preparing Results...'
                       : 'Round $_currentRound • Preparing Question $nextQNum of 10',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -2234,8 +2229,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                       ),
                       child: Text(
                         _gamePlayMode == 'Manual'
-                            ? 'NEXT QUESTION, WAITING ON HOST'
-                            : 'NEXT QUESTION IN ${_interQuestionSecondsRemaining}s',
+                            ? (_questionNumberInRound == 10
+                                ? 'ROUND RESULTS, WAITING ON HOST'
+                                : 'NEXT QUESTION, WAITING ON HOST')
+                            : (_questionNumberInRound == 10
+                                ? 'ROUND RESULTS IN ${_interQuestionSecondsRemaining}s'
+                                : 'NEXT QUESTION IN ${_interQuestionSecondsRemaining}s'),
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,

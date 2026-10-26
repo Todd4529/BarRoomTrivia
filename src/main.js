@@ -4667,7 +4667,8 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
 
   const reviewDurationMs = 15000; // Synchronized 15-second review: result reveal + dedicated countdown
-  hostTargetEpochMs = Date.now() + reviewDurationMs;
+  const hostReviewDurationMs = (questionInRound === 10) ? 20000 : reviewDurationMs; // 20 seconds for question 10
+  hostTargetEpochMs = Date.now() + hostReviewDurationMs;
 
   const correctOpt = (question.correct || '').toUpperCase().trim();
 
@@ -4704,33 +4705,6 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
     renderLeaderboard();
   }
 
-  // If this was Question 10 (end of round), do NOT broadcast a question review countdown timer.
-  // Advance directly to round summary so no question countdown is displayed.
-  if (questionInRound === 10) {
-    if (anyScoreChanged) {
-      broadcastRealtimeEvent('leaderboard_updated', {
-        players: playersLeaderboard,
-        leaderboard: playersLeaderboard,
-        room_code: currentRoomCode
-      });
-      playersLeaderboard.forEach(p => {
-        try {
-          supabase.from('players').upsert({
-            room_code: currentRoomCode.toUpperCase(),
-            nickname: p.nickname,
-            player_uid: p.player_uid || p.nickname,
-            cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
-            is_connected: true
-          }, { onConflict: 'room_code, nickname' });
-        } catch (_) {}
-      });
-    }
-    currentGameState = 'QUESTION_REVIEW';
-    hostEngineState = 'QUESTION_REVIEW';
-    handleHostAdvanceAfterReview(10, currentRound);
-    return;
-  }
-
   const expiredPayload = {
     correctOption: question.correct,
     correctText: `${question.correct}) ${question.options[question.correct]}`,
@@ -4743,6 +4717,7 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
     id: question.id,
     timestamp: Date.now(),
     game_play_mode: hostGamePlayMode,
+    is_last_question_of_round: (questionInRound === 10),
   };
 
   currentGameState = 'QUESTION_REVIEW';
@@ -4776,7 +4751,7 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   if (hostGamePlayMode === 'Auto') {
     autoEngineTimeout = setTimeout(() => {
       checkHostEngineTick();
-    }, reviewDurationMs);
+    }, hostReviewDurationMs);
   }
 }
 
@@ -5450,7 +5425,7 @@ function updateTimerUI() {
 
 let playerReviewInterval = null;
 
-function startPlayerReviewCountdown(seconds, targetEpochMs) {
+function startPlayerReviewCountdown(seconds, targetEpochMs, isLastQ = false) {
   clearInterval(playerReviewInterval);
   const targetEpoch = targetEpochMs || (Date.now() + (seconds * 1000));
 
@@ -5460,9 +5435,13 @@ function startPlayerReviewCountdown(seconds, targetEpochMs) {
     if (playerStatusBadge) {
       if (rem > 0) {
         playerStatusBadge.className = 'status-badge status-active';
-        playerStatusBadge.innerHTML = `<span id="status-icon">⏳</span> <span id="status-text">NEXT QUESTION IN ${rem}s...</span>`;
+        playerStatusBadge.innerHTML = isLastQ
+          ? `<span id="status-icon">⏱️</span> <span id="status-text">ROUND RESULTS IN ${rem}s...</span>`
+          : `<span id="status-icon">⏳</span> <span id="status-text">NEXT QUESTION IN ${rem}s...</span>`;
       } else {
-        playerStatusBadge.innerHTML = `<span id="status-icon">🚀</span> <span id="status-text">PREPARING NEXT QUESTION...</span>`;
+        playerStatusBadge.innerHTML = isLastQ
+          ? `<span id="status-icon">🏆</span> <span id="status-text">CALCULATING WINNERS...</span>`
+          : `<span id="status-icon">🚀</span> <span id="status-text">PREPARING NEXT QUESTION...</span>`;
       }
     }
     return rem;
@@ -5498,10 +5477,14 @@ function onTimerExpired(payload) {
   const playerStatusBadge = document.getElementById('player-status-badge');
   const answerBtns = document.querySelectorAll('.btn-answer');
 
-  const curQ = ((currentQuestionIndex - 1) % 10) + 1;
-  updatePlayerHeaderCard(currentRound, curQ, 'Review');
+  const curQ = payload?.questionNumberInRound || payload?.question_number_in_round || ((currentQuestionIndex % 10) + 1);
+  const curRound = payload?.roundNumber || payload?.round_number || currentRound;
+  updatePlayerHeaderCard(curRound, curQ, 'Review');
 
-  // Calculate review seconds remaining for next question countdown (synchronized 15s)
+  const isLastQ = (curQ === 10);
+  const defaultReviewMs = isLastQ ? 20000 : 15000;
+
+  // Calculate review seconds remaining for next question / round results countdown (20s for Q10, 15s for Q1-9)
   let nextEpoch = payload?.next_question_starts_at_epoch_ms || 
                   payload?.nextQuestionStartsAtEpochMs;
   if (typeof nextEpoch === 'string') {
@@ -5513,6 +5496,7 @@ function onTimerExpired(payload) {
   const now = Date.now();
   if (!nextEpoch || isNaN(nextEpoch) || nextEpoch <= now) {
     nextEpoch = now + 15000;
+    if (isLastQ) nextEpoch = now + 20000;
   }
   const reviewSeconds = Math.max(0, Math.ceil((nextEpoch - now) / 1000));
 
@@ -5527,13 +5511,15 @@ function onTimerExpired(payload) {
     hostStageBadge.textContent = '🔵 QUESTION REVIEW';
   }
   if (hostStageQCounter) {
-    hostStageQCounter.textContent = `Reviewing Answer (Next Question in ${reviewSeconds}s)`;
+    hostStageQCounter.textContent = isLastQ
+      ? `Revealing Correct Answer (Round Results in ${reviewSeconds}s)`
+      : `Reviewing Answer (Next Question in ${reviewSeconds}s)`;
   }
   if (hostTimerSecs) {
     hostTimerSecs.textContent = `${reviewSeconds}s`;
   }
 
-  startPlayerReviewCountdown(reviewSeconds, nextEpoch);
+  startPlayerReviewCountdown(reviewSeconds, nextEpoch, isLastQ);
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
@@ -5574,47 +5560,47 @@ function onTimerExpired(payload) {
   const tvTimerContainer = document.getElementById('tv-timer-container');
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
   const timerProgress = document.getElementById('timer-progress');
-
   const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
 
-  if (curQ === 10) {
-    if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
-    if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
-    clearInterval(tvNextQCountdownInterval);
-  } else {
-    if (tvTimerContainer) {
-      tvTimerContainer.classList.remove('hidden');
-      if (timerLabel) timerLabel.textContent = '';
-      if (tvTimerSublabel) {
-        tvTimerSublabel.textContent = 'Next question';
-        tvTimerSublabel.classList.remove('hidden');
-      }
+  if (tvTimerContainer) {
+    tvTimerContainer.classList.remove('hidden');
+    if (timerLabel) timerLabel.textContent = '';
+    if (tvTimerSublabel) {
+      tvTimerSublabel.textContent = isLastQ ? 'Round Results' : 'Next question';
+      tvTimerSublabel.classList.remove('hidden');
     }
-
-    const updateTvCountdown = () => {
-      const remNextQSecs = Math.max(0, Math.ceil((nextEpoch - Date.now()) / 1000));
-      if (tvNextQVal) tvNextQVal.textContent = remNextQSecs;
-      if (tvTimerVal) tvTimerVal.textContent = remNextQSecs;
-      if (timerProgress) {
-        const ratio = remNextQSecs / 15.0;
-        const offset = 264 - (ratio * 264);
-        timerProgress.style.strokeDashoffset = offset;
-        timerProgress.style.stroke = '#00e5ff';
-      }
-      if (remNextQSecs <= 0) {
-        clearInterval(tvNextQCountdownInterval);
-        if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
-      }
-      return remNextQSecs;
-    };
-
-    if (tvNextQBanner) {
-      tvNextQBanner.classList.remove('hidden');
-    }
-    updateTvCountdown();
-    clearInterval(tvNextQCountdownInterval);
-    tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
   }
+
+  const totalReviewDuration = isLastQ ? 20.0 : 15.0;
+
+  if (tvNextQBanner) {
+    tvNextQBanner.innerHTML = isLastQ
+      ? `⏱️ ROUND RESULTS IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`
+      : `⏳ NEXT QUESTION IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`;
+    tvNextQBanner.classList.remove('hidden');
+  }
+
+  const updateTvCountdown = () => {
+    const remNextQSecs = Math.max(0, Math.ceil((nextEpoch - Date.now()) / 1000));
+    const activeTvVal = document.getElementById('tv-next-q-timer-val');
+    if (activeTvVal) activeTvVal.textContent = remNextQSecs;
+    if (tvTimerVal) tvTimerVal.textContent = remNextQSecs;
+    if (timerProgress) {
+      const ratio = remNextQSecs / totalReviewDuration;
+      const offset = 264 - (ratio * 264);
+      timerProgress.style.strokeDashoffset = offset;
+      timerProgress.style.stroke = '#00e5ff';
+    }
+    if (remNextQSecs <= 0) {
+      clearInterval(tvNextQCountdownInterval);
+      if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
+    }
+    return remNextQSecs;
+  };
+
+  updateTvCountdown();
+  clearInterval(tvNextQCountdownInterval);
+  tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
   const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
@@ -5696,14 +5682,14 @@ function onTimerExpired(payload) {
       } catch (_) {}
 
       const randomQuote = getRandomItem(funnyCorrectQuotes);
-      showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch);
+      showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ);
       confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
     } else {
       if (currentPlayer) {
         currentPlayer.streak = 0;
       }
       const randomQuote = getRandomItem(funnyWrongQuotes);
-      showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch);
+      showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ);
     }
 
     // Do NOT set playerChoiceSubmitted = null here! Keep choice locked in during review phase.
@@ -5715,7 +5701,7 @@ function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 15, targetEpochMs = null) {
+function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 15, targetEpochMs = null, isLastQ = false) {
   const overlay = document.getElementById('result-modal-overlay');
   const card = document.getElementById('result-modal-box');
   const icon = document.getElementById('result-modal-icon');
@@ -5750,6 +5736,15 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   if (correctTextEl) correctTextEl.textContent = decodeHtmlEntities(correctTextStr);
   if (quote) quote.textContent = `"${funnyQuote}"`;
 
+  const pill = document.querySelector('.next-q-countdown-pill');
+  if (pill) {
+    if (isLastQ) {
+      pill.innerHTML = `⏱️ Round Results in <strong id="modal-next-q-timer">${countdownSeconds}</strong>s...`;
+    } else {
+      pill.innerHTML = `⏳ Next Question in <strong id="modal-next-q-timer">${countdownSeconds}</strong>s...`;
+    }
+  }
+
   const now = Date.now();
   let targetEpoch = targetEpochMs;
   if (!targetEpoch || (targetEpoch - now) <= 5000) {
@@ -5758,11 +5753,14 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
 
   const updateModalCountdown = () => {
     const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
-    if (modalTimerVal) modalTimerVal.textContent = rem;
-    if (rem <= 5) {
+    const activeTimer = document.getElementById('modal-next-q-timer');
+    if (activeTimer) activeTimer.textContent = rem;
+    if (rem <= (isLastQ ? 0 : 5)) {
       clearInterval(modalCountdownInterval);
       hideResultModal();
-      showInterQuestionCountdown(targetEpoch);
+      if (!isLastQ) {
+        showInterQuestionCountdown(targetEpoch);
+      }
     }
   };
 
@@ -5771,11 +5769,13 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   modalCountdownInterval = setInterval(updateModalCountdown, 500);
 
   overlay.classList.remove('hidden');
-  // Tap-to-dismiss immediately transitions to dedicated countdown screen
+  // Tap-to-dismiss transitions to dedicated countdown screen (or hides if round ending)
   overlay.onclick = () => {
     clearInterval(modalCountdownInterval);
     hideResultModal();
-    showInterQuestionCountdown(targetEpoch);
+    if (!isLastQ) {
+      showInterQuestionCountdown(targetEpoch);
+    }
   };
 }
 

@@ -202,71 +202,35 @@ class GameEngineManager {
   void _handleQuestionTimerExpiration({required String roomCode, required Question question}) {
     if (!isEngineRunning) return;
     isQuestionTimerRunning = false;
-    // Check if 10-question round has completed
-    if (currentQuestionIndex >= 10) {
-      currentQuestionIndex = 0;
-      final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
-      final interRoundSecs = interRoundDurationSeconds > 0 ? interRoundDurationSeconds : 120;
-      final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (interRoundSecs * 1000);
-      final nextRound = currentRound + 1;
+    isReviewPhase = true;
 
-      _realtimeService.broadcastRoundCompleted(
-        roomCode: roomCode,
-        top3Winners: top3,
-        roundNumber: currentRound,
-        nextRound: nextRound,
-        nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
-        delaySeconds: interRoundSecs,
-      );
+    final isRoundEnding = currentQuestionIndex >= 10;
+    final reviewSeconds = isRoundEnding ? 20 : 15;
+    final nextTargetEpochMs = DateTime.now().millisecondsSinceEpoch + (reviewSeconds * 1000);
 
-      _realtimeService.broadcastLeaderboardUpdated(
-        roomCode: roomCode,
-        players: SupabaseService.getLocalPlayersJson(roomCode),
-      );
+    _realtimeService.broadcastTimerExpired(
+      roomCode: roomCode,
+      correctOption: question.correctOption,
+      nextQuestionStartsAtEpochMs: nextTargetEpochMs,
+      gamePlayMode: gamePlayMode,
+      questionId: question.id,
+      questionIndex: currentQuestionIndex,
+      roundNumber: currentRound,
+    );
 
-      currentRound = nextRound;
-
-      // Rotate to the next genre for the upcoming round
-      if (selectedGenres.length > 1) {
-        final completedGenre = selectedGenres.removeAt(0);
-        selectedGenres.add(completedGenre);
-      } else if (selectedGenres.isEmpty) {
-        selectedGenres = List.from(TriviaGenres.allGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)'));
-      }
-
+    if (isRoundEnding) {
       if (gamePlayMode == 'Auto') {
-        // Schedule inter-round delay before Question 1 of next round in Auto Mode
-        _questionTimer = Timer(Duration(seconds: interRoundSecs), () {
+        // Display Question 10 correct answer for 20 seconds before proceeding to round summary
+        _questionTimer = Timer(Duration(seconds: reviewSeconds), () {
           if (isEngineRunning) {
-            isEngineRunning = false;
-            startPreGame(
-              roomCode: roomCode,
-              timerSeconds: selectedTimerSeconds,
-              genres: selectedGenres,
-              durationSeconds: 10,
-            );
+            _advanceToRoundCompletion(roomCode: roomCode);
           }
         });
-      } else {
-        // Manual mode: hold on round summary until host taps 'START NEXT ROUND'
-        isRoundCompletedWaitingForNext = true;
       }
     } else {
-      isReviewPhase = true;
-      final nextQuestionStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (15 * 1000);
-      _realtimeService.broadcastTimerExpired(
-        roomCode: roomCode,
-        correctOption: question.correctOption,
-        nextQuestionStartsAtEpochMs: nextQuestionStartsAtEpochMs,
-        gamePlayMode: gamePlayMode,
-        questionId: question.id,
-        questionIndex: currentQuestionIndex,
-        roundNumber: currentRound,
-      );
-
       if (gamePlayMode == 'Auto') {
         // 15-Second Review phase before proceeding to next question automatically in Auto mode
-        _questionTimer = Timer(const Duration(seconds: 15), () {
+        _questionTimer = Timer(Duration(seconds: reviewSeconds), () {
           if (isEngineRunning) {
             broadcastNextQuestion(roomCode: roomCode);
           }
@@ -275,11 +239,66 @@ class GameEngineManager {
     }
   }
 
+  void _advanceToRoundCompletion({required String roomCode}) {
+    currentQuestionIndex = 0;
+    isReviewPhase = false;
+    final top3 = SupabaseService.awardRoundWinnerBonusAndGetTop3(roomCode, 20);
+    final interRoundSecs = interRoundDurationSeconds > 0 ? interRoundDurationSeconds : 120;
+    final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (interRoundSecs * 1000);
+    final nextRound = currentRound + 1;
+
+    _realtimeService.broadcastRoundCompleted(
+      roomCode: roomCode,
+      top3Winners: top3,
+      roundNumber: currentRound,
+      nextRound: nextRound,
+      nextRoundStartsAtEpochMs: nextRoundStartsAtEpochMs,
+      delaySeconds: interRoundSecs,
+    );
+
+    _realtimeService.broadcastLeaderboardUpdated(
+      roomCode: roomCode,
+      players: SupabaseService.getLocalPlayersJson(roomCode),
+    );
+
+    currentRound = nextRound;
+
+    // Rotate to the next genre for the upcoming round
+    if (selectedGenres.length > 1) {
+      final completedGenre = selectedGenres.removeAt(0);
+      selectedGenres.add(completedGenre);
+    } else if (selectedGenres.isEmpty) {
+      selectedGenres = List.from(TriviaGenres.allGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)'));
+    }
+
+    if (gamePlayMode == 'Auto') {
+      // Schedule inter-round delay before Question 1 of next round in Auto Mode
+      _questionTimer = Timer(Duration(seconds: interRoundSecs), () {
+        if (isEngineRunning) {
+          isEngineRunning = false;
+          startPreGame(
+            roomCode: roomCode,
+            timerSeconds: selectedTimerSeconds,
+            genres: selectedGenres,
+            durationSeconds: 10,
+          );
+        }
+      });
+    } else {
+      // Manual mode: hold on round summary until host taps 'START NEXT ROUND'
+      isRoundCompletedWaitingForNext = true;
+    }
+  }
+
   void nextQuestionManual({required String roomCode}) {
     if (!isEngineRunning) return;
     _questionTimer?.cancel();
     isReviewPhase = false;
-    broadcastNextQuestion(roomCode: roomCode);
+    if (currentQuestionIndex >= 10) {
+      _advanceToRoundCompletion(roomCode: roomCode);
+    } else {
+      broadcastNextQuestion(roomCode: roomCode);
+    }
   }
 
   void startNextRoundManual({required String roomCode}) {

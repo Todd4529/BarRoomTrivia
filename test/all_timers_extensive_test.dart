@@ -153,6 +153,15 @@ void main() {
           reason: 'Flutter TV display must use 15-second review fallback epoch');
     });
 
+    test('9b. Question 10 answer reveal displays correct answer for 20 seconds before proceeding to round podium', () {
+      final gameEngineContent = File('lib/shared/services/game_engine.dart').readAsStringSync();
+      expect(gameEngineContent.contains('final reviewSeconds = isRoundEnding ? 20 : 15;'), isTrue);
+      expect(mainJsContent.contains('(questionInRound === 10) ? 20000 : reviewDurationMs'), isTrue);
+      expect(mainJsContent.contains('ROUND RESULTS IN'), isTrue);
+      expect(tvDisplayContent.contains('DateTime.now().millisecondsSinceEpoch + 20000'), isTrue);
+      expect(tvDisplayContent.contains('Round Results'), isTrue);
+    });
+
     test('10. Inter-Round Intermission timers (30s, 60s, 120s, 180s, 240s, 300s, 600s) supported', () {
       final expectedRoundIntervals = [30, 60, 120, 180, 240, 300, 600];
 
