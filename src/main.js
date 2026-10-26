@@ -148,7 +148,7 @@ window.addEventListener('pageshow', () => {
 // Synthesized in-browser with zero network latency
 // ==========================================
 let audioCtx = null;
-let isSoundEffectsEnabled = safeStorage.getItem('bar_trivia_sound_enabled') !== 'false';
+let isSoundEffectsEnabled = false; // Disabled permanently per user request
 
 function getAudioContext() {
   if (!audioCtx) {
@@ -227,17 +227,9 @@ unlockAudioOnInteraction();
 function updateTvAudioUI() {
   const btnTvSound = document.getElementById('btn-tv-toggle-sound');
   const banner = document.getElementById('tv-audio-unlock-banner');
-  const ctx = audioCtx;
-
-  if (!isSoundEffectsEnabled) {
-    if (btnTvSound) {
-      btnTvSound.className = 'tv-toggle-btn tv-sound-toggle-btn sound-off';
-      btnTvSound.textContent = '🔇 Sound OFF';
-      btnTvSound.setAttribute('title', 'Sound effects are muted. Click to enable.');
-    }
-    if (banner) banner.classList.add('hidden');
-    return;
-  }
+  if (btnTvSound) btnTvSound.classList.add('hidden');
+  if (banner) banner.classList.add('hidden');
+  return;
 
   const isSuspended = !ctx || (ctx.state === 'suspended');
   if (isSuspended) {
@@ -414,8 +406,8 @@ function getCrowdApplauseBuffer(ctx, isGrandFanfare) {
 }
 
 function playSound(type) {
-  const param = arguments[1];
-  if (!isSoundEffectsEnabled) return;
+  if (!isSoundEffectsEnabled) return; // Sound disabled completely per user request
+  return;
   const ctx = getAudioContext();
   if (!ctx) return;
 
@@ -575,10 +567,10 @@ function playSound(type) {
 }
 
 function setSoundEffectsEnabled(enabled, shouldBroadcast = true) {
-  isSoundEffectsEnabled = Boolean(enabled);
-  safeStorage.setItem('bar_trivia_sound_enabled', String(isSoundEffectsEnabled));
+  isSoundEffectsEnabled = false; // Permanently disabled
+  safeStorage.setItem('bar_trivia_sound_enabled', 'false');
   const toggleSound = document.getElementById('host-toggle-sound');
-  if (toggleSound) toggleSound.checked = isSoundEffectsEnabled;
+  if (toggleSound) toggleSound.checked = false;
   updateTvAudioUI();
 
   if (shouldBroadcast) {
@@ -2773,6 +2765,9 @@ function initHostControls() {
       pausedRemainingQuestionSeconds = selectedQuestionDuration || 20;
     }
 
+    timerEndsAtGlobalMs = 0;
+    hostTargetEpochMs = 0;
+
     isAutomatedEngineRunning = false;
     stopHostHeartbeatLoop();
     clearTimeout(autoEngineTimeout);
@@ -2784,6 +2779,11 @@ function initHostControls() {
     clearMockPlayerTimeouts();
     currentGameState = 'PAUSED';
     updateHostEngineUI('PAUSED');
+    onGamePaused({
+      remaining_question_seconds: pausedRemainingQuestionSeconds,
+      round_number: pausedRound,
+      question_index: pausedQuestionIndex
+    });
 
     channel.postMessage({
       type: 'GAME_PAUSED',
@@ -2829,6 +2829,13 @@ function initHostControls() {
     currentRound = pausedRound || currentRound || 1;
     currentQuestionIndex = pausedQuestionIndex !== undefined ? pausedQuestionIndex : currentQuestionIndex;
 
+    onGameResuming({
+      starts_at_epoch_ms: startsAtMs,
+      remaining_question_seconds: remainingSecs,
+      round_number: currentRound,
+      question_index: currentQuestionIndex
+    });
+
     channel.postMessage({
       type: 'GAME_RESUMING',
       payload: {
@@ -2866,7 +2873,7 @@ function initHostControls() {
     autoEngineTimeout = setTimeout(() => {
       if (!isAutomatedEngineRunning) return;
 
-      if (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedQuestionData || currentQuestionData) {
+      if (pausedHostEngineState === 'QUESTION_ACTIVE' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData))) {
         const question = pausedQuestionData || currentQuestionData;
         const questionInRound = (currentQuestionIndex % 10) + 1;
         const qDuration = Math.max(1, remainingSecs);
@@ -3050,10 +3057,10 @@ function initHostControls() {
   });
 
   btnPauseAuto?.addEventListener('click', () => {
-    if (isAutomatedEngineRunning) {
-      pauseGameEngine();
-    } else {
+    if (currentGameState === 'PAUSED') {
       resumeGameEngine();
+    } else {
+      pauseGameEngine();
     }
   });
 
@@ -3508,19 +3515,66 @@ async function renderPdfFileToSlides(file) {
 
 // 4. Render direct image files (.png, .jpg, .webp) to slide
 async function renderImageFileToSlide(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      resolve([{
-        id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
-        name: file.name,
-        dataUrl: e.target.result,
-        type: 'image',
-        page: 1,
-        totalPages: 1,
-        timestamp: Date.now()
-      }]);
+      const rawDataUrl = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.naturalWidth || img.width;
+          let height = img.naturalHeight || img.height;
+          const maxDim = 1920;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+          resolve([{
+            id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            dataUrl,
+            type: 'image',
+            page: 1,
+            totalPages: 1,
+            timestamp: Date.now()
+          }]);
+        } catch (_) {
+          resolve([{
+            id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            dataUrl: rawDataUrl,
+            type: 'image',
+            page: 1,
+            totalPages: 1,
+            timestamp: Date.now()
+          }]);
+        }
+      };
+      img.onerror = () => {
+        resolve([{
+          id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
+          name: file.name,
+          dataUrl: rawDataUrl,
+          type: 'image',
+          page: 1,
+          totalPages: 1,
+          timestamp: Date.now()
+        }]);
+      };
+      img.src = rawDataUrl;
     };
+    reader.onerror = () => reject(new Error('Failed to read image file'));
     reader.readAsDataURL(file);
   });
 }
@@ -3975,13 +4029,16 @@ function stopTvAdSignageRotation() {
 
 function displayAdSlide(index) {
   const allSlides = getAllActiveAdSlides();
-  const slide = allSlides[index];
+  if (!allSlides || allSlides.length === 0) return;
+  const safeIndex = index % allSlides.length;
+  const slide = allSlides[safeIndex];
   if (!slide) return;
 
   const img = document.getElementById('tv-ad-slide-img');
   const counterText = document.getElementById('tv-ad-slide-counter-text');
+  slide.dataUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
 
-  if (img) {
+  if (img && slide.dataUrl) {
     if (!img.src || img.src === window.location.href || img.src.endsWith('/') || img.classList.contains('fading')) {
       img.src = slide.dataUrl;
       img.classList.remove('fading');
@@ -3990,13 +4047,13 @@ function displayAdSlide(index) {
       setTimeout(() => {
         img.src = slide.dataUrl;
         img.classList.remove('fading');
-      }, 250);
+      }, 200);
     }
   }
 
   if (counterText) {
     const prefix = currentGameState === 'PAUSED' ? 'GAME PAUSED • ' : '';
-    counterText.textContent = `${prefix}AD ${index + 1} OF ${allSlides.length}`.toUpperCase();
+    counterText.textContent = `${prefix}AD ${safeIndex + 1} OF ${allSlides.length}`.toUpperCase();
   }
 }
 
@@ -4192,14 +4249,7 @@ function initHostAdSettings() {
     });
   }
 
-  // Sound Effects toggle
-  const toggleSound = document.getElementById('host-toggle-sound');
-  if (toggleSound) {
-    toggleSound.checked = isSoundEffectsEnabled;
-    toggleSound.addEventListener('change', () => {
-      setSoundEffectsEnabled(toggleSound.checked, true);
-    });
-  }
+  // Sound Effects permanently removed per user request
 
   // Duration Chips
   durChips.forEach(chip => {
@@ -6333,9 +6383,15 @@ function initPlayerControls() {
                 question_index: session.current_question_index,
               });
             }
-          } else if (currentGameState === 'PAUSED' && session.status !== 'paused') {
-            currentGameState = 'IN PROGRESS';
-            syncTvSignageDisplay();
+          } else if (session.status === 'resuming') {
+            if (currentGameState === 'PAUSED') {
+              onGameResuming({
+                starts_at_epoch_ms: session.starts_at,
+                remaining_question_seconds: session.remaining_question_seconds,
+                round_number: session.current_round,
+                question_index: session.current_question_index,
+              });
+            }
           }
           const rNum = Number(session.current_round || session.round_number || 0);
           if (rNum > 0) {
@@ -6711,6 +6767,8 @@ function onGamePaused(payload) {
   } else if (remainingTimerSeconds > 0) {
     pausedRemainingQuestionSeconds = remainingTimerSeconds;
   }
+  timerEndsAtGlobalMs = 0;
+  hostTargetEpochMs = 0;
   clearInterval(countdownInterval);
   clearInterval(modalCountdownInterval);
   clearInterval(tvNextQCountdownInterval);
@@ -6718,6 +6776,14 @@ function onGamePaused(payload) {
   clearInterval(playerInterQuestionInterval);
   updateHostEngineUI('PAUSED');
   syncTvSignageDisplay();
+
+  const tvTimerVal = document.getElementById('tv-timer-val');
+  if (tvTimerVal) tvTimerVal.textContent = 'PAUSED';
+  const playerTimerVal = document.getElementById('player-timer-val');
+  if (playerTimerVal) playerTimerVal.textContent = 'PAUSED';
+  const playerStatusBadge = document.getElementById('player-status-badge');
+  if (playerStatusBadge) playerStatusBadge.textContent = 'GAME PAUSED';
+  updatePlayerHeaderCard(currentRound, null, 'Game Paused');
 }
 
 function onGameResuming(payload) {
@@ -6730,6 +6796,32 @@ function onGameResuming(payload) {
   if (payload?.remaining_question_seconds) {
     pausedRemainingQuestionSeconds = Number(payload.remaining_question_seconds);
   }
+
+  const rawStarts = payload?.starts_at_epoch_ms || payload?.starts_at;
+  const startsAt = rawStarts ? Number(rawStarts) : (Date.now() + 10000);
+
+  clearInterval(countdownInterval);
+  const updateResumeTick = () => {
+    const rem = Math.max(0, Math.ceil((startsAt - Date.now()) / 1000));
+    const tvTimerVal = document.getElementById('tv-timer-val');
+    if (tvTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
+      tvTimerVal.textContent = rem > 0 ? `${rem}s` : 'GO!';
+    }
+    const playerTimerVal = document.getElementById('player-timer-val');
+    if (playerTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
+      playerTimerVal.textContent = rem > 0 ? `${rem}s` : 'GO!';
+    }
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    if (playerStatusBadge && currentGameState !== 'QUESTION_ACTIVE') {
+      playerStatusBadge.textContent = rem > 0 ? `RESUMING IN ${rem}s` : 'RESUMING NOW';
+    }
+    updatePlayerHeaderCard(currentRound, null, rem > 0 ? `Resuming in ${rem}s` : 'Resuming...');
+    if (rem <= 0) {
+      clearInterval(countdownInterval);
+    }
+  };
+  updateResumeTick();
+  countdownInterval = setInterval(updateResumeTick, 1000);
 }
 
 // RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL

@@ -599,8 +599,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   const SizedBox(height: 16),
                   _buildAdSignageModeSwitch(),
                   const SizedBox(height: 16),
-                  _buildSoundEffectsModeSwitch(),
-                  const SizedBox(height: 16),
                   _buildDifficultySegmentedControl(),
                   const SizedBox(height: 16),
                   _buildTimerDurationScrollWheel(),
@@ -1002,80 +1000,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   ),
                 );
               }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSoundEffectsModeSwitch() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _isSoundEffectsEnabled ? AppTheme.neonPink.withValues(alpha: 0.5) : Colors.white.withOpacity(0.06),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonPink.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  _isSoundEffectsEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                  color: AppTheme.neonPink,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'GAME SOUND EFFECTS',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Tick countdown, buzzers, cheering on TV',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Switch(
-            value: _isSoundEffectsEnabled,
-            activeColor: AppTheme.neonPink,
-            activeTrackColor: AppTheme.neonPink.withValues(alpha: 0.4),
-            inactiveThumbColor: Colors.grey.shade400,
-            inactiveTrackColor: Colors.white.withOpacity(0.1),
-            onChanged: (val) {
-              setState(() {
-                _isSoundEffectsEnabled = val;
-              });
-              SoundService.isSoundEffectsEnabled = val;
-              RealtimeService().broadcastSoundEffectsToggled(
-                roomCode: _targetRoomCode.isNotEmpty ? _targetRoomCode : 'TRIV',
-                isSoundEffectsEnabled: val,
-              );
             },
           ),
         ],

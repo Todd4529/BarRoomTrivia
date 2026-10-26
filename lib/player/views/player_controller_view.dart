@@ -451,10 +451,16 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
 
-        final startsAt = payload['starts_at_epoch_ms'] as int? ?? (DateTime.now().millisecondsSinceEpoch + 10000);
+        final rawStarts = payload['starts_at_epoch_ms'] ?? payload['starts_at'];
+        final startsAt = (rawStarts is num)
+            ? rawStarts.toInt()
+            : (int.tryParse(rawStarts?.toString() ?? '') ?? (DateTime.now().millisecondsSinceEpoch + 10000));
         final now = DateTime.now().millisecondsSinceEpoch;
         final remainingSec = ((startsAt - now) / 1000).ceil().clamp(1, 10);
-        final remainingQuestionSec = payload['remaining_question_seconds'] as int? ?? 60;
+        final rawRemQ = payload['remaining_question_seconds'];
+        final remainingQuestionSec = (rawRemQ is num)
+            ? rawRemQ.toInt()
+            : (int.tryParse(rawRemQ?.toString() ?? '') ?? 20);
 
         setState(() {
           _isGamePaused = false;
@@ -864,12 +870,6 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 });
                 _startLocalCountdown();
               } else {
-                if (_isGamePaused || _isResumeCountdownActive) {
-                  setState(() {
-                    _isGamePaused = false;
-                    _isResumeCountdownActive = false;
-                  });
-                }
                 if (_questionNumberInRound != calcQNum || (rNum != null && rNum > 0 && _currentRound != rNum)) {
                   setState(() {
                     if (rNum != null && rNum > 0) _currentRound = rNum;

@@ -72,10 +72,8 @@ void main() {
       expect(htmlContent.contains('class="status-dot"'), isTrue);
     });
 
-    test('index.html contains Game Sound Effects toggle in Host Settings (Tab 4)', () {
-      expect(htmlContent.contains('id="host-toggle-sound"'), isTrue);
-      expect(htmlContent.contains('GAME SOUND EFFECTS'), isTrue);
-      expect(htmlContent.contains('Synthesized audio cues for countdown timer, buzzers & winner fanfares'), isTrue);
+    test('index.html contains no Game Sound Effects toggle in Host Settings (sound options deleted)', () {
+      expect(htmlContent.contains('id="host-toggle-sound"'), isFalse);
     });
 
     test('index.html contains About & Legal section linking to privacy and terms', () {

@@ -143,7 +143,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
 
   void _startAdSlideTimer() {
-    if (_adSlideTimer != null && _adSlideTimer!.isActive) return;
     _adSlideTimer?.cancel();
     final total = _totalAdSlides;
     if (total <= 1) {
@@ -152,8 +151,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       }
       return;
     }
-    _adSlideTimer = Timer.periodic(const Duration(seconds: 15), (t) {
-      if ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown && mounted) {
+    _adSlideTimer = Timer.periodic(const Duration(seconds: 12), (t) {
+      final canRotate = ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown) || _isInterRoundPhase || _isAdSignageModeActive || _customAdSlides.isNotEmpty;
+      if (canRotate && !_isPreGameCountdown && mounted) {
         setState(() {
           final count = _totalAdSlides;
           _adSlideIndex = count > 0 ? (_adSlideIndex + 1) % count : 0;
@@ -191,7 +191,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             for (final s in rawSlides) {
               if (s is Map) parsedSlides.add(Map<String, dynamic>.from(s));
             }
-            if (_customAdSlides.length != parsedSlides.length) {
+            if (_customAdSlides.length != parsedSlides.length || _customAdSlides != parsedSlides) {
               setState(() {
                 _customAdSlides = parsedSlides;
                 if (_adSlideIndex >= _totalAdSlides) {
@@ -224,9 +224,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             });
             _startAdSlideTimer();
           } else if (status == 'question_active' && _isGamePaused) {
-            setState(() {
-              _isGamePaused = false;
-            });
+            final qData = res['question_data'];
+            final qId = (qData is Map ? qData['id'] : null)?.toString();
+            if (qId != null && qId.isNotEmpty && qId != _currentQuestion?.id) {
+              setState(() {
+                _isGamePaused = false;
+              });
+            }
           } else if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
             final startsAt = res['starts_at'] as int?;
             final now = DateTime.now().millisecondsSinceEpoch;
@@ -561,7 +565,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             }
           }
 
-          final startsAtEpochMs = payload['starts_at_epoch_ms'] as int?;
+          final rawStartsAt = payload['starts_at_epoch_ms'] ?? payload['starts_at'];
+          final startsAtEpochMs = (rawStartsAt is num)
+              ? rawStartsAt.toInt()
+              : (int.tryParse(rawStartsAt?.toString() ?? ''));
           final nowMs = DateTime.now().millisecondsSinceEpoch;
           final remaining = startsAtEpochMs != null
               ? ((startsAtEpochMs - nowMs) / 1000).ceil().clamp(0, 10)
@@ -2020,12 +2027,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   Expanded(
                     child: (_isGamePaused && _isAdSignageModeActive)
                         ? _buildFullscreenSignageDisplay()
-                        : ((_isGameActive || _isGamePaused || _isResumeCountdownActive)
-                            ? _buildLiveStageGrid()
-                            : (_isPreGameCountdown
-                                ? _buildPreGameCountdownScreen()
-                                : ((_isInterRoundPhase || _isAdSignageModeActive)
-                                    ? _buildFullscreenSignageDisplay()
+                        : ((_isInterRoundPhase || _isAdSignageModeActive || (_customAdSlides.isNotEmpty && !_isGameActive && !_isPreGameCountdown && !_isResumeCountdownActive))
+                            ? _buildFullscreenSignageDisplay()
+                            : ((_isGameActive || _isGamePaused || _isResumeCountdownActive)
+                                ? _buildLiveStageGrid()
+                                : (_isPreGameCountdown
+                                    ? _buildPreGameCountdownScreen()
                                     : _buildOfficial4PageAdCarousel()))),
                   ),
                 ],
@@ -2419,8 +2426,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   /// If no slides are uploaded, only the official default ad is displayed.
   Widget _buildFullscreenAdSlide(int index) {
     if (_customAdSlides.isNotEmpty) {
-      if (index < _customAdSlides.length) {
-        return _buildCustomAdSlide(_customAdSlides[index]);
+      if (index == 0) {
+        return _buildFullscreenSlide0();
+      }
+      final customIndex = index - 1;
+      if (customIndex < _customAdSlides.length) {
+        return _buildCustomAdSlide(_customAdSlides[customIndex]);
       }
       return _buildFullscreenSlide0();
     }
@@ -2706,7 +2717,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   /// Renders a host-uploaded custom advertisement slide (Base64 image or network URL)
   Widget _buildCustomAdSlide(Map<String, dynamic> slide) {
     final playUrl = _getPlayUrl();
-    final dataUrl = slide['dataUrl']?.toString() ?? slide['url']?.toString() ?? '';
+    final dataUrl = slide['dataUrl']?.toString() ??
+        slide['data_url']?.toString() ??
+        slide['url']?.toString() ??
+        slide['image_url']?.toString() ??
+        '';
     final slideName = slide['name']?.toString() ?? 'VENUE AD';
 
     Uint8List? imageBytes;
@@ -2717,6 +2732,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           final b64 = dataUrl.substring(commaIdx + 1);
           imageBytes = base64Decode(b64);
         }
+      } catch (_) {}
+    } else if (!dataUrl.startsWith('http') && dataUrl.length > 50) {
+      try {
+        imageBytes = base64Decode(dataUrl);
       } catch (_) {}
     }
 

@@ -230,30 +230,20 @@ void main() {
           reason: 'Web client must use stable linear ramps to prevent IndexSizeError');
     });
 
-    test('17. Host Sound Effects toggle synchronizes and mutes TV display sounds', () {
+    test('17. Sound options are deleted and sounds permanently disabled as requested', () {
       final hostContent = File('lib/host/views/host_dashboard_view.dart').readAsStringSync();
       final soundServiceContent = File('lib/shared/services/sound_service.dart').readAsStringSync();
       final realtimeContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
 
-      // SoundService master toggle verification
-      expect(soundServiceContent.contains('static bool isSoundEffectsEnabled = true;'), isTrue,
-          reason: 'SoundService must have static isSoundEffectsEnabled master flag');
+      // SoundService master toggle verification (permanently disabled)
+      expect(soundServiceContent.contains('static bool isSoundEffectsEnabled = false;'), isTrue,
+          reason: 'SoundService must have static isSoundEffectsEnabled disabled');
       expect(soundServiceContent.contains('if (!isSoundEffectsEnabled) return;'), isTrue,
           reason: 'SoundService.playSound must immediately return if sound effects are disabled');
 
-      // RealtimeService broadcast and listener verification
-      expect(realtimeContent.contains('broadcastSoundEffectsToggled'), isTrue,
-          reason: 'RealtimeService must implement broadcastSoundEffectsToggled');
-      expect(realtimeContent.contains('onSoundEffectsToggledBroadcast'), isTrue,
-          reason: 'RealtimeService.joinRoomChannel must support onSoundEffectsToggledBroadcast');
-
-      // Host Dashboard verification
-      expect(hostContent.contains('_buildSoundEffectsModeSwitch()'), isTrue,
-          reason: 'Host Dashboard must build the Game Sound Effects toggle switch');
-      expect(hostContent.contains('GAME SOUND EFFECTS'), isTrue,
-          reason: 'Host Dashboard switch must display GAME SOUND EFFECTS label');
-      expect(hostContent.contains('broadcastSoundEffectsToggled'), isTrue,
-          reason: 'Host Dashboard must broadcast sound effects toggle');
+      // Host Dashboard verification: sound effects toggle deleted
+      expect(hostContent.contains('_buildSoundEffectsModeSwitch()'), isFalse,
+          reason: 'Host Dashboard sound effects toggle must be deleted');
 
       // TV Display verification
       expect(tvDisplayContent.contains('_isSoundEffectsEnabled'), isTrue,
