@@ -3769,7 +3769,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl() {
       icon: '⚡',
       title: 'REAL-TIME MULTIPLAYER',
       color: '#00e5ff',
-      desc: 'Instant 20s countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.'
+      desc: 'Instant countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.'
     },
     {
       icon: '🏆',

@@ -2560,7 +2560,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           '⚡',
                           'REAL-TIME MULTIPLAYER',
                           AppTheme.neonCyan,
-                          'Instant 20s countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.',
+                          'Instant countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.',
                         ),
                       ),
                       const SizedBox(height: 8),
