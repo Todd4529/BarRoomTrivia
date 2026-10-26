@@ -2019,7 +2019,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             ? _buildLiveStageGrid()
                             : (_isPreGameCountdown
                                 ? _buildPreGameCountdownScreen()
-                                : (_isAdSignageModeActive
+                                : ((_isInterRoundPhase || _isAdSignageModeActive)
                                     ? _buildFullscreenSignageDisplay()
                                     : _buildOfficial4PageAdCarousel()))),
                   ),
@@ -2369,35 +2369,39 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             if (_isInterRoundPhase)
               Positioned(
                 top: 24,
-                right: 28,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkBackground.withOpacity(0.92),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.neonYellow, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.neonYellow.withOpacity(0.4),
-                        blurRadius: 18,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.timer_rounded, color: AppTheme.neonYellow, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
-                        style: const TextStyle(
-                          color: AppTheme.neonYellow,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 15,
-                          letterSpacing: 1.2,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkBackground.withOpacity(0.94),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppTheme.neonYellow, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.neonYellow.withOpacity(0.45),
+                          blurRadius: 24,
+                          spreadRadius: 2,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_rounded, color: AppTheme.neonYellow, size: 26),
+                        const SizedBox(width: 10),
+                        Text(
+                          'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
+                          style: const TextStyle(
+                            color: AppTheme.neonYellow,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            letterSpacing: 1.8,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -3864,19 +3864,31 @@ function syncTvSignageDisplay() {
   if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) tvAdBanner.classList.add('hidden');
     return;
   }
 
   const allSlides = getAllActiveAdSlides();
+  const isIntermission = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
 
-  // Idle / Lobby / Paused mode:
-  if (isAdModeActive && allSlides && allSlides.length > 0) {
+  // Intermission between rounds or active ad mode: ALWAYS display ads!
+  if ((isAdModeActive || isIntermission) && allSlides && allSlides.length > 0) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
     if (btnPromo) btnPromo.classList.add('active');
     if (btnLive) btnLive.classList.remove('active');
     startTvAdSignageRotation();
+
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) {
+      if (isIntermission) {
+        tvAdBanner.classList.remove('hidden');
+      } else {
+        tvAdBanner.classList.add('hidden');
+      }
+    }
   } else {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
