@@ -1479,73 +1479,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // OPTION 1: HOST CONTROL QR CODE
-                ElevatedButton.icon(
-                  autofocus: true,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonYellow,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 6,
-                    shadowColor: AppTheme.neonYellow.withOpacity(0.5),
-                  ),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 24, color: Colors.black),
-                  label: const Text(
-                    'HOST CONTROL QR CODE',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  onPressed: () {
-                    if (mounted) setState(() => _isExitDialogOpen = false);
-                    Navigator.of(dialogContext).pop();
-                    _showHostControlQrDialog();
-                  },
-                ),
-                const SizedBox(height: 14),
+                // Yes and Cancel row placed above Host Control QR Code button (Yes on left, Cancel on right)
                 StatefulBuilder(
                   builder: (context, setBtnState) {
                     return FocusTraversalGroup(
                       child: Row(
                         children: [
-                          Expanded(
-                            child: Focus(
-                              onFocusChange: (f) => setBtnState(() => isCancelFocused = f),
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
-                                  foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
-                                  side: BorderSide(
-                                    color: isCancelFocused ? AppTheme.neonCyan : Colors.white.withOpacity(0.2),
-                                    width: isCancelFocused ? 2.0 : 1.0,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: isCancelFocused ? 6 : 0,
-                                ),
-                                onPressed: () {
-                                  if (mounted) setState(() => _isExitDialogOpen = false);
-                                  Navigator.of(dialogContext).pop();
-                                },
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: isCancelFocused ? Colors.black : Colors.white70,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
                           Expanded(
                             child: Focus(
                               onFocusChange: (f) => setBtnState(() => isYesFocused = f),
@@ -1584,9 +1523,71 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                               ),
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Focus(
+                              onFocusChange: (f) => setBtnState(() => isCancelFocused = f),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
+                                  foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
+                                  side: BorderSide(
+                                    color: isCancelFocused ? AppTheme.neonCyan : Colors.white.withOpacity(0.2),
+                                    width: isCancelFocused ? 2.0 : 1.0,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: isCancelFocused ? 6 : 0,
+                                ),
+                                onPressed: () {
+                                  if (mounted) setState(() => _isExitDialogOpen = false);
+                                  Navigator.of(dialogContext).pop();
+                                },
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: isCancelFocused ? Colors.black : Colors.white70,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     );
+                  },
+                ),
+                const SizedBox(height: 14),
+                // HOST CONTROL QR CODE BUTTON
+                ElevatedButton.icon(
+                  autofocus: true,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonYellow,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 6,
+                    shadowColor: AppTheme.neonYellow.withOpacity(0.5),
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 24, color: Colors.black),
+                  label: const Text(
+                    'HOST CONTROL QR CODE',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  onPressed: () {
+                    if (mounted) setState(() => _isExitDialogOpen = false);
+                    Navigator.of(dialogContext).pop();
+                    _showHostControlQrDialog();
                   },
                 ),
               ],

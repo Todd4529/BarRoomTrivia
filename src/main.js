@@ -1366,6 +1366,7 @@ function initTvModeToggle() {
 function initTvExitAndRecoveryMenu() {
   const btnTvBack = document.getElementById('btn-tv-back');
   const tvExitOverlay = document.getElementById('tv-exit-dialog-overlay');
+  const btnTvExitYes = document.getElementById('btn-tv-exit-yes');
   const btnTvExitCancel = document.getElementById('btn-tv-exit-cancel');
   const btnTvShowHostQr = document.getElementById('btn-tv-show-host-qr');
   const tvHostQrOverlay = document.getElementById('tv-host-qr-modal-overlay');
@@ -1427,6 +1428,10 @@ function initTvExitAndRecoveryMenu() {
   });
 
   btnTvExitCancel?.addEventListener('click', closeTvExitDialog);
+  btnTvExitYes?.addEventListener('click', () => {
+    closeTvExitDialog();
+    switchView('lobby');
+  });
   btnTvShowHostQr?.addEventListener('click', showTvHostQrRecovery);
   btnTvCloseHostQr?.addEventListener('click', closeTvHostQrRecovery);
   btnTvCloseEmptyHostQr?.addEventListener('click', closeTvHostQrRecovery);

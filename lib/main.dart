@@ -297,35 +297,6 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Focus(
-                      onFocusChange: (hasF) => setBtnState(() => isCancelFocused = hasF),
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
-                          foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
-                          side: BorderSide(
-                            color: isCancelFocused ? AppTheme.neonCyan : Colors.white24,
-                            width: isCancelFocused ? 2.0 : 1.0,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: isCancelFocused ? 6 : 0,
-                        ),
-                        onPressed: () {
-                          if (mounted) setState(() => _isExitDialogOpen = false);
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: isCancelFocused ? Colors.black : Colors.white70,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Focus(
                       autofocus: true,
                       onFocusChange: (hasF) => setBtnState(() => isYesFocused = hasF),
                       child: OutlinedButton(
@@ -349,6 +320,35 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
                           'Yes',
                           style: TextStyle(
                             color: isYesFocused ? Colors.black : Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Focus(
+                      onFocusChange: (hasF) => setBtnState(() => isCancelFocused = hasF),
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
+                          foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
+                          side: BorderSide(
+                            color: isCancelFocused ? AppTheme.neonCyan : Colors.white24,
+                            width: isCancelFocused ? 2.0 : 1.0,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: isCancelFocused ? 6 : 0,
+                        ),
+                        onPressed: () {
+                          if (mounted) setState(() => _isExitDialogOpen = false);
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: isCancelFocused ? Colors.black : Colors.white70,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
