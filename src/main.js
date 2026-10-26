@@ -1945,12 +1945,12 @@ function handleIncomingQuestionStart(rawPayload) {
     id: qObj.id || payload.question_id || payload.id || String(Date.now()),
     category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
     difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
-    text: qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || '',
+    text: decodeHtmlEntities(qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || ''),
     options: {
-      A: optA,
-      B: optB,
-      C: optC,
-      D: optD,
+      A: decodeHtmlEntities(optA),
+      B: decodeHtmlEntities(optB),
+      C: decodeHtmlEntities(optC),
+      D: decodeHtmlEntities(optD),
     },
     correct: correct,
   };
@@ -5107,12 +5107,12 @@ function onQuestionStart(payload) {
     id: qObj.id || payload.question_id || payload.id || String(Date.now()),
     category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
     difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
-    text: qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || '',
+    text: decodeHtmlEntities(qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || ''),
     options: {
-      A: optA,
-      B: optB,
-      C: optC,
-      D: optD,
+      A: decodeHtmlEntities(optA),
+      B: decodeHtmlEntities(optB),
+      C: decodeHtmlEntities(optC),
+      D: decodeHtmlEntities(optD),
     },
     correct: correct,
   };
@@ -5220,7 +5220,7 @@ function onQuestionStart(payload) {
   if (tvGenreIcon) tvGenreIcon.textContent = categoryIcon;
   if (tvRoundTracker) tvRoundTracker.textContent = `ROUND ${roundNumber || 1} • QUESTION ${questionNumberInRound || 1}/10`;
   if (tvCategory) tvCategory.textContent = `${categoryIcon} ${categoryName.toUpperCase()}`;
-  const cleanQText = (questionData.text || '')
+  const cleanQText = decodeHtmlEntities(questionData.text || '')
       .replace(/\s*\((?:Focus Point|Batch|Formula|Protocol\s*)?#\d+\)/gi, '')
       .replace(/\s*\(#INDEX\)/gi, '')
       .replace(/\s*#\d+\b/g, '')
@@ -5328,13 +5328,13 @@ function onQuestionStart(payload) {
     if (playerQuestionText) playerQuestionText.textContent = cleanQText;
 
     const pOptA = document.getElementById('p-opt-a');
-    if (pOptA) pOptA.textContent = questionData.options.A;
+    if (pOptA) pOptA.textContent = decodeHtmlEntities(questionData.options.A);
     const pOptB = document.getElementById('p-opt-b');
-    if (pOptB) pOptB.textContent = questionData.options.B;
+    if (pOptB) pOptB.textContent = decodeHtmlEntities(questionData.options.B);
     const pOptC = document.getElementById('p-opt-c');
-    if (pOptC) pOptC.textContent = questionData.options.C;
+    if (pOptC) pOptC.textContent = decodeHtmlEntities(questionData.options.C);
     const pOptD = document.getElementById('p-opt-d');
-    if (pOptD) pOptD.textContent = questionData.options.D;
+    if (pOptD) pOptD.textContent = decodeHtmlEntities(questionData.options.D);
 
     if (playerStatusBadge) {
       if (isIdle) {
@@ -5747,7 +5747,7 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
     if (scorePill) scorePill.textContent = pointsText;
   }
 
-  if (correctTextEl) correctTextEl.textContent = correctTextStr;
+  if (correctTextEl) correctTextEl.textContent = decodeHtmlEntities(correctTextStr);
   if (quote) quote.textContent = `"${funnyQuote}"`;
 
   const now = Date.now();
@@ -6886,6 +6886,71 @@ function startLeaderboardAutoScroll() {
       list.style.transform = `translateY(0px)`;
     }
   }, 100);
+}
+
+function decodeHtmlEntities(text) {
+  if (!text) return '';
+  let str = String(text);
+
+  const entityMap = {
+    '&percnt;': '%',
+    '&quot;': '"',
+    '&#039;': "'",
+    '&#39;': "'",
+    '&apos;': "'",
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&deg;': '°',
+    '&plusmn;': '±',
+    '&ndash;': '–',
+    '&mdash;': '—',
+    '&lsquo;': '‘',
+    '&rsquo;': '’',
+    '&ldquo;': '“',
+    '&rdquo;': '”',
+    '&hellip;': '…',
+    '&sup2;': '²',
+    '&sup3;': '³',
+    '&frac12;': '½',
+    '&frac14;': '¼',
+    '&frac34;': '¾',
+    '&eacute;': 'é',
+    '&Eacute;': 'É',
+    '&aacute;': 'á',
+    '&iacute;': 'í',
+    '&oacute;': 'ó',
+    '&uacute;': 'ú',
+    '&ntilde;': 'ñ',
+    '&uuml;': 'ü',
+    '&ouml;': 'ö',
+    '&auml;': 'ä',
+    '&copy;': '©',
+    '&reg;': '®',
+    '&trade;': '™',
+    '&euro;': '€',
+    '&pound;': '£',
+    '&yen;': '¥',
+    '&cent;': '¢'
+  };
+
+  for (const [entity, replacement] of Object.entries(entityMap)) {
+    str = str.split(entity).join(replacement);
+  }
+
+  // Decimal entities: &#37; -> %, &#176; -> °, etc.
+  str = str.replace(/&#(\d+);/g, (match, dec) => {
+    const code = parseInt(dec, 10);
+    return code && code > 0 && code <= 0x10FFFF ? String.fromCharCode(code) : match;
+  });
+
+  // Hex entities: &#x25; -> %, etc.
+  str = str.replace(/&#x([0-9a-fA-F]+);/gi, (match, hex) => {
+    const code = parseInt(hex, 16);
+    return code && code > 0 && code <= 0x10FFFF ? String.fromCharCode(code) : match;
+  });
+
+  return str;
 }
 
 function escapeHtml(text) {

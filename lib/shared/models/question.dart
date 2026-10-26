@@ -23,9 +23,85 @@ class Question {
     this.timeLimitSeconds = 20,
   }) : questionText = cleanQuestionText(questionText);
 
+  /// Decodes HTML entities (e.g. &percnt; -> %, &#37; -> %, &deg; -> °, &quot;, &amp;, etc.)
+  /// and normalizes symbols to ensure full fidelity on all mobile device views.
+  static String decodeHtmlAndSymbols(String raw) {
+    if (raw.isEmpty) return raw;
+    var text = raw;
+
+    const map = {
+      '&percnt;': '%',
+      '&quot;': '"',
+      '&apos;': "'",
+      '&#039;': "'",
+      '&#39;': "'",
+      '&amp;': '&',
+      '&lt;': '<',
+      '&gt;': '>',
+      '&deg;': '°',
+      '&plusmn;': '±',
+      '&ndash;': '–',
+      '&mdash;': '—',
+      '&lsquo;': '‘',
+      '&rsquo;': '’',
+      '&ldquo;': '“',
+      '&rdquo;': '”',
+      '&hellip;': '…',
+      '&sup2;': '²',
+      '&sup3;': '³',
+      '&frac12;': '½',
+      '&frac14;': '¼',
+      '&frac34;': '¾',
+      '&eacute;': 'é',
+      '&Eacute;': 'É',
+      '&aacute;': 'á',
+      '&iacute;': 'í',
+      '&oacute;': 'ó',
+      '&uacute;': 'ú',
+      '&ntilde;': 'ñ',
+      '&Ntilde;': 'Ñ',
+      '&uuml;': 'ü',
+      '&Uuml;': 'Ü',
+      '&ouml;': 'ö',
+      '&Ouml;': 'Ö',
+      '&auml;': 'ä',
+      '&copy;': '©',
+      '&reg;': '®',
+      '&trade;': '™',
+      '&euro;': '€',
+      '&pound;': '£',
+      '&yen;': '¥',
+      '&cent;': '¢',
+    };
+
+    map.forEach((entity, replacement) {
+      text = text.replaceAll(entity, replacement);
+    });
+
+    // Decimal entities: &#37; -> %, &#176; -> °, etc.
+    text = text.replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
+      final code = int.tryParse(match.group(1)!);
+      if (code != null && code > 0 && code <= 0x10FFFF) {
+        return String.fromCharCode(code);
+      }
+      return match.group(0)!;
+    });
+
+    // Hex entities: &#x25; -> %, etc.
+    text = text.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+      final code = int.tryParse(match.group(1)!, radix: 16);
+      if (code != null && code > 0 && code <= 0x10FFFF) {
+        return String.fromCharCode(code);
+      }
+      return match.group(0)!;
+    });
+
+    return text;
+  }
+
   /// Strips any question numbers like (#1), (#INDEX), (Focus Point #2), etc.
   static String cleanQuestionText(String raw) {
-    var text = raw
+    var text = decodeHtmlAndSymbols(raw)
         .replaceAll(RegExp(r'\s*\([^)]*#(?:\d+|INDEX)[^)]*\)', caseSensitive: false), '')
         .replaceAll(RegExp(r'\s*#\d+\b'), '')
         .trim();
@@ -62,10 +138,10 @@ class Question {
       category: (inner['category'] ?? inner['genre'] ?? json['category'] ?? json['genre'] ?? 'General Knowledge').toString(),
       difficulty: (inner['difficulty'] ?? json['difficulty'] ?? 'Standard').toString(),
       questionText: cleanQuestionText((inner['question_text'] ?? inner['text'] ?? inner['question'] ?? json['question_text'] ?? json['text'] ?? json['question'] ?? '').toString()),
-      optionA: optA.toString(),
-      optionB: optB.toString(),
-      optionC: optC.toString(),
-      optionD: optD.toString(),
+      optionA: decodeHtmlAndSymbols(optA.toString()),
+      optionB: decodeHtmlAndSymbols(optB.toString()),
+      optionC: decodeHtmlAndSymbols(optC.toString()),
+      optionD: decodeHtmlAndSymbols(optD.toString()),
       correctOption: correct.toString().toUpperCase().trim(),
       timeLimitSeconds: (inner['time_limit_seconds'] ?? inner['duration_seconds'] ?? json['time_limit_seconds'] ?? json['duration_seconds'] as num?)?.toInt() ?? 20,
     );

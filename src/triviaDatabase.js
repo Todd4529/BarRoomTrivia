@@ -65,22 +65,62 @@ const seenQuestionTexts = new Set();
 let openTdbSessionToken = null;
 
 // HTML Entity Decoder helper
-function decodeHTMLEntities(text) {
+export function decodeHTMLEntities(text) {
   if (!text) return '';
-  if (typeof document !== 'undefined') {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = text;
-    return textarea.value;
+  let str = String(text);
+
+  const entityMap = {
+    '&percnt;': '%',
+    '&quot;': '"',
+    '&#039;': "'",
+    '&#39;': "'",
+    '&apos;': "'",
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&deg;': '°',
+    '&plusmn;': '±',
+    '&ndash;': '–',
+    '&mdash;': '—',
+    '&lsquo;': '‘',
+    '&rsquo;': '’',
+    '&ldquo;': '“',
+    '&rdquo;': '”',
+    '&hellip;': '…',
+    '&sup2;': '²',
+    '&sup3;': '³',
+    '&frac12;': '½',
+    '&frac14;': '¼',
+    '&frac34;': '¾',
+    '&eacute;': 'é',
+    '&ntilde;': 'ñ',
+    '&uuml;': 'ü',
+    '&copy;': '©',
+    '&reg;': '®',
+    '&trade;': '™',
+    '&euro;': '€',
+    '&pound;': '£',
+    '&yen;': '¥',
+    '&cent;': '¢'
+  };
+
+  for (const [entity, replacement] of Object.entries(entityMap)) {
+    str = str.split(entity).join(replacement);
   }
-  return text
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&eacute;/g, 'é')
-    .replace(/&rsquo;/g, "'");
+
+  // Decimal entities: &#37; -> %, &#176; -> °, etc.
+  str = str.replace(/&#(\d+);/g, (match, dec) => {
+    const code = parseInt(dec, 10);
+    return code && code > 0 && code <= 0x10FFFF ? String.fromCharCode(code) : match;
+  });
+
+  // Hex entities: &#x25; -> %, etc.
+  str = str.replace(/&#x([0-9a-fA-F]+);/gi, (match, hex) => {
+    const code = parseInt(hex, 16);
+    return code && code > 0 && code <= 0x10FFFF ? String.fromCharCode(code) : match;
+  });
+
+  return str;
 }
 
 // REQUEST OPENTDB SESSION TOKEN (Prevents API repeats across games)

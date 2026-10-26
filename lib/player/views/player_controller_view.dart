@@ -1472,6 +1472,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: wasCorrect ? const Color(0xFF10B981) : AppTheme.neonGreen,
+                              fontFamilyFallback: const ['Roboto', 'Arial', 'sans-serif'],
                             ),
                           ),
                         ],
@@ -2288,12 +2289,13 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           ),
           const SizedBox(height: 14),
           Text(
-            _currentQuestion?.questionText ?? '',
+            Question.decodeHtmlAndSymbols(_currentQuestion?.questionText ?? ''),
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
               color: Colors.white,
               height: 1.3,
+              fontFamilyFallback: ['Roboto', 'Arial', 'sans-serif'],
             ),
           ),
           const SizedBox(height: 20),
@@ -2414,14 +2416,15 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               ),
               const SizedBox(height: 4),
               Text(
-                text,
+                Question.decodeHtmlAndSymbols(text),
                 textAlign: TextAlign.center,
-                maxLines: 3,
+                maxLines: 4,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: text.length > 35 ? 14 : (text.length > 20 ? 16 : 18),
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
+                  fontFamilyFallback: const ['Roboto', 'Arial', 'sans-serif'],
                 ),
               ),
               if (isCorrect) ...[
