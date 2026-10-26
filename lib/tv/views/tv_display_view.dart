@@ -407,13 +407,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               ? rawEndsAt.toInt()
               : (rawEndsAt != null ? int.tryParse(rawEndsAt.toString()) : null);
 
-          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
+          int targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
               ? timerEndsAtEpochMs
               : (nowMs + duration * 1000);
-          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
-
           final remainingMs = targetEndsAt - nowMs;
-          final durationSec = isIdleTimer ? duration : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+          int durationSec = isIdleTimer ? duration : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+          if (!isIdleTimer && durationSec <= 4 && duration > 4) {
+            durationSec = duration;
+            targetEndsAt = nowMs + (duration * 1000);
+          }
+          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
 
           _adSlideTimer?.cancel();
           _preGameTimer?.cancel();

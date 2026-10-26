@@ -205,13 +205,16 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           final questionPhase = payload['question_phase']?.toString();
           final isIdleTimer = timerState == 'idle' || questionPhase == 'reading';
 
-          final targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
+          int targetEndsAt = (timerEndsAtEpochMs != null && timerEndsAtEpochMs > nowMs && !isIdleTimer)
               ? timerEndsAtEpochMs
               : (nowMs + fallbackDuration * 1000);
-          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
-
           final remainingMs = targetEndsAt - nowMs;
           int durationSec = isIdleTimer ? fallbackDuration : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+          if (!isIdleTimer && durationSec <= 4 && fallbackDuration > 4) {
+            durationSec = fallbackDuration;
+            targetEndsAt = nowMs + (fallbackDuration * 1000);
+          }
+          _targetTimerEndsAtMs = isIdleTimer ? null : targetEndsAt;
 
           final qNumInRound = (payload['question_number_in_round'] as num?)?.toInt() ??
               (payload['questionNumberInRound'] as num?)?.toInt() ??
@@ -258,8 +261,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
 
           if (_isInterRoundPhase || _showRoundWinnersOverlay) {
-            if (incomingRound <= _currentRound && isSameIndex) {
-              // Ignore stale question event during intermission
+            if (incomingRound < _currentRound) {
+              // Ignore stale question event from previous round
               return;
             }
           }
@@ -782,7 +785,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             });
           }
 
-          if (status == 'question_active') {
+          if (status == 'question_active' || status == 'active_reading') {
             final rawEnds = res['timer_ends_at'];
             int? timerEndsAt;
             if (rawEnds is num) {
@@ -804,24 +807,30 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             if (qData != null) {
               if (_isInterRoundPhase || _showRoundWinnersOverlay) {
                 final sessionRound = rNum ?? _currentRound;
-                if (sessionRound <= _currentRound) {
+                if (sessionRound < _currentRound) {
                   return;
                 }
               }
               final q = Question.fromJson(qData);
               final sessionR = rNum ?? _currentRound;
               final isNewQuestion = _currentQuestion == null ||
+                  _isInterQuestionPhase ||
+                  _isReviewPhase ||
                   sessionR != _currentRound ||
                   calcQNum != _questionNumberInRound ||
                   (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText);
 
               if (isNewQuestion) {
                 final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
-                final targetEndsAt = (timerEndsAt != null && timerEndsAt > now)
+                int targetEndsAt = (timerEndsAt != null && timerEndsAt > now)
                     ? timerEndsAt
                     : (now + dur * 1000);
                 final remainingMs = targetEndsAt - now;
-                final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+                int durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+                if (durationSec <= 4 && dur > 4) {
+                  durationSec = dur;
+                  targetEndsAt = now + (dur * 1000);
+                }
                 _targetTimerEndsAtMs = targetEndsAt;
 
                 _interQuestionTimer?.cancel();

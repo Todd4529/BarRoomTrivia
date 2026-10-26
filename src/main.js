@@ -351,7 +351,7 @@ function getCrowdApplauseBuffer(ctx, isGrandFanfare) {
     right[i] += wash * 0.48;
   }
 
-  // 3. LAYER 3: DISTINCT INDIVIDUAL EXCITED VOCAL CHEERS ("WOOO!", "YEAAAH!", "WHOO-HOO!")
+  // 3. LAYER 3: DISTINCT INDIVIDUAL EXCITED VOCAL CHEERS ("WOOO!", "YEAAAH!", "WHOO-HOO!") - AUTHENTIC CLAPPING AND CHEERING
   const cheers = isGrandFanfare ? [
     { start: 0.08, dur: 1.15, f0: 230, f1: 340, formants: [680, 1300, 2500], pan: -0.35, vol: 0.16 },
     { start: 0.18, dur: 1.35, f0: 190, f1: 270, formants: [750, 1600, 2700], pan: 0.40, vol: 0.17 },
@@ -361,8 +361,9 @@ function getCrowdApplauseBuffer(ctx, isGrandFanfare) {
     { start: 0.06, dur: 0.85, f0: 220, f1: 310, formants: [720, 1450, 2600], pan: -0.20, vol: 0.15 },
     { start: 0.14, dur: 0.95, f0: 185, f1: 250, formants: [680, 1300, 2500], pan: 0.30, vol: 0.16 }
   ];
+  const cheerVoices = cheers;
 
-  cheers.forEach(ch => {
+  cheerVoices.forEach(ch => {
     const startIdx = Math.floor(ch.start * sampleRate);
     const durSamples = Math.floor(ch.dur * sampleRate);
     const lPan = (1 - ch.pan) * 0.5;
@@ -1470,6 +1471,28 @@ function switchView(viewName) {
     }
   }
 
+  // 4b. Player View specific behavior: Show active question immediately if game in progress
+  if (viewName === 'player') {
+    hideWinnerModals();
+    hideResultModal();
+    hideInterQuestionCountdown();
+    if (currentQuestionData && (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'QUESTION_READING')) {
+      const now = Date.now();
+      const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
+        ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
+        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (Number(selectedQuestionDuration) || 20));
+
+      onQuestionStart({
+        questionData: currentQuestionData,
+        roundNumber: currentRound,
+        questionNumberInRound: (currentQuestionIndex % 10) + 1,
+        durationSeconds: remainingSecs,
+        totalTimerDuration: selectedQuestionDuration || 20,
+        difficulty: selectedDifficulty
+      });
+    }
+  }
+
   // 5. Update venue & logo
   onVenueNameUpdated({ venueName: currentVenueName });
   if (customBarLogoUrl) {
@@ -1721,6 +1744,7 @@ const SENDER_EPOCH_KEYS = [
   'timer_ends_at_epoch_ms',
   'timerEndsAtMs',
   'timer_ends_at',
+  'timerEndsAtEpochMs',
   'starts_at_epoch_ms',
   'starts_at',
   'next_question_starts_at_epoch_ms',
@@ -1737,8 +1761,13 @@ const SENDER_EPOCH_KEYS = [
  */
 function normalizeIncomingClockSkew(payload) {
   if (!payload || typeof payload !== 'object') return payload;
-  const sent = Number(payload.timestamp || payload.sent_at_epoch_ms || 0);
-  if (!sent) return payload;
+  const rawSent = payload.timestamp || payload.sent_at_epoch_ms || payload.updated_at;
+  let sent = Number(rawSent);
+  if (isNaN(sent) && typeof rawSent === 'string') {
+    const parsed = Date.parse(rawSent);
+    if (!isNaN(parsed) && parsed > 0) sent = parsed;
+  }
+  if (!sent || isNaN(sent) || sent <= 0) return payload;
   const skew = Date.now() - sent;
   if (Math.abs(skew) < 1500) return payload;
   const out = { ...payload };
@@ -1879,16 +1908,13 @@ function handleIncomingQuestionStart(rawPayload) {
   console.log('[Realtime] Processing question_start:', payload);
 
   const incomingRound = Number(payload.round_number || payload.roundNumber || (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : 1));
-  const isWinnerActive = () => {
-    const tv = document.getElementById('tv-winner-modal-overlay');
-    const pl = document.getElementById('player-winner-modal-overlay');
-    return (tv && !tv.classList.contains('hidden')) || (pl && !pl.classList.contains('hidden'));
-  };
-  if ((currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY' || isWinnerActive()) && incomingRound <= currentRound) {
-    console.log('[Realtime] Ignoring question_start during ROUND_SUMMARY intermission:', incomingRound, currentRound);
+  // Stale packet guard: ONLY ignore if incoming question is strictly from a past round
+  if (incomingRound > 0 && currentRound > 0 && incomingRound < currentRound) {
+    console.log('[Realtime] Ignoring stale question_start from previous round:', incomingRound, currentRound);
     return;
   }
 
+  // A question_start event indicates active gameplay; dismiss all intermission and countdown overlays
   hideWinnerModals();
   hideResultModal();
   hideInterQuestionCountdown();
@@ -1922,6 +1948,7 @@ function handleIncomingQuestionStart(rawPayload) {
   const roundNum = (rFromPayload && rFromPayload > 0)
     ? rFromPayload
     : (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : (currentRound || 1));
+  const prevRound = currentRound;
   currentRound = roundNum;
 
   let incomingQIndex = null;
@@ -1935,15 +1962,24 @@ function handleIncomingQuestionStart(rawPayload) {
   }
 
   const prevQIndex = currentQuestionIndex;
-  const isDifferentIndex = (incomingQIndex !== null && prevQIndex !== null && incomingQIndex !== prevQIndex) || (currentRound !== roundNum);
+  const isDifferentIndex = (incomingQIndex !== null && prevQIndex !== null && incomingQIndex !== prevQIndex) || (prevRound !== roundNum);
   if (incomingQIndex !== null) {
     currentQuestionIndex = incomingQIndex;
   }
   const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((currentQuestionIndex % 10) + 1));
 
+  // Check if player UI is currently showing waiting or blank screen
+  const playerQElem = document.getElementById('player-question-text');
+  const isUiWaiting = !playerQElem ||
+    playerQElem.textContent.includes('Waiting for next question') ||
+    playerQElem.textContent.includes('Get ready') ||
+    playerQElem.textContent.includes('STARTING IN') ||
+    playerQElem.textContent.includes('NEXT ROUND') ||
+    playerQElem.textContent.trim() === '';
+
   const isSameQuestion = !isDifferentIndex && currentQuestionData && (
     (currentQuestionData.id && questionData.id && currentQuestionData.id === questionData.id) ||
-    (currentQuestionData.text && questionData.text && currentQuestionData.text === questionData.text)
+    (currentQuestionData.text && questionData.text && currentQuestionData.text.trim() !== '' && currentQuestionData.text === questionData.text)
   );
 
   const rawTargetEpoch = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || payload.timer_ends_at || payload.timerEndsAtEpochMs;
@@ -1964,9 +2000,13 @@ function handleIncomingQuestionStart(rawPayload) {
   } else {
     timerEndsAtGlobalMs = now + (durationSeconds * 1000);
   }
-  const remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
+  let remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
+  if (remainingSecs <= 4 && durationSeconds > 4) {
+    remainingSecs = durationSeconds;
+    timerEndsAtGlobalMs = now + (durationSeconds * 1000);
+  }
 
-  if (isSameQuestion && playerChoiceSubmitted !== null) {
+  if (isSameQuestion && !isUiWaiting && playerChoiceSubmitted !== null) {
     // Current question is already active and answer submitted.
     // Preserve their answer selection and do not wipe question scored state
     currentQuestionData = questionData;
@@ -1975,7 +2015,7 @@ function handleIncomingQuestionStart(rawPayload) {
     }
     return;
   }
-  if (isSameQuestion && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
+  if (isSameQuestion && !isUiWaiting && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
     currentQuestionData = questionData;
     return;
   }
@@ -2632,6 +2672,7 @@ function initHostControls() {
       const parsedSecs = parseInt(chip.getAttribute('data-timer'), 10);
       if (!isNaN(parsedSecs)) {
         selectedQuestionDuration = parsedSecs;
+        totalTimerDuration = parsedSecs;
         safeStorage.setItem('bar_trivia_question_duration', String(parsedSecs));
       }
 
@@ -3667,6 +3708,19 @@ function generateOfficialBarRoomsTriviaAdDataUrl() {
   const homeDesc = 'No pens, no paper answer sheets, and no manual score calculation! Hook up your laptop, tablet, or smart TV, gather your friends and family, and start playing in under 60 seconds.';
   wrapText(homeDesc, 110, botY + 165, leftW - 80, 32, '#94a3b8', "500 20px 'Inter', sans-serif");
 
+  // Home party chips: Family Game Nights, Friends & House Parties, Office & Team Socials, Holiday & Birthday Parties
+  const homePartyChips = ['Family Game Nights', 'Friends & House Parties', 'Office & Team Socials', 'Holiday & Birthday Parties'];
+  let chipX = 110;
+  homePartyChips.forEach(chip => {
+    ctx.font = "600 14px 'Inter', sans-serif";
+    const chipW = ctx.measureText(chip).width + 24;
+    roundRect(chipX, botY + 235, chipW, 28, 14, 'rgba(0, 229, 255, 0.1)', 'rgba(0, 229, 255, 0.35)', 1);
+    ctx.fillStyle = '#00e5ff';
+    ctx.textAlign = 'left';
+    ctx.fillText(chip, chipX + 12, botY + 254);
+    chipX += chipW + 12;
+  });
+
   // Footer Tagline on Left Card
   ctx.font = "600 16px 'Inter', sans-serif";
   ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
@@ -3844,7 +3898,26 @@ function startTvAdSignageRotation() {
 
   displayAdSlide(currentAdSlideIndex);
 
+  const progressFill = document.getElementById('tv-ad-progress-fill');
+  if (progressFill) {
+    progressFill.style.width = '0%';
+    progressFill.style.transition = 'none';
+    requestAnimationFrame(() => {
+      progressFill.style.transition = `width ${adSlideDurationSeconds || 10}s linear`;
+      progressFill.style.width = '100%';
+    });
+  }
+
   const totalMs = (adSlideDurationSeconds || 10) * 1000;
+
+  if (adProgressBarInterval) clearInterval(adProgressBarInterval);
+  const startMs = Date.now();
+  adProgressBarInterval = setInterval(() => {
+    const elapsed = Date.now() - startMs;
+    const pct = Math.min(100, (elapsed / totalMs) * 100);
+    if (progressFill) progressFill.style.width = `${pct}%`;
+    if (elapsed >= totalMs) clearInterval(adProgressBarInterval);
+  }, 100);
 
   adRotationTimeout = setTimeout(() => {
     const slides = getAllActiveAdSlides();
@@ -4507,6 +4580,8 @@ async function runNextAutomatedStep() {
       game_play_mode: hostGamePlayMode,
       question_phase: isManual ? 'reading' : 'countdown',
       timer_state: isManual ? 'idle' : 'running',
+      timestamp: Date.now(),
+      sent_at_epoch_ms: Date.now(),
     };
 
     currentGameState = isManual ? 'QUESTION_READING' : 'QUESTION_ACTIVE';
@@ -4855,6 +4930,8 @@ function startManualQuestionCountdown() {
     totalTimerDuration: durationSeconds,
     question_index: (currentQuestionIndex % 10) + 1,
     round_number: currentRound,
+    timestamp: Date.now(),
+    sent_at_epoch_ms: Date.now(),
   });
 
   startCountdown(durationSeconds);
@@ -5013,11 +5090,13 @@ function onQuestionStart(payload) {
     correct: correct,
   };
 
-  const roundNumber = payload.roundNumber || payload.round_number || currentRound || 1;
   const totalDur = payload.totalTimerDuration || payload.total_duration || payload.time_limit_seconds || selectedQuestionDuration || 20;
   totalTimerDuration = Math.max(5, Number(totalDur) || 20);
   const rawDur = payload.durationSeconds || payload.duration_seconds || totalTimerDuration;
-  const durationSeconds = Math.max(1, Number(rawDur) || totalTimerDuration);
+  let durationSeconds = Math.max(1, Number(rawDur) || totalTimerDuration);
+  if (durationSeconds <= 4 && totalTimerDuration > 4) {
+    durationSeconds = totalTimerDuration;
+  }
   const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
 
   currentQuestionData = questionData;
@@ -5240,11 +5319,9 @@ function onQuestionStart(payload) {
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
   const validSeconds = Math.max(1, Number(seconds) || Number(totalTimerDuration) || Number(selectedQuestionDuration) || 20);
-  if (!totalTimerDuration || totalTimerDuration < validSeconds) {
-    totalTimerDuration = validSeconds;
-  }
+  totalTimerDuration = validSeconds;
   const now = Date.now();
-  if (!timerEndsAtGlobalMs || timerEndsAtGlobalMs <= now) {
+  if (!timerEndsAtGlobalMs || timerEndsAtGlobalMs <= now || ((timerEndsAtGlobalMs - now) <= 4000 && validSeconds > 4)) {
     timerEndsAtGlobalMs = now + (validSeconds * 1000);
   }
   remainingTimerSeconds = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
@@ -5680,9 +5757,18 @@ function showInterQuestionCountdown(targetEpochMs) {
   const btnGrid = document.querySelector('.button-grid-2x2');
 
   // Immediately hide previous question and previous choices
-  if (qCard) qCard.classList.add('hidden');
-  if (btnGrid) btnGrid.classList.add('hidden');
-  if (interQScreen) interQScreen.classList.remove('hidden');
+  if (qCard) {
+    qCard.classList.add('hidden');
+    qCard.style.display = 'none';
+  }
+  if (btnGrid) {
+    btnGrid.classList.add('hidden');
+    btnGrid.style.display = 'none';
+  }
+  if (interQScreen) {
+    interQScreen.classList.remove('hidden');
+    interQScreen.style.display = 'flex';
+  }
 
   const updateCountdown = () => {
     const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
@@ -5716,9 +5802,18 @@ function hideInterQuestionCountdown() {
   const interQScreen = document.getElementById('player-inter-question-screen');
   const qCard = document.querySelector('.player-question-card');
   const btnGrid = document.querySelector('.button-grid-2x2');
-  if (interQScreen) interQScreen.classList.add('hidden');
-  if (qCard) qCard.classList.remove('hidden');
-  if (btnGrid) btnGrid.classList.remove('hidden');
+  if (interQScreen) {
+    interQScreen.classList.add('hidden');
+    interQScreen.style.display = 'none';
+  }
+  if (qCard) {
+    qCard.classList.remove('hidden');
+    qCard.style.display = '';
+  }
+  if (btnGrid) {
+    btnGrid.classList.remove('hidden');
+    btnGrid.style.display = '';
+  }
 }
 
 function hideResultModal() {
@@ -6169,10 +6264,11 @@ function initPlayerControls() {
             startsAt = startsAt || Date.now();
             const rem = Math.max(1, Math.ceil((startsAt - Date.now()) / 1000));
             handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum || currentRound, genre: session.genre });
-          } else if (session.status === 'question_active' && session.question_data) {
+          } else if ((session.status === 'question_active' || session.status === 'active_reading') && session.question_data) {
             const isIntermissionActive = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
-            const sessionRound = session.current_round || session.round_number || session.question_data.round_number || session.question_data.roundNumber || currentRound;
-            if (isIntermissionActive && sessionRound <= currentRound) {
+            const sessionRound = Number(session.current_round || session.round_number || session.question_data.round_number || session.question_data.roundNumber || currentRound);
+            // Stale check: Only skip if session round is strictly less than current round
+            if (isIntermissionActive && sessionRound < currentRound) {
               return;
             }
             const qData = session.question_data;
@@ -6185,7 +6281,7 @@ function initPlayerControls() {
               endsAt = Number(endsAt);
             }
             const dur = Math.max(5, Number(session.duration_seconds || session.time_limit_seconds || selectedQuestionDuration || 20));
-            if (!endsAt || isNaN(endsAt) || (endsAt - now) <= 3000) {
+            if (!endsAt || isNaN(endsAt) || (endsAt - now) <= 4000) {
               endsAt = now + (dur * 1000);
             }
             if ((endsAt - now) > -60000) {
@@ -6193,8 +6289,19 @@ function initPlayerControls() {
               const curQIdx = (currentQuestionIndex !== null && currentQuestionIndex !== undefined) ? currentQuestionIndex + 1 : 0;
               const qText = qData.text || qData.question || qData.question_text || '';
               const curText = currentQuestionData ? (currentQuestionData.text || currentQuestionData.question || currentQuestionData.question_text || '') : '';
+              
+              const playerQElem = document.getElementById('player-question-text');
+              const isUiWaiting = !playerQElem ||
+                playerQElem.textContent.includes('Waiting for next question') ||
+                playerQElem.textContent.includes('Get ready') ||
+                playerQElem.textContent.includes('STARTING IN') ||
+                playerQElem.textContent.includes('NEXT ROUND') ||
+                playerQElem.textContent.trim() === '';
+
               const isDifferentQ = !currentQuestionData ||
+                isUiWaiting ||
                 (sessionQIdx > 0 && sessionQIdx !== curQIdx) ||
+                (sessionRound !== currentRound) ||
                 (qData.id && currentQuestionData.id && qData.id !== currentQuestionData.id) ||
                 (qText && curText && qText !== curText);
 
@@ -6204,10 +6311,14 @@ function initPlayerControls() {
                 handleIncomingQuestionStart({
                   ...qData,
                   question_index: session.current_question_index || 1,
+                  cumulative_question_index: session.current_question_index || 1,
                   round_number: sessionRound,
                   roundNumber: sessionRound,
                   duration_seconds: dur,
-                  timer_ends_at_epoch_ms: endsAt
+                  totalTimerDuration: dur,
+                  timer_ends_at_epoch_ms: endsAt,
+                  timestamp: now,
+                  sent_at_epoch_ms: now,
                 });
               } else {
                 const qNum = ((session.current_question_index - 1) % 10) + 1;

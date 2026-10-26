@@ -195,7 +195,7 @@ class MainActivity : FlutterActivity() {
         val buffer = ShortArray(totalSamples)
         val random = java.util.Random(1337L)
 
-        // LAYER 1: Realistic Multi-Person Acoustic Handclapping (palm-on-palm flesh impact)
+        // LAYER 1: Realistic Multi-Person Acoustic Handclapping (palm-on-palm flesh impact) - Crowd Applause
         val numClappers = if (isGrandFanfare) 24 else 16
         for (p in 0 until numClappers) {
             val clapRateMs = 250 + (random.nextInt(120))
@@ -237,7 +237,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // LAYER 2: Collective Crowd Vocal Roar
+        // LAYER 2: Collective Crowd Vocal Roar - Crowd Cheering
         var noiseFilter = 0.0
         val roarSustain = if (isGrandFanfare) 1.8 else 0.8
         val roarDecay = if (isGrandFanfare) 1.5 else 0.7

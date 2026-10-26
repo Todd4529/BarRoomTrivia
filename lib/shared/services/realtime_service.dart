@@ -30,7 +30,10 @@ class RealtimeService {
   static const List<String> _senderEpochKeys = [
     'timer_ends_at_epoch_ms',
     'timerEndsAtMs',
+    'timer_ends_at',
+    'timerEndsAtEpochMs',
     'starts_at_epoch_ms',
+    'starts_at',
     'next_question_starts_at_epoch_ms',
     'nextQuestionStartsAtEpochMs',
     'next_round_starts_at_epoch_ms',
@@ -46,8 +49,14 @@ class RealtimeService {
   /// `timestamp`, so `now - timestamp` approximates the clock offset (plus a
   /// small network latency). Offsets under 1.5s are treated as normal latency.
   static Map<String, dynamic> normalizeClockSkew(Map<String, dynamic> payload) {
-    final sentRaw = payload['timestamp'] ?? payload['sent_at_epoch_ms'];
-    final sent = sentRaw is num ? sentRaw.toInt() : int.tryParse('${sentRaw ?? ''}');
+    final sentRaw = payload['timestamp'] ?? payload['sent_at_epoch_ms'] ?? payload['updated_at'];
+    int? sent;
+    if (sentRaw is num) {
+      sent = sentRaw.toInt();
+    } else if (sentRaw is String) {
+      final dt = DateTime.tryParse(sentRaw);
+      sent = dt?.millisecondsSinceEpoch ?? int.tryParse(sentRaw);
+    }
     if (sent == null || sent <= 0) return payload;
 
     final skew = DateTime.now().millisecondsSinceEpoch - sent;
@@ -55,9 +64,16 @@ class RealtimeService {
 
     final out = Map<String, dynamic>.from(payload);
     for (final key in _senderEpochKeys) {
-      final v = out[key];
-      if (v is num && v > 0) {
-        out[key] = v.toInt() + skew;
+      final raw = out[key];
+      int? v;
+      if (raw is num) {
+        v = raw.toInt();
+      } else if (raw is String) {
+        final dt = DateTime.tryParse(raw);
+        v = dt?.millisecondsSinceEpoch ?? int.tryParse(raw);
+      }
+      if (v != null && v > 0) {
+        out[key] = v + skew;
       }
     }
     // Re-stamp so downstream code sees a consistent local-clock payload
