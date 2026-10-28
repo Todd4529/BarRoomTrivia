@@ -295,11 +295,13 @@ void main() {
       expect(tvViewContent.contains('PERFECT FOR PARTIES'), isTrue);
     });
 
-    test('Slide 2 focuses on Google Play Store app and instant web play', () {
+    test('Slide 2 focuses on Google Play Store app and Amazon Fire TV Appstore', () {
       expect(tvViewContent.contains('BAR ROOMS TRIVIA'), isTrue);
-      expect(tvViewContent.contains('DOWNLOAD FROM GOOGLE PLAY'), isTrue);
+      expect(tvViewContent.contains('GOOGLE PLAY & AMAZON FIRE TV'), isTrue);
       expect(tvViewContent.contains('Google Play'), isTrue);
       expect(tvViewContent.contains('GET IT ON'), isTrue);
+      expect(tvViewContent.contains('Amazon Fire TV'), isTrue);
+      expect(tvViewContent.contains('AVAILABLE AT'), isTrue);
     });
 
     test('All slides feature embedded live QR code pointing to game room', () {

@@ -2691,7 +2691,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     );
   }
 
-  /// Signage Slide 2: Official Bar Rooms Trivia App & Google Play Store
+  /// Signage Slide 2: Official Bar Rooms Trivia App (Google Play Store & Amazon Fire TV Appstore)
   Widget _buildFullscreenSlide2() {
     final playUrl = _getPlayUrl();
     return Padding(
@@ -2710,7 +2710,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   border: Border.all(color: AppTheme.neonCyan, width: 1.5),
                 ),
                 child: const Text(
-                  '📲 OFFICIAL APP ON GOOGLE PLAY & THE WEB 📲',
+                  '📲 OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV 📲',
                   style: TextStyle(
                     color: AppTheme.neonCyan,
                     fontWeight: FontWeight.w900,
@@ -2756,7 +2756,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'DOWNLOAD THE OFFICIAL APP OR PLAY INSTANTLY ONLINE IN ANY BROWSER',
+            'DOWNLOAD THE OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV APPSTORE',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
           ),
           const SizedBox(height: 12),
@@ -2801,38 +2801,75 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         const Text(
-                          'DOWNLOAD FROM GOOGLE PLAY',
+                          'DOWNLOAD FROM APP STORES',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white30),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.play_arrow_rounded, color: AppTheme.neonGreen, size: 28),
-                              const SizedBox(width: 10),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text('GET IT ON', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
-                                  Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
-                                ],
+                        Row(
+                          children: [
+                            // Google Play Badge
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white30),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.play_arrow_rounded, color: AppTheme.neonGreen, size: 24),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: const [
+                                          Text('GET IT ON', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
+                                          Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Amazon Fire TV Badge
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Color(0xFFFF9900).withValues(alpha: 0.6)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF9900), size: 24),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: const [
+                                          Text('AVAILABLE AT', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
+                                          Text('Amazon Fire TV', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const Text(
-                          'Search "Bar Rooms Trivia" on Google Play Store',
-                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 13),
+                          '✓ Search "Bar Rooms Trivia" on Google Play Store',
+                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 12.5),
                         ),
                         const Text(
-                          '🌐 Play instantly online: todd4529.github.io/BarRoomTrivia',
-                          style: TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w700, fontSize: 13),
+                          '✓ Search "Bar Rooms Trivia" on Amazon Fire TV Appstore',
+                          style: TextStyle(color: Color(0xFFFF9900), fontWeight: FontWeight.w700, fontSize: 12.5),
                         ),
                       ],
                     ),

@@ -3959,13 +3959,13 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
   } else {
     // ==========================================
-    // SLIDE 3: GOOGLE PLAY STORE & WEB APP
+    // SLIDE 3: GOOGLE PLAY & AMAZON FIRE TV APP
     // ==========================================
     roundRect(660, 48, 600, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
     ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
     ctx.textAlign = 'center';
-    ctx.fillText('📲 AVAILABLE ON GOOGLE PLAY & THE WEB 📲', 960, 72);
+    ctx.fillText('📲 AVAILABLE ON GOOGLE PLAY & AMAZON FIRE TV 📲', 960, 72);
 
     ctx.font = "900 56px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#ffffff';
@@ -3976,11 +3976,11 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#ffd600';
-    ctx.fillText('DOWNLOAD FROM GOOGLE PLAY', 960, 182);
+    ctx.fillText('DOWNLOAD FROM GOOGLE PLAY & AMAZON FIRE TV', 960, 182);
 
     ctx.font = "500 16px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Install the official app on your Android Phone, Tablet or Google TV for full-screen performance.', 960, 214);
+    ctx.fillText('Install the official app on Google Play and Amazon Fire TV Appstore for full-screen performance.', 960, 214);
 
     const cardY = 250;
     const cardH = 550;
@@ -4008,7 +4008,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     roundRect(120, cardY + cardH - 80, 880, 48, 12, 'rgba(0, 229, 255, 0.1)', 'rgba(0, 229, 255, 0.4)', 1);
     ctx.font = "700 16px 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
-    ctx.fillText('★ Compatible with Android Phones, Tablets, Google TV, Fire TV & iPads ★', 140, cardY + cardH - 50);
+    ctx.fillText('★ Compatible with Android Phones, Tablets, Google TV, Fire TV & Smart TVs ★', 140, cardY + cardH - 50);
 
     const rightX = 1080;
     roundRect(rightX, cardY, 760, cardH, 20, 'rgba(16, 16, 26, 0.96)', 'rgba(255, 214, 0, 0.4)', 2);
@@ -4016,72 +4016,118 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     ctx.textAlign = 'left';
     ctx.font = "900 26px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
-    ctx.fillText('GET IT ON GOOGLE PLAY', rightX + 40, cardY + 60);
+    ctx.fillText('DOWNLOAD FROM APP STORES', rightX + 40, cardY + 54);
 
     ctx.font = "500 16px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Available now on the Google Play Store for Android & Google TV:', rightX + 40, cardY + 100);
+    ctx.fillText('Get the full-screen app on your TV, streaming box, or tablet:', rightX + 40, cardY + 90);
 
+    // 1. Google Play Store Badge
     const badgeX = rightX + 40;
-    const badgeY = cardY + 140;
-    const badgeW = 600;
-    const badgeH = 110;
-    roundRect(badgeX, badgeY, badgeW, badgeH, 18, '#000000', 'rgba(255, 255, 255, 0.35)', 2);
+    const badgeY = cardY + 115;
+    const badgeW = 680;
+    const badgeH = 95;
+    roundRect(badgeX, badgeY, badgeW, badgeH, 16, '#000000', 'rgba(255, 255, 255, 0.35)', 2);
 
-    const iconCenterX = badgeX + 60;
-    const iconCenterY = badgeY + 55;
+    const iconCenterX = badgeX + 55;
+    const iconCenterY = badgeY + 47;
 
     ctx.fillStyle = '#00e5ff';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX - 24, iconCenterY - 30);
-    ctx.lineTo(iconCenterX + 20, iconCenterY);
+    ctx.moveTo(iconCenterX - 22, iconCenterY - 26);
+    ctx.lineTo(iconCenterX + 18, iconCenterY);
     ctx.lineTo(iconCenterX - 4, iconCenterY);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#00e676';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX + 20, iconCenterY);
-    ctx.lineTo(iconCenterX + 34, iconCenterY + 12);
-    ctx.lineTo(iconCenterX - 24, iconCenterY + 30);
+    ctx.moveTo(iconCenterX + 18, iconCenterY);
+    ctx.lineTo(iconCenterX + 30, iconCenterY + 10);
+    ctx.lineTo(iconCenterX - 22, iconCenterY + 26);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#ffd600';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX + 20, iconCenterY);
-    ctx.lineTo(iconCenterX + 34, iconCenterY - 12);
-    ctx.lineTo(iconCenterX - 24, iconCenterY - 30);
+    ctx.moveTo(iconCenterX + 18, iconCenterY);
+    ctx.lineTo(iconCenterX + 30, iconCenterY - 10);
+    ctx.lineTo(iconCenterX - 22, iconCenterY - 26);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#ff007a';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX + 20, iconCenterY);
-    ctx.lineTo(iconCenterX + 34, iconCenterY - 12);
-    ctx.lineTo(iconCenterX + 34, iconCenterY + 12);
+    ctx.moveTo(iconCenterX + 18, iconCenterY);
+    ctx.lineTo(iconCenterX + 30, iconCenterY - 10);
+    ctx.lineTo(iconCenterX + 30, iconCenterY + 10);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = '#e2e8f0';
-    ctx.font = "600 16px 'Inter', sans-serif";
-    ctx.fillText('GET IT ON', badgeX + 115, badgeY + 42);
+    ctx.font = "600 14px 'Inter', sans-serif";
+    ctx.fillText('GET IT ON', badgeX + 105, badgeY + 36);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = "800 38px 'Outfit', 'Inter', sans-serif";
-    ctx.fillText('Google Play', badgeX + 115, badgeY + 86);
+    ctx.font = "800 32px 'Outfit', 'Inter', sans-serif";
+    ctx.fillText('Google Play', badgeX + 105, badgeY + 74);
 
-    ctx.font = "700 18px 'Outfit', 'Inter', sans-serif";
+    // 2. Amazon Fire TV Appstore Badge
+    const amzBadgeY = cardY + 230;
+    roundRect(badgeX, amzBadgeY, badgeW, badgeH, 16, '#000000', 'rgba(255, 153, 0, 0.6)', 2);
+
+    const amzCenterX = badgeX + 55;
+    const amzCenterY = amzBadgeY + 47;
+
+    // Stylized Amazon Fire TV Flame icon
+    ctx.save();
+    ctx.fillStyle = '#FF9900';
+    ctx.beginPath();
+    ctx.moveTo(amzCenterX, amzCenterY - 26);
+    ctx.bezierCurveTo(amzCenterX + 16, amzCenterY - 10, amzCenterX + 22, amzCenterY + 8, amzCenterX + 14, amzCenterY + 20);
+    ctx.bezierCurveTo(amzCenterX + 7, amzCenterY + 26, amzCenterX - 7, amzCenterY + 26, amzCenterX - 14, amzCenterY + 20);
+    ctx.bezierCurveTo(amzCenterX - 22, amzCenterY + 8, amzCenterX - 15, amzCenterY - 6, amzCenterX - 5, amzCenterY - 13);
+    ctx.bezierCurveTo(amzCenterX - 7, amzCenterY - 3, amzCenterX - 4, amzCenterY + 5, amzCenterX + 2, amzCenterY + 5);
+    ctx.bezierCurveTo(amzCenterX + 7, amzCenterY + 5, amzCenterX + 6, amzCenterY - 7, amzCenterX, amzCenterY - 26);
+    ctx.closePath();
+    ctx.fill();
+
+    // Inner bright gold flame
+    ctx.fillStyle = '#FFD600';
+    ctx.beginPath();
+    ctx.moveTo(amzCenterX + 1, amzCenterY - 7);
+    ctx.bezierCurveTo(amzCenterX + 9, amzCenterY + 4, amzCenterX + 7, amzCenterY + 16, amzCenterX, amzCenterY + 19);
+    ctx.bezierCurveTo(amzCenterX - 7, amzCenterY + 16, amzCenterX - 9, amzCenterY + 7, amzCenterX - 2, amzCenterY + 2);
+    ctx.bezierCurveTo(amzCenterX - 3, amzCenterY + 7, amzCenterX + 2, amzCenterY + 9, amzCenterX + 4, amzCenterY + 7);
+    ctx.bezierCurveTo(amzCenterX + 5, amzCenterY + 4, amzCenterX + 3, amzCenterY - 1, amzCenterX + 1, amzCenterY - 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = "600 14px 'Inter', sans-serif";
+    ctx.fillText('AVAILABLE AT', badgeX + 105, amzBadgeY + 36);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "800 32px 'Outfit', 'Inter', sans-serif";
+    ctx.fillText('Amazon Fire TV', badgeX + 105, amzBadgeY + 74);
+
+    roundRect(badgeX + 370, amzBadgeY + 44, 90, 30, 8, 'rgba(255, 153, 0, 0.2)', '#FF9900', 1);
+    ctx.fillStyle = '#FF9900';
+    ctx.font = "800 13px 'Outfit', sans-serif";
+    ctx.fillText('Appstore', badgeX + 382, amzBadgeY + 64);
+
+    // Search instructions
+    ctx.font = "700 17px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
-    ctx.fillText('✓ Search "Bar Rooms Trivia" on Google Play Store', rightX + 40, cardY + 310);
+    ctx.fillText('✓ Search "Bar Rooms Trivia" on Google Play Store', rightX + 40, cardY + 365);
 
-    roundRect(rightX + 40, cardY + 350, 680, 70, 14, 'rgba(255, 255, 255, 0.05)', 'rgba(255, 214, 0, 0.4)', 1.5);
-    ctx.font = "800 18px 'Inter', sans-serif";
-    ctx.fillStyle = '#ffd600';
-    ctx.fillText('🌐 Or Play Instantly Online in Any Browser:', rightX + 64, cardY + 392);
-    ctx.font = "700 18px 'Outfit', sans-serif";
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('todd4529.github.io/BarRoomTrivia', rightX + 440, cardY + 392);
+    ctx.fillStyle = '#FF9900';
+    ctx.fillText('✓ Search "Bar Rooms Trivia" on Amazon Fire TV Appstore', rightX + 40, cardY + 410);
+
+    ctx.font = "600 15px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('✓ 100% Free Download • No Subscriptions • Optimized for TVs', rightX + 40, cardY + 455);
 
     const botY = 830;
     const botH = 180;
@@ -4094,11 +4140,11 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "600 18px 'Inter', sans-serif";
     ctx.fillStyle = '#ffd600';
-    ctx.fillText('🌐 Free for all players • No installation required to play • Runs on any smart TV or phone', 120, botY + 104);
+    ctx.fillText('📱 Free for all players • Available on Google Play & Amazon Fire TV • Instant phone buzzer join', 120, botY + 104);
 
     ctx.font = "500 15px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Join the game by scanning the TV QR code with your camera, or visit todd4529.github.io/BarRoomTrivia', 120, botY + 144);
+    ctx.fillText('Players join the game instantly by scanning the TV QR code with any smartphone camera to buzz in!', 120, botY + 144);
   }
 
   return canvas.toDataURL('image/jpeg', 0.90);
@@ -4132,7 +4178,7 @@ function getOfficialBarRoomsTriviaAdSlides() {
       },
       {
         id: `${OFFICIAL_SYSTEM_AD_ID}_3`,
-        name: 'Google Play & Web App (Official Ad 3/3)',
+        name: 'Google Play & Amazon Fire TV (Official Ad 3/3)',
         dataUrl: generateOfficialBarRoomsTriviaAdDataUrl(3),
         type: 'system',
         page: 3,
