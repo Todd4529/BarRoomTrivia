@@ -20,7 +20,7 @@
   <link rel="manifest" href="/BarRoomTrivia/assets/manifest--2K9kbVy.webmanifest">
   <link rel="apple-touch-icon" href="./app_logo.png">
   <link rel="icon" type="image/png" href="./app_logo.png">
-  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-zWQ3QIwd.js"></script>
+  <script type="module" crossorigin src="/BarRoomTrivia/assets/index-CKdya6rB.js"></script>
   <link rel="stylesheet" crossorigin href="/BarRoomTrivia/assets/index-Z-MI-y78.css">
 </head>
 <body class="dark-theme" data-view="auth">
@@ -899,11 +899,10 @@
                 <div id="host-ad-settings-content" class="ad-settings-content">
                   <!-- File Upload Dropzone & Active Ad Slides Container -->
                   <div class="ad-upload-section">
-                    <label for="host-ad-files-input" class="ad-dropzone" id="host-ad-dropzone">
+                    <label for="host-ad-files-input" class="ad-dropzone" id="host-ad-dropzone" style="padding: 14px 16px;">
                       <span class="dropzone-icon">📄</span>
                       <div class="dropzone-text">
                         <strong>Upload Ad Files (PDF or Images)</strong>
-                        <small>Upload multi-page PDF flyers, PNG, JPG, or WEBP ads.</small>
                       </div>
                       <span class="btn btn-secondary btn-sm">Browse Files</span>
                     </label>
@@ -926,40 +925,13 @@
 
                   <!-- Ad Rotation Duration -->
                   <div class="ad-config-row">
-                    <label class="ad-field-label">Slide Display Duration:</label>
+                    <label class="ad-field-label">Ad Display Duration:</label>
                     <div class="ad-duration-chips" id="ad-duration-chips">
-                      <button type="button" class="ad-dur-chip" data-dur="8">8s</button>
-                      <button type="button" class="ad-dur-chip active" data-dur="10">10s (Default)</button>
-                      <button type="button" class="ad-dur-chip" data-dur="15">15s</button>
-                      <button type="button" class="ad-dur-chip" data-dur="20">20s</button>
-                      <button type="button" class="ad-dur-chip" data-dur="30">30s</button>
-                      <button type="button" class="ad-dur-chip" data-dur="45">45s</button>
-                      <button type="button" class="ad-dur-chip" data-dur="60">60s</button>
-                      <button type="button" class="ad-dur-chip" data-dur="90">90s</button>
+                      <button type="button" class="ad-dur-chip active" data-dur="60">1 min</button>
+                      <button type="button" class="ad-dur-chip" data-dur="120">2 min</button>
+                      <button type="button" class="ad-dur-chip" data-dur="180">3 min</button>
+                      <button type="button" class="ad-dur-chip" data-dur="240">4 min</button>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- PWA FULL-SCREEN HOST APP INSTALLATION -->
-              <div class="settings-subgroup pwa-install-subgroup" id="host-pwa-subgroup">
-                <div class="config-label">
-                  <span class="icon">📲</span>
-                  <div>
-                    <span class="lbl-title">FULL-SCREEN HOST APP</span>
-                    <span class="lbl-desc">Install onto your phone or tablet for full-screen mode without browser address bars</span>
-                  </div>
-                </div>
-                <div class="pwa-install-actions" id="host-pwa-actions-container" style="margin-top: 12px;">
-                  <button type="button" class="btn btn-secondary" id="btn-install-pwa-host" style="width: 100%; padding: 14px; font-weight: 800; border-radius: 12px; border: 1.5px solid var(--neon-cyan); background: rgba(0, 229, 255, 0.1); color: var(--neon-cyan); cursor: pointer;">
-                    📲 Install Host Controls to Home Screen
-                  </button>
-                  <div id="host-pwa-ios-instructions" class="hidden" style="margin-top: 10px; padding: 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 13px; color: #ccc; line-height: 1.4;">
-                    <strong style="color: #fff; display: block; margin-bottom: 4px;">🍏 iPhone / iPad Setup:</strong>
-                    Tap Safari's <strong>Share</strong> button <svg style="vertical-align: middle; display: inline;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> at the bottom of the screen, then tap <strong>"Add to Home Screen"</strong> to run as a full-screen app!
-                  </div>
-                  <div id="host-pwa-installed-badge" class="hidden" style="margin-top: 10px; padding: 12px; border-radius: 10px; background: rgba(0, 230, 118, 0.1); border: 1px solid var(--neon-green); font-size: 13px; color: var(--neon-green); font-weight: 700; text-align: center;">
-                    ✅ Running in Full-Screen Standalone App Mode
                   </div>
                 </div>
               </div>

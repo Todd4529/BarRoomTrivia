@@ -59,11 +59,10 @@ void main() {
       expect(htmlContent.contains('id="host-ad-dropzone"'), isTrue);
       expect(htmlContent.contains('id="host-ad-upload-status"'), isTrue);
       expect(htmlContent.contains('id="ad-duration-chips"'), isTrue);
-      expect(htmlContent.contains('data-dur="8"'), isTrue);
-      expect(htmlContent.contains('data-dur="10"'), isTrue);
-      expect(htmlContent.contains('data-dur="15"'), isTrue);
-      expect(htmlContent.contains('data-dur="20"'), isTrue);
-      expect(htmlContent.contains('data-dur="30"'), isTrue);
+      expect(htmlContent.contains('data-dur="60"'), isTrue);
+      expect(htmlContent.contains('data-dur="120"'), isTrue);
+      expect(htmlContent.contains('data-dur="180"'), isTrue);
+      expect(htmlContent.contains('data-dur="240"'), isTrue);
       // Host QR toggle was explicitly removed
       expect(htmlContent.contains('id="host-toggle-ad-qr"'), isFalse,
           reason: 'Host toggle for corner QR code must be removed');

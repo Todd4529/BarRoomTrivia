@@ -38,10 +38,11 @@ void main() {
           reason: 'difficulty-chips should be a 4-column grid for uniform button widths');
     });
 
-    test('3. Slide display duration has 45s, 60s, and 90s options', () {
-      expect(indexHtmlContent.contains('data-dur="45">45s</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="60">60s</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="90">90s</button>'), isTrue);
+    test('3. Ad display duration has 1min, 2min, 3min, and 4min options', () {
+      expect(indexHtmlContent.contains('data-dur="60">1 min</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-dur="120">2 min</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-dur="180">3 min</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-dur="240">4 min</button>'), isTrue);
     });
 
     test('4. In-between round duration selector configured with all requested intervals', () {

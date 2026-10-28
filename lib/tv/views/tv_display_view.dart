@@ -69,6 +69,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   // Active Advertisement Slides
   int _adSlideIndex = 0;
   Timer? _adSlideTimer;
+  int _adSlideDurationSeconds = 60;
   List<Map<String, dynamic>> _customAdSlides = [];
 
   int get _totalAdSlides => _customAdSlides.isEmpty ? 1 : (1 + _customAdSlides.length);
@@ -151,7 +152,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       }
       return;
     }
-    _adSlideTimer = Timer.periodic(const Duration(seconds: 12), (t) {
+    final dur = _adSlideDurationSeconds > 0 ? _adSlideDurationSeconds : 60;
+    _adSlideTimer = Timer.periodic(Duration(seconds: dur), (t) {
       final canRotate = ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown) || _isInterRoundPhase || _isAdSignageModeActive || _customAdSlides.isNotEmpty;
       if (canRotate && !_isPreGameCountdown && mounted) {
         setState(() {
@@ -845,6 +847,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         if (!mounted) return;
         final active = payload['isAdModeActive'] == true ||
             payload['is_ad_mode_active'] == true;
+        if (payload['adSlideDurationSeconds'] != null || payload['ad_slide_duration_seconds'] != null) {
+          final dur = int.tryParse((payload['adSlideDurationSeconds'] ?? payload['ad_slide_duration_seconds']).toString());
+          if (dur != null && dur > 0) _adSlideDurationSeconds = dur;
+        }
         setState(() {
           _isAdSignageModeActive = active;
         });
@@ -857,6 +863,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           final parsed = <Map<String, dynamic>>[];
           for (final s in rawSlides) {
             if (s is Map) parsed.add(Map<String, dynamic>.from(s));
+          }
+          if (payload['adSlideDurationSeconds'] != null || payload['ad_slide_duration_seconds'] != null) {
+            final dur = int.tryParse((payload['adSlideDurationSeconds'] ?? payload['ad_slide_duration_seconds']).toString());
+            if (dur != null && dur > 0) _adSlideDurationSeconds = dur;
           }
           setState(() {
             _customAdSlides = parsed;

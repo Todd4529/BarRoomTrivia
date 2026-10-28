@@ -87,7 +87,11 @@ let currentGameState = 'LOBBY';
 
 // Ad Display Signage Mode State - Default OFF when first loading host controls
 let isAdModeActive = false;
-let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '10', 10);
+let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '60', 10);
+if (isNaN(adSlideDurationSeconds) || adSlideDurationSeconds < 60) {
+  adSlideDurationSeconds = 60;
+  safeStorage.setItem('bar_trivia_ad_duration', '60');
+}
 let customAdSlides = [];
 let currentAdSlideIndex = 0;
 let adRotationTimeout = null;
@@ -809,7 +813,7 @@ async function refreshHostPlayers() {
   playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
   renderLeaderboard();
   renderHostPlayersRoster();
-  updateHostEngineUI(currentGameState);
+  updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : (currentGameState === 'PAUSED' ? 'PAUSED' : 'NOT STARTED'));
 
   const hostPlayersRoom = document.getElementById('host-players-room-code');
   if (hostPlayersRoom) hostPlayersRoom.textContent = normRoom;
@@ -969,10 +973,10 @@ function initApp() {
   startLeaderboardAutoScroll();
   renderLeaderboard();
   loadInitialPlayers();
-  // Continuous background sync ensures players always populate even if WebSockets dropped
+  // Background sync roster every 5 minutes (or immediately on-demand via host refresh tap)
   setInterval(() => {
     loadInitialPlayers();
-  }, 4000);
+  }, 300000);
 }
 
 // HOST AUTHENTICATION LOGIC (Mobile & Web)
@@ -3044,6 +3048,7 @@ function initHostControls() {
       return;
     }
     isAutomatedEngineRunning = true;
+    currentGameState = 'PRE_GAME';
     currentRoundQuestions = [];
     currentQuestionIndex = 0;
     currentRound = 1;
@@ -3111,7 +3116,7 @@ function initHostControls() {
     } catch (_) {}
 
     // 2. Fetch questions during the countdown
-    await initOpenTdbToken();
+    await initOpenTdbToken().catch(() => {});
 
     // 3. Start Question 1 automatically after countdown finishes
     clearTimeout(autoEngineTimeout);
@@ -3429,7 +3434,7 @@ const idbAdStorage = {
           return;
         }
         try {
-          const request = window.indexedDB.open('BarRoomTriviaDB', 1);
+          const request = window.indexedDB.open('BarRoomTriviaDB', 3);
           request.onupgradeneeded = (e) => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains('ad_slides')) {
@@ -3560,16 +3565,16 @@ async function renderPdfFileToSlides(file) {
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    // Render at 2.0 scale for crisp 1080p display
-    const viewport = page.getViewport({ scale: 2.0 });
+    // Render at 1.25 scale for crisp display while keeping image weight under network payload limits
+    const viewport = page.getViewport({ scale: 1.25 });
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
 
     await page.render({ canvasContext: ctx, viewport }).promise;
-    // Export as high-quality JPEG (0.90) for crisp text with lightweight storage
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+    // Export as optimized JPEG (0.72) for crisp text and fast cross-device sync
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
     slides.push({
       id: `slide_${Date.now()}_${pageNum}_${Math.random().toString(36).substring(2, 6)}`,
       name: file.name,
@@ -3595,7 +3600,8 @@ async function renderImageFileToSlide(file) {
           const canvas = document.createElement('canvas');
           let width = img.naturalWidth || img.width;
           let height = img.naturalHeight || img.height;
-          const maxDim = 1920;
+          // Scale to max dimension 1080px for crisp full HD TV rendering with lightweight base64 payload
+          const maxDim = 1080;
           if (width > maxDim || height > maxDim) {
             if (width > height) {
               height = Math.round((height * maxDim) / width);
@@ -3609,7 +3615,7 @@ async function renderImageFileToSlide(file) {
           canvas.height = Math.max(1, height);
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
           resolve([{
             id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
             name: file.name,
@@ -4546,10 +4552,12 @@ function renderHostPlayersRoster() {
 }
 
 function updateHostEngineUI(statusText) {
-  if (!statusText) {
+  if (!statusText || statusText === 'PRE_GAME' || statusText === 'QUESTION_ACTIVE' || statusText === 'ROUND_SUMMARY' || statusText === 'INTER_ROUND' || statusText === 'QUESTION_READING') {
     statusText = isAutomatedEngineRunning ? 'IN PROGRESS' : (currentGameState === 'PAUSED' ? 'PAUSED' : 'NOT STARTED');
-  } else if (statusText === 'NOT STARTED' && currentGameState === 'PAUSED') {
-    statusText = 'PAUSED';
+  } else if (statusText === 'NOT STARTED' && (currentGameState === 'PAUSED' || isAutomatedEngineRunning)) {
+    statusText = isAutomatedEngineRunning ? 'IN PROGRESS' : 'PAUSED';
+  } else if (isAutomatedEngineRunning && statusText !== 'PAUSED') {
+    statusText = 'IN PROGRESS';
   }
 
   const btnStartAuto = document.getElementById('btn-start-auto');
