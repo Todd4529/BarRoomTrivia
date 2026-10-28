@@ -76,6 +76,23 @@ void main() {
     expect(find.text('Exit Application'), findsNothing);
   });
 
+  testWidgets('MainNavigationHub exit dialog Yes button invokes exitApplication and dismisses dialog', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MainNavigationHub(),
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Exit Application'), findsOneWidget);
+
+    await tester.tap(find.text('Yes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Exit Application'), findsNothing);
+  });
+
   testWidgets('AuthPage renders email, password, and TV navigation components', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(

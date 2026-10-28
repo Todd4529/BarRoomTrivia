@@ -28,6 +28,15 @@ class MainActivity : FlutterActivity() {
                 val param = call.argument<Int>("param") ?: 0
                 playTailoredSound(type, param)
                 result.success(true)
+            } else if (call.method == "exitApp") {
+                result.success(true)
+                try {
+                    finishAndRemoveTask()
+                } catch (_: Exception) {
+                    finishAffinity()
+                }
+                android.os.Process.killProcess(android.os.Process.myPid())
+                System.exit(0)
             } else {
                 result.notImplemented()
             }

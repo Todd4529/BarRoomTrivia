@@ -37,8 +37,8 @@ void main() {
       expect(jsContent.contains("const OFFICIAL_SYSTEM_AD_ID = 'system_bar_rooms_trivia_official_ad';"), isTrue);
     });
 
-    test('Host ad gallery section in HTML displays notice about official ad', () {
-      expect(htmlContent.contains('Upload custom drink specials, food menus, or event flyers above to rotate alongside the official Bar Rooms Trivia ad!'), isTrue);
+    test('Host ad gallery section in HTML displays empty state placeholder', () {
+      expect(htmlContent.contains('No custom ad slides uploaded yet. Upload custom drink specials, food menus, or event flyers above!'), isTrue);
     });
 
     test('CSS defines system card and lock badge styling', () {
@@ -83,7 +83,7 @@ void main() {
       expect(jsContent.contains('Google Play'), isTrue);
       expect(jsContent.contains('GET IT ON'), isTrue);
       expect(jsContent.contains('Search "Bar Rooms Trivia" on Google Play Store'), isTrue);
-      expect(jsContent.contains('todd4529.github.io/BarRoomTrivia'), isTrue);
+      expect(jsContent.contains('barroomstrivia.com'), isTrue);
     });
 
     test('Official ad slide descriptor sets isSystemPermanent to true', () {
@@ -98,11 +98,10 @@ void main() {
       expect(jsContent.contains('getOfficialBarRoomsTriviaAdSlides();'), isTrue);
     });
 
-    test('Host gallery prevents removal of the system permanent ad', () {
-      expect(jsContent.contains('card.className = slide.isSystemPermanent ? \'ad-thumb-card system-card\' : \'ad-thumb-card\';'), isTrue);
-      expect(jsContent.contains('⭐ OFFICIAL APP AD'), isTrue);
-      expect(jsContent.contains('🔒'), isTrue);
-      expect(jsContent.contains("const customIndex = index - officialSlides.length; // 0-based index in customAdSlides"), isTrue);
+    test('Host gallery strictly shows thumbnails of host uploaded files', () {
+      expect(jsContent.contains('// 7. Host Gallery Thumbnail Management (Only displays host-uploaded files)'), isTrue);
+      expect(jsContent.contains('card.className = \'ad-thumb-card\';'), isTrue);
+      expect(jsContent.contains('customAdSlides.forEach((slide, customIndex) => {'), isTrue);
       expect(jsContent.contains("title=\"Delete Custom Slide\""), isTrue);
     });
 

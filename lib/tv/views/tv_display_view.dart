@@ -17,6 +17,7 @@ import '../../shared/services/realtime_service.dart';
 import '../../shared/services/sound_service.dart';
 import '../../shared/services/supabase_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../utils/app_exit.dart';
 import '../widgets/leaderboard_widget.dart';
 import '../widgets/qr_display_widget.dart';
 import '../widgets/timer_ring.dart';
@@ -89,7 +90,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   bool _isSoundEffectsEnabled = true;
   String? _lastAnswerRevealSoundQuestionId;
   final Set<String> _previousWrongOptions = {};
-  static const String _playerBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+  static const String _playerBaseUrl = 'https://barroomstrivia.com';
 
   @override
   void initState() {
@@ -548,9 +549,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _remainingSeconds = raw.toInt();
             }
           }
+          _targetTimerEndsAtMs = null;
           _timer?.cancel();
           _preGameTimer?.cancel();
           _resumeTimer?.cancel();
+          _interQuestionTimer?.cancel();
           setState(() {
             _isGamePaused = true;
             _isResumeCountdownActive = false;
@@ -560,9 +563,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       },
       onGameResumingBroadcast: (payload) {
         if (mounted) {
+          _targetTimerEndsAtMs = null;
           _timer?.cancel();
           _preGameTimer?.cancel();
           _resumeTimer?.cancel();
+          _interQuestionTimer?.cancel();
 
           if (payload['remaining_question_seconds'] != null) {
             final raw = payload['remaining_question_seconds'];
@@ -1534,7 +1539,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                 onPressed: () {
                                   if (mounted) setState(() => _isExitDialogOpen = false);
                                   Navigator.of(dialogContext).pop();
-                                  SystemNavigator.pop();
+                                  exitApplication();
                                 },
                               ),
                             ),

@@ -64,7 +64,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   bool _isInterRoundPhase = false;
-  int _interRoundSecondsRemaining = 15;
+  int _interRoundSecondsRemaining = 120;
   Timer? _interRoundTimer;
   Timer? _roundWinnersOverlayTimer;
   bool _showResultOverlay = false;
@@ -436,7 +436,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _localTimer?.cancel();
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
+        _interQuestionTimer?.cancel();
         _interRoundTimer?.cancel();
+        _targetTimerEndsAtMs = null;
         setState(() {
           _isGamePaused = true;
           _isResumeCountdownActive = false;
@@ -450,6 +452,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _localTimer?.cancel();
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
+        _interQuestionTimer?.cancel();
+        _targetTimerEndsAtMs = null;
 
         final rawStarts = payload['starts_at_epoch_ms'] ?? payload['starts_at'];
         final startsAt = (rawStarts is num)
@@ -1363,7 +1367,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         },
         child: Container(
-          color: Colors.black.withOpacity(0.96),
+          color: const Color(0xFF0A0B10),
           alignment: Alignment.center,
           padding: const EdgeInsets.only(top: 126, left: 20, right: 20, bottom: 20),
           child: Stack(
@@ -1381,21 +1385,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                     color: wasCorrect ? const Color(0xFF10B981) : Colors.redAccent,
                     width: 2.5,
                   ),
-                  boxShadow: wasCorrect
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF10B981).withOpacity(0.35),
-                            blurRadius: 28,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.55),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                  boxShadow: const [],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1615,8 +1605,45 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     return Container(
       key: const Key('sticky-player-top-header'),
       color: AppTheme.darkBackground,
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: _buildStickyPlayerHeaderCard(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.sports_bar,
+                      color: AppTheme.neonCyan,
+                      size: 22,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'BAR ROOMS TRIVIA',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.8,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildStickyPlayerHeaderCard(),
+        ],
+      ),
     );
   }
 
@@ -2381,10 +2408,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             color: bg,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isCorrect
-                  ? Colors.white
-                  : (isSelected ? Colors.white : Colors.transparent),
-              width: isCorrect ? 4 : (isSelected ? 3.5 : 1),
+              color: _showResultOverlay
+                  ? Colors.transparent
+                  : (isCorrect
+                      ? Colors.white
+                      : (isSelected ? Colors.white : Colors.transparent)),
+              width: _showResultOverlay ? 0 : (isCorrect ? 4 : (isSelected ? 3.5 : 1)),
             ),
             boxShadow: ((isCorrect || isSelected) && !_showResultOverlay)
                 ? [

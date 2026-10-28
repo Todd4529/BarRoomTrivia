@@ -1399,7 +1399,9 @@ function initTvExitAndRecoveryMenu() {
 
   function showTvHostQrRecovery() {
     closeTvExitDialog();
-    const hostBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+    const hostBaseUrl = window.location.origin.includes('localhost')
+      ? window.location.origin
+      : 'https://barroomstrivia.com';
     const hostUrl = `${hostBaseUrl}/?view=host&room=${currentRoomCode}`;
 
     const isRunning = isAutomatedEngineRunning ||
@@ -1439,7 +1441,67 @@ function initTvExitAndRecoveryMenu() {
   btnTvExitCancel?.addEventListener('click', closeTvExitDialog);
   btnTvExitYes?.addEventListener('click', () => {
     closeTvExitDialog();
-    switchView('lobby');
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch (_) {}
+
+    // 1. Terminate all active running intervals, audio, and loops
+    clearInterval(countdownInterval);
+    clearInterval(modalCountdownInterval);
+    clearInterval(tvNextQCountdownInterval);
+    clearInterval(winnerCountdownInterval);
+    clearInterval(playerInterQuestionInterval);
+    clearInterval(hostHeartbeatInterval);
+    clearTimeout(autoEngineTimeout);
+    clearTimeout(tvWinnerOverlayTimeout);
+    stopHostHeartbeatLoop();
+    stopTvAdSignageRotation();
+
+    // 2. Try closing browser window via multiple methods
+    let closed = false;
+    try {
+      window.close();
+      if (window.closed) closed = true;
+    } catch (_) {}
+
+    if (!closed) {
+      try {
+        window.open('', '_self', '');
+        window.close();
+        if (window.closed) closed = true;
+      } catch (_) {}
+    }
+
+    if (!closed && typeof navigator !== 'undefined' && navigator.app && typeof navigator.app.exitApp === 'function') {
+      try {
+        navigator.app.exitApp();
+        closed = true;
+      } catch (_) {}
+    }
+
+    // 3. Fallback: Display dedicated full-screen Application Exited screen
+    const exitedScreen = document.getElementById('tv-exited-screen');
+    if (exitedScreen) {
+      exitedScreen.classList.remove('hidden');
+    } else {
+      document.body.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0a0b10;color:#fff;text-align:center;font-family:sans-serif;padding:24px;">
+          <div style="font-size:56px;margin-bottom:16px;">👋</div>
+          <h1 style="font-size:26px;font-weight:900;letter-spacing:1px;margin-bottom:8px;">APPLICATION CLOSED</h1>
+          <p style="color:rgba(255,255,255,0.7);max-width:440px;line-height:1.5;margin-bottom:24px;">You have exited Bar Rooms Trivia. You may now safely close this window or return home.</p>
+          <button onclick="location.reload()" style="background:#00e5ff;color:#000;font-weight:900;border:none;padding:12px 24px;border-radius:12px;font-size:15px;cursor:pointer;">Restart App</button>
+        </div>
+      `;
+    }
+  });
+
+  const btnReopenApp = document.getElementById('btn-reopen-app');
+  btnReopenApp?.addEventListener('click', () => {
+    const exitedScreen = document.getElementById('tv-exited-screen');
+    if (exitedScreen) exitedScreen.classList.add('hidden');
+    switchView('tv');
   });
   btnTvShowHostQr?.addEventListener('click', showTvHostQrRecovery);
   btnTvCloseHostQr?.addEventListener('click', closeTvHostQrRecovery);
@@ -1461,6 +1523,7 @@ function initTvExitAndRecoveryMenu() {
 // 1. NAVIGATION ROUTING & INSTANT VIEW SWITCHING
 function switchView(viewName) {
   if (!viewName) return;
+  if (viewName === 'lobby') viewName = 'auth';
 
   // Toggle player mode on body
   document.body.classList.toggle('player-mode', viewName === 'player');
@@ -1604,9 +1667,28 @@ function initNavigation() {
 
   // Browser Back / Forward button support
   window.addEventListener('popstate', (e) => {
-    const view = e.state?.view || new URLSearchParams(window.location.search).get('view') || 'auth';
+    const view = e.state?.view || new URLSearchParams(window.location.search).get('view') || 'marketing';
     switchView(view);
   });
+
+  // Marketing Quick-Join Form
+  const marketingJoinForm = document.getElementById('marketing-join-form');
+  if (marketingJoinForm) {
+    marketingJoinForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('marketing-room-input');
+      const code = (input?.value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      if (code) {
+        currentRoomCode = code;
+        const roomInput = document.getElementById('input-room-code');
+        if (roomInput) roomInput.value = code;
+        switchView('player');
+        const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+        const newUrl = `${window.location.origin}${basePath}/?view=player&room=${code}`;
+        window.history.pushState({ view: 'player', room: code }, '', newUrl);
+      }
+    });
+  }
 
   popoutPlayerBtn?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1642,7 +1724,7 @@ function initNavigation() {
   const isHostPath = pathname.endsWith('/host') || pathname.includes('/host/') || window.location.hash.includes('/host');
   const isTvAuth = pathname.includes('/tv-auth') || window.location.hash.includes('tv-auth') || !!deviceToken;
 
-  if (viewParam && ['tv', 'player', 'host', 'auth'].includes(viewParam)) {
+  if (viewParam && ['tv', 'player', 'host', 'auth', 'marketing'].includes(viewParam)) {
     switchView(viewParam);
   } else if (isTvAuth) {
     switchView('auth');
@@ -1653,14 +1735,14 @@ function initNavigation() {
   } else if (isPlayPath || (roomParam && !deviceToken)) {
     switchView('player');
   } else {
-    switchView('auth');
+    switchView('marketing');
   }
 }
 
 // Global click delegate to catch inner card clicks (e.g. .target-card or .nav-btn)
 document.addEventListener('click', (e) => {
   // Never intercept form controls, inputs, textareas, buttons, or labels
-  if (e.target.closest('input, textarea, select, button, label, form, [contenteditable="true"]')) {
+  if (e.target.closest('input, textarea, select, form, [contenteditable="true"]')) {
     return;
   }
 
@@ -1677,8 +1759,9 @@ document.addEventListener('click', (e) => {
 
 // 2. DYNAMIC QR CODES
 function initQrCodes() {
-  // Always use the public GitHub website for QR code scans so mobile phones can connect
-  const playBaseUrl = 'https://todd4529.github.io/BarRoomTrivia';
+  const playBaseUrl = window.location.origin.includes('localhost')
+    ? window.location.origin
+    : 'https://barroomstrivia.com';
   const playUrl = `${playBaseUrl}/?view=player&room=${currentRoomCode}`;
 
   const canvasStage = document.getElementById('qr-canvas');
@@ -2711,6 +2794,9 @@ function initHostControls() {
       }
     });
     updateHostManualDock();
+    if (mode === 'Manual') {
+      openHostManualModal();
+    }
     try {
       supabase.from('game_sessions').upsert({
         room_code: currentRoomCode,
@@ -2852,6 +2938,7 @@ function initHostControls() {
     clearMockPlayerTimeouts();
     currentGameState = 'PAUSED';
     updateHostEngineUI('PAUSED');
+    updateHostManualDock();
     onGamePaused({
       remaining_question_seconds: pausedRemainingQuestionSeconds,
       round_number: pausedRound,
@@ -2894,6 +2981,7 @@ function initHostControls() {
     isAutomatedEngineRunning = true;
     currentGameState = 'IN PROGRESS';
     updateHostEngineUI('IN PROGRESS');
+    updateHostManualDock();
 
     const resumeSecs = 10;
     const startsAtMs = Date.now() + (resumeSecs * 1000);
@@ -2946,7 +3034,7 @@ function initHostControls() {
     autoEngineTimeout = setTimeout(() => {
       if (!isAutomatedEngineRunning) return;
 
-      if (pausedHostEngineState === 'QUESTION_ACTIVE' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData))) {
+      if (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedHostEngineState === 'QUESTION_READING' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData)) || (pausedQuestionData || currentQuestionData)) {
         const question = pausedQuestionData || currentQuestionData;
         const questionInRound = (currentQuestionIndex % 10) + 1;
         const qDuration = Math.max(1, remainingSecs);
@@ -3136,6 +3224,42 @@ function initHostControls() {
     } else {
       pauseGameEngine();
     }
+  });
+
+  window.pauseGameEngine = pauseGameEngine;
+  window.resumeGameEngine = resumeGameEngine;
+
+  const btnCloseManualModal = document.getElementById('btn-close-manual-modal');
+  const manualModalBackdrop = document.getElementById('host-manual-modal-backdrop');
+  const btnOpenManualModal = document.getElementById('btn-open-manual-modal');
+  const btnManualModalPause = document.getElementById('btn-manual-modal-pause');
+  const btnManualModalNextQ = document.getElementById('btn-manual-modal-next-q');
+  const btnManualModalPhaseAction = document.getElementById('btn-manual-modal-phase-action');
+
+  btnCloseManualModal?.addEventListener('click', closeHostManualModal);
+  manualModalBackdrop?.addEventListener('click', closeHostManualModal);
+  btnOpenManualModal?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openHostManualModal();
+  });
+  btnManualModalPause?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (currentGameState === 'PAUSED') {
+      resumeGameEngine();
+    } else {
+      pauseGameEngine();
+    }
+    updateHostManualModalUI();
+  });
+  btnManualModalNextQ?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleManualHostNextQuestionAction();
+    updateHostManualModalUI();
+  });
+  btnManualModalPhaseAction?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleManualHostPhaseStep();
+    updateHostManualModalUI();
   });
 
   const btnRefreshPlayers = document.getElementById('btn-refresh-players');
@@ -3848,7 +3972,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "600 18px 'Inter', sans-serif";
     ctx.fillStyle = '#ffd600';
-    ctx.fillText('🌐 Or Play Instantly Online in Any Browser: todd4529.github.io/BarRoomTrivia', 120, botY + 104);
+    ctx.fillText('🌐 Or Play Instantly Online in Any Browser: barroomstrivia.com', 120, botY + 104);
 
     ctx.font = "500 15px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
@@ -4356,48 +4480,46 @@ function displayAdSlide(index) {
   }
 }
 
-// 7. Host Gallery Thumbnail Management
+// 7. Host Gallery Thumbnail Management (Only displays host-uploaded files)
 function renderHostAdGallery() {
   const gallery = document.getElementById('host-ad-gallery');
   const countEl = document.getElementById('host-ad-count');
-  const officialSlides = getOfficialBarRoomsTriviaAdSlides();
-  const allDisplaySlides = [...officialSlides, ...customAdSlides];
-  if (countEl) countEl.textContent = allDisplaySlides.length;
+  const count = customAdSlides ? customAdSlides.length : 0;
+  if (countEl) countEl.textContent = count;
 
   if (!gallery) return;
 
+  if (count === 0) {
+    gallery.innerHTML = `
+      <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
+        <span>No custom ad slides uploaded yet. Upload custom drink specials, food menus, or event flyers above!</span>
+      </div>
+    `;
+    return;
+  }
+
   gallery.innerHTML = '';
-  allDisplaySlides.forEach((slide, index) => {
+  customAdSlides.forEach((slide, customIndex) => {
     const card = document.createElement('div');
-    card.className = slide.isSystemPermanent ? 'ad-thumb-card system-card' : 'ad-thumb-card';
+    card.className = 'ad-thumb-card';
     card.setAttribute('data-slide-id', slide.id);
 
     const displayName = (slide.totalPages > 1) 
       ? `${slide.name} (P.${slide.page}/${slide.totalPages})`
       : slide.name;
 
-    if (slide.isSystemPermanent) {
-      card.innerHTML = `
-        <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
-        <div class="ad-thumb-system-tag">⭐ OFFICIAL APP AD</div>
-        <div class="ad-thumb-lock-badge" title="Permanent System Ad - Displays in all rotations">🔒</div>
-        <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
-      `;
-    } else {
-      const customIndex = index - officialSlides.length; // 0-based index in customAdSlides
-      card.innerHTML = `
-        <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
-        <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
-        <button type="button" class="btn-remove-ad-slide" title="Delete Custom Slide" data-custom-index="${customIndex}">✕</button>
-      `;
+    card.innerHTML = `
+      <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
+      <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
+      <button type="button" class="btn-remove-ad-slide" title="Delete Custom Slide" data-custom-index="${customIndex}">✕</button>
+    `;
 
-      const removeBtn = card.querySelector('.btn-remove-ad-slide');
-      removeBtn?.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        removeCustomAdSlide(customIndex);
-      });
-    }
+    const removeBtn = card.querySelector('.btn-remove-ad-slide');
+    removeBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeCustomAdSlide(customIndex);
+    });
 
     gallery.appendChild(card);
   });
@@ -5222,17 +5344,280 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
   }
 }
 
+let isHostManualModalOpen = false;
+
+function openHostManualModal() {
+  const overlay = document.getElementById('host-manual-modal-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('hidden');
+  isHostManualModalOpen = true;
+  updateHostManualModalUI();
+}
+
+function closeHostManualModal() {
+  const overlay = document.getElementById('host-manual-modal-overlay');
+  if (!overlay) return;
+  overlay.classList.add('hidden');
+  isHostManualModalOpen = false;
+}
+
+function updateHostManualModalUI() {
+  const overlay = document.getElementById('host-manual-modal-overlay');
+  if (!overlay || overlay.classList.contains('hidden')) return;
+
+  const roundInd = document.getElementById('manual-modal-round-indicator');
+  const qInd = document.getElementById('manual-modal-q-indicator');
+  const genrePill = document.getElementById('manual-modal-genre-pill');
+  const phaseBadge = document.getElementById('manual-modal-phase-badge');
+  const timerCountdown = document.getElementById('manual-modal-timer-countdown');
+  const timerNum = document.getElementById('manual-timer-num');
+  const qText = document.getElementById('manual-modal-question-text');
+  const optionsList = document.getElementById('manual-modal-options-list');
+  const btnPause = document.getElementById('btn-manual-modal-pause');
+  const btnPauseIcon = document.getElementById('btn-manual-modal-pause-icon');
+  const btnPauseText = document.getElementById('btn-manual-modal-pause-text');
+  const btnPauseSub = document.getElementById('btn-manual-modal-pause-sub');
+  const btnNextQ = document.getElementById('btn-manual-modal-next-q');
+  const btnPhaseAction = document.getElementById('btn-manual-modal-phase-action');
+
+  const questionNumberInRound = ((currentQuestionIndex || 0) % 10) + 1;
+  const activeRound = currentRound || 1;
+
+  if (roundInd) roundInd.textContent = `ROUND ${activeRound}`;
+  if (qInd) qInd.textContent = `Q${questionNumberInRound} / 10`;
+
+  const questionInRound = (currentQuestionIndex % 10) + 1;
+  let question = currentRoundQuestions?.[questionInRound - 1] || currentQuestionData;
+  if (!question || !question.options) {
+    question = currentQuestionData;
+  }
+
+  const currentGenre = question?.genre || question?.category || (selectedGenreQueue.length > 0 ? selectedGenreQueue[(activeRound - 1) % selectedGenreQueue.length] : 'General Trivia');
+  if (genrePill) genrePill.textContent = currentGenre;
+
+  // Phase badge & timer display
+  if (phaseBadge) {
+    phaseBadge.className = 'manual-phase-badge';
+    if (currentGameState === 'PAUSED') {
+      phaseBadge.classList.add('phase-paused');
+      phaseBadge.textContent = '⏸️ GAME PAUSED';
+    } else if (hostEngineState === 'QUESTION_READING') {
+      phaseBadge.classList.add('phase-reading');
+      phaseBadge.textContent = '📖 READING QUESTION';
+    } else if (hostEngineState === 'QUESTION_ACTIVE') {
+      phaseBadge.classList.add('phase-active');
+      phaseBadge.textContent = `⏱️ TIMER ACTIVE (${remainingTimerSeconds || 20}s)`;
+    } else if (hostEngineState === 'QUESTION_REVIEW') {
+      phaseBadge.classList.add('phase-review');
+      phaseBadge.textContent = '💡 ANSWER REVEALED';
+    } else if (hostEngineState === 'ROUND_SUMMARY') {
+      phaseBadge.classList.add('phase-summary');
+      phaseBadge.textContent = '🏆 ROUND COMPLETE';
+    } else {
+      phaseBadge.classList.add('phase-reading');
+      phaseBadge.textContent = '🏁 READY / LOBBY';
+    }
+  }
+
+  if (timerCountdown && timerNum) {
+    if (hostEngineState === 'QUESTION_ACTIVE' && currentGameState !== 'PAUSED') {
+      timerCountdown.classList.remove('hidden');
+      timerNum.textContent = remainingTimerSeconds || 20;
+    } else {
+      timerCountdown.classList.add('hidden');
+    }
+  }
+
+  // Question Prompt & Options Preview
+  if (qText) {
+    if (question && question.question) {
+      qText.textContent = question.question;
+    } else if (isAutomatedEngineRunning) {
+      qText.textContent = 'Preparing next trivia question...';
+    } else {
+      qText.textContent = 'Trivia round is waiting to launch. Click Start Game to begin.';
+    }
+  }
+
+  if (optionsList) {
+    optionsList.innerHTML = '';
+    if (question && question.options) {
+      const optionKeys = ['A', 'B', 'C', 'D'];
+      optionKeys.forEach(key => {
+        const optText = question.options[key];
+        if (optText !== undefined) {
+          const item = document.createElement('div');
+          item.className = 'manual-option-item';
+          const isCorrect = (key === question.correct);
+          if (isCorrect) {
+            item.classList.add('manual-option-correct');
+          }
+          item.innerHTML = `
+            <span><span class="option-prefix">${key}:</span> ${escapeHtml(optText)}</span>
+            ${isCorrect ? '<span class="correct-tag">✓ CORRECT</span>' : ''}
+          `;
+          optionsList.appendChild(item);
+        }
+      });
+    }
+  }
+
+  // PAUSE / RESUME BUTTON
+  if (btnPause) {
+    if (currentGameState === 'PAUSED') {
+      btnPause.classList.add('is-resuming');
+      if (btnPauseIcon) btnPauseIcon.textContent = '▶️';
+      if (btnPauseText) btnPauseText.textContent = 'RESUME GAME';
+      if (btnPauseSub) btnPauseSub.textContent = `Countdown (${pausedRemainingQuestionSeconds || 10}s)`;
+    } else {
+      btnPause.classList.remove('is-resuming');
+      if (btnPauseIcon) btnPauseIcon.textContent = '⏸️';
+      if (btnPauseText) btnPauseText.textContent = 'PAUSE GAME';
+      if (btnPauseSub) btnPauseSub.textContent = 'Hold live timer';
+    }
+  }
+
+  // NEXT QUESTION BUTTON
+  if (btnNextQ) {
+    btnNextQ.disabled = (!isAutomatedEngineRunning && currentGameState !== 'PAUSED');
+  }
+
+  // PRIMARY PHASE ACTION BUTTON
+  if (btnPhaseAction) {
+    btnPhaseAction.className = 'btn-manual-phase-action';
+    if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
+      btnPhaseAction.innerHTML = '▶️ START GAME (MANUAL MODE)';
+      btnPhaseAction.onclick = () => {
+        const btnStart = document.getElementById('btn-start-auto');
+        if (btnStart) btnStart.click();
+      };
+    } else if (currentGameState === 'PAUSED') {
+      btnPhaseAction.classList.add('btn-phase-next');
+      btnPhaseAction.innerHTML = '▶️ RESUME GAME';
+      btnPhaseAction.onclick = () => {
+        if (typeof window.resumeGameEngine === 'function') {
+          window.resumeGameEngine();
+        } else {
+          const btnPauseAuto = document.getElementById('btn-pause-auto');
+          if (btnPauseAuto) btnPauseAuto.click();
+        }
+      };
+    } else if (hostEngineState === 'QUESTION_READING') {
+      btnPhaseAction.innerHTML = '⏱️ START QUESTION TIMER';
+      btnPhaseAction.onclick = () => {
+        startManualQuestionCountdown();
+      };
+    } else if (hostEngineState === 'QUESTION_ACTIVE') {
+      btnPhaseAction.classList.add('btn-phase-reveal');
+      btnPhaseAction.innerHTML = '⚡ END TIMER (REVEAL ANSWER)';
+      btnPhaseAction.onclick = () => {
+        expireManualQuestionEarly();
+      };
+    } else if (hostEngineState === 'QUESTION_REVIEW') {
+      btnPhaseAction.classList.add('btn-phase-next');
+      btnPhaseAction.innerHTML = '⏭️ NEXT QUESTION';
+      btnPhaseAction.onclick = () => {
+        advanceManualNextQuestion();
+      };
+    } else if (hostEngineState === 'ROUND_SUMMARY') {
+      btnPhaseAction.classList.add('btn-phase-round');
+      btnPhaseAction.innerHTML = `🚀 START ROUND ${Math.floor(currentQuestionIndex / 10) + 1}`;
+      btnPhaseAction.onclick = () => {
+        handleHostAdvanceAfterRoundSummary();
+      };
+    } else {
+      btnPhaseAction.innerHTML = '⏱️ START QUESTION TIMER';
+      btnPhaseAction.onclick = () => {
+        startManualQuestionCountdown();
+      };
+    }
+  }
+}
+
+function handleManualHostNextQuestionAction() {
+  if (hostEngineState === 'QUESTION_REVIEW') {
+    advanceManualNextQuestion();
+  } else if (hostEngineState === 'ROUND_SUMMARY') {
+    handleHostAdvanceAfterRoundSummary();
+  } else if (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING') {
+    expireManualQuestionEarly();
+  } else if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
+    const btnStart = document.getElementById('btn-start-auto');
+    if (btnStart) btnStart.click();
+  }
+}
+
+function handleManualHostPhaseStep() {
+  if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
+    const btnStart = document.getElementById('btn-start-auto');
+    if (btnStart) btnStart.click();
+  } else if (currentGameState === 'PAUSED') {
+    if (typeof window.resumeGameEngine === 'function') {
+      window.resumeGameEngine();
+    } else {
+      const btnPauseAuto = document.getElementById('btn-pause-auto');
+      if (btnPauseAuto) btnPauseAuto.click();
+    }
+  } else if (hostEngineState === 'QUESTION_READING') {
+    startManualQuestionCountdown();
+  } else if (hostEngineState === 'QUESTION_ACTIVE') {
+    expireManualQuestionEarly();
+  } else if (hostEngineState === 'QUESTION_REVIEW') {
+    advanceManualNextQuestion();
+  } else if (hostEngineState === 'ROUND_SUMMARY') {
+    handleHostAdvanceAfterRoundSummary();
+  } else {
+    startManualQuestionCountdown();
+  }
+}
+
 function updateHostManualDock() {
   const manualBanner = document.getElementById('host-manual-dock-banner');
   const btnManual = document.getElementById('btn-manual-primary');
+  const btnOpenModal = document.getElementById('btn-open-manual-modal');
   if (!manualBanner || !btnManual) return;
 
-  if (hostGamePlayMode !== 'Manual' || !isAutomatedEngineRunning || currentGameState === 'PAUSED') {
+  if (hostGamePlayMode !== 'Manual') {
     manualBanner.classList.add('hidden');
     return;
   }
 
   manualBanner.classList.remove('hidden');
+
+  if (btnOpenModal) {
+    btnOpenModal.onclick = (e) => {
+      e.preventDefault();
+      openHostManualModal();
+    };
+  }
+
+  if (currentGameState === 'PAUSED') {
+    btnManual.style.background = 'var(--neon-green)';
+    btnManual.style.color = '#000';
+    btnManual.innerHTML = '▶️ RESUME GAME';
+    btnManual.onclick = () => {
+      if (typeof window.resumeGameEngine === 'function') {
+        window.resumeGameEngine();
+      } else {
+        const btnPause = document.getElementById('btn-pause-auto');
+        if (btnPause) btnPause.click();
+      }
+    };
+    updateHostManualModalUI();
+    return;
+  }
+
+  if (!isAutomatedEngineRunning) {
+    btnManual.style.background = 'var(--neon-green)';
+    btnManual.style.color = '#000';
+    btnManual.innerHTML = '▶️ START GAME (MANUAL)';
+    btnManual.onclick = () => {
+      const btnStart = document.getElementById('btn-start-auto');
+      if (btnStart) btnStart.click();
+    };
+    updateHostManualModalUI();
+    return;
+  }
 
   if (hostEngineState === 'QUESTION_READING') {
     btnManual.style.background = 'var(--neon-green)';
@@ -5263,8 +5648,15 @@ function updateHostManualDock() {
       handleHostAdvanceAfterRoundSummary();
     };
   } else {
-    manualBanner.classList.add('hidden');
+    btnManual.style.background = 'var(--neon-green)';
+    btnManual.style.color = '#000';
+    btnManual.innerHTML = '⏱️ START QUESTION TIMER';
+    btnManual.onclick = () => {
+      startManualQuestionCountdown();
+    };
   }
+
+  updateHostManualModalUI();
 }
 
 function startManualQuestionCountdown() {
@@ -5450,19 +5842,30 @@ function onQuestionStart(payload) {
   const rawDur = payload.durationSeconds || payload.duration_seconds || totalTimerDuration;
   let durationSeconds = Math.max(1, Number(rawDur) || totalTimerDuration);
   if (durationSeconds <= 4 && totalTimerDuration > 4) {
-    durationSeconds = totalTimerDuration;
+    if (!payload.is_resumed) {
+      durationSeconds = totalTimerDuration;
+    }
   }
   const roundNumber = Number(payload.roundNumber || payload.round_number || payload.current_round || currentRound || 1);
   const questionNumberInRound = Number(payload.questionNumberInRound || payload.question_number_in_round || ((currentQuestionIndex % 10) + 1));
   const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
+
+  if (payload.timerEndsAtMs || payload.timer_ends_at_epoch_ms) {
+    timerEndsAtGlobalMs = Number(payload.timerEndsAtMs || payload.timer_ends_at_epoch_ms);
+  }
 
   currentQuestionData = questionData;
   playerChoiceSubmitted = null;
   isCurrentQuestionScored = false;
   lastScoredQuestionKey = null;
   currentQuestionAnswers = {};
-  if (payload.questionIndex !== undefined || payload.question_index !== undefined) {
-    currentQuestionIndex = Number(payload.questionIndex ?? payload.question_index);
+  if (payload.cumulative_question_index !== undefined) {
+    currentQuestionIndex = Math.max(0, Number(payload.cumulative_question_index) - 1);
+  } else if (payload.questionIndex !== undefined) {
+    currentQuestionIndex = Number(payload.questionIndex);
+  } else if (payload.question_index !== undefined) {
+    const rawQ = Number(payload.question_index);
+    currentQuestionIndex = rawQ > 10 ? rawQ - 1 : ((roundNumber - 1) * 10) + (rawQ - 1);
   }
 
   hideResultModal();
@@ -5748,6 +6151,8 @@ function updateTimerUI() {
   const hostTimerFill = document.getElementById('host-timer-progress-fill');
   const hostTimerSecs = document.getElementById('host-live-timer-secs');
   if (hostTimerSecs) hostTimerSecs.textContent = `${currentSecs}s`;
+  const manualTimerNum = document.getElementById('manual-timer-num');
+  if (manualTimerNum) manualTimerNum.textContent = currentSecs;
   if (hostTimerFill) {
     const maxDur = totalTimerDuration > 0 ? totalTimerDuration : 20;
     const pct = Math.max(0, Math.min(100, (currentSecs / maxDur) * 100));
@@ -6066,6 +6471,8 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
 
   if (!overlay || !card) return;
 
+  document.body.classList.add('result-modal-open');
+
   if (isCorrect) {
     card.className = 'result-modal-card is-correct';
     if (icon) icon.textContent = '🎉';
@@ -6211,6 +6618,7 @@ function hideInterQuestionCountdown() {
 }
 
 function hideResultModal() {
+  document.body.classList.remove('result-modal-open');
   const overlay = document.getElementById('result-modal-overlay');
   if (overlay) {
     overlay.classList.add('hidden');
@@ -6805,13 +7213,21 @@ function initPlayerControls() {
                 starts_at_epoch_ms: targetEpoch
               });
             } else {
-              const formatRoundTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+              const formatRoundTimer = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+              const formatIntermissionBadge = (s) => {
+                if (s <= 0) return 'STARTING NOW';
+                const mins = Math.floor(s / 60);
+                const secs = s % 60;
+                if (mins >= 1 && secs === 0) return `${mins} MINUTE${mins > 1 ? 'S' : ''}`;
+                if (mins >= 1) return `${mins} MIN ${secs} SEC`;
+                return `${secs} SECONDS`;
+              };
               const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
               const playerWinnerTimer = document.getElementById('player-winner-next-round-timer') || document.getElementById('player-winner-next-timer');
               const cardTimer = document.getElementById('player-card-round-timer');
-              if (tvNextRoundTimer) tvNextRoundTimer.textContent = rem >= 60 ? formatRoundTimer(rem) : rem;
+              if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadge(rem);
               if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(rem);
-              if (cardTimer) cardTimer.textContent = formatRoundTimer(rem);
+              if (cardTimer) cardTimer.textContent = formatIntermissionBadge(rem);
             }
           }
 

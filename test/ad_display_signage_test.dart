@@ -154,9 +154,9 @@ void main() {
       expect(jsContent.contains('REAL-TIME MULTIPLAYER'), isTrue);
     });
 
-    test('Host gallery renders system permanent ad and prevents host from removing it', () {
-      expect(jsContent.contains('if (slide.isSystemPermanent)'), isTrue);
-      expect(jsContent.contains('⭐ OFFICIAL APP AD'), isTrue);
+    test('Host gallery renders only custom uploaded ads and allows deletion', () {
+      expect(jsContent.contains('// 7. Host Gallery Thumbnail Management (Only displays host-uploaded files)'), isTrue);
+      expect(jsContent.contains('customAdSlides.forEach((slide, customIndex) => {'), isTrue);
       expect(jsContent.contains('removeCustomAdSlide'), isTrue);
       expect(jsContent.contains('clearAllAdSlides'), isTrue);
     });

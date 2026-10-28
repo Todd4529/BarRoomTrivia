@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
 import '../shared/services/mqtt_service.dart';
 import '../shared/theme/app_theme.dart';
+import '../utils/app_exit.dart';
 
 /// Pure Android TV & Big-Screen QR Code Authentication Screen
 /// Displays a high-contrast QR code and listens for mobile host sign-in.
@@ -79,7 +80,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _deviceToken = 'tv_${timestamp}_$randomHex';
 
     // Universal pairing URL (opens mobile auth view with token & code)
-    _qrAuthUrl = 'https://todd4529.github.io/BarRoomTrivia/?view=auth&device_token=$_deviceToken&user_code=$_userCode&room=$_userCode';
+    _qrAuthUrl = 'https://barroomstrivia.com/?view=auth&device_token=$_deviceToken&user_code=$_userCode&room=$_userCode';
 
     _remainingSeconds = 300;
     _subscribeToPairingChannel();
@@ -309,7 +310,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                         onPressed: () {
                           if (mounted) setState(() => _isExitDialogOpen = false);
                           Navigator.of(dialogContext).pop();
-                          SystemNavigator.pop();
+                          exitApplication();
                         },
                         child: Text(
                           'Yes',

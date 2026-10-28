@@ -864,6 +864,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                         _selectedGameMode = mode;
                         GameEngineManager.instance.gamePlayMode = mode;
                       });
+                      if (mode == 'Manual') {
+                        _showManualHostControlDialog(context);
+                      }
                       try {
                         final room = _activeSession?.roomCode ?? _targetRoomCode;
                         SupabaseConfig.client.from('game_sessions').upsert({
@@ -1459,6 +1462,29 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             ),
           ],
         ),
+        if (_selectedGameMode == 'Manual') ...[
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () => _showManualHostControlDialog(context),
+            icon: const Icon(Icons.mic_external_on_rounded, color: Colors.black87, size: 22),
+            label: const Text(
+              '🎙️ OPEN LIVE MC CONSOLE (POP-UP)',
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+                letterSpacing: 0.5,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black87,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              elevation: 3,
+            ),
+          ),
+        ],
         if (_isEngineRunning && _selectedGameMode == 'Manual' && !isPaused) ...[
           const SizedBox(height: 12),
           // If Round is completed and waiting for next round:
@@ -1609,6 +1635,516 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           ],
         ),
       ],
+    );
+  }
+
+  void _showManualHostControlDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final engine = GameEngineManager.instance;
+            final room = _activeSession?.roomCode ?? _targetRoomCode;
+            final isPaused = engine.isGamePaused;
+            final isRunning = engine.isEngineRunning;
+            final activeQ = engine.activeQuestion;
+            final questionNum = ((engine.currentQuestionIndex) % 10) + 1;
+            final roundNum = engine.currentRound;
+
+            String statusLabel;
+            Color statusColor;
+            if (isPaused) {
+              statusLabel = '⏸️ GAME PAUSED';
+              statusColor = AppTheme.neonYellow;
+            } else if (engine.isRoundCompletedWaitingForNext) {
+              statusLabel = '🏆 ROUND COMPLETED';
+              statusColor = AppTheme.neonPurple;
+            } else if (engine.isReviewPhase) {
+              statusLabel = '💡 ANSWER REVEALED';
+              statusColor = AppTheme.neonCyan;
+            } else if (engine.isQuestionTimerRunning) {
+              statusLabel = '⏱️ TIMER ACTIVE (${engine.remainingQuestionSeconds}s)';
+              statusColor = AppTheme.neonGreen;
+            } else if (isRunning && activeQ != null) {
+              statusLabel = '📖 READING QUESTION';
+              statusColor = AppTheme.neonCyan;
+            } else {
+              statusLabel = '🏁 READY / LOBBY';
+              statusColor = Colors.white70;
+            }
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10121C),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border.all(color: AppTheme.neonCyan.withOpacity(0.5), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.neonCyan.withOpacity(0.2),
+                    blurRadius: 25,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Drag Handle
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('🎙️', style: TextStyle(fontSize: 26)),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'MANUAL HOST CONSOLE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              Text(
+                                'Live Host MC Controls',
+                                style: TextStyle(
+                                  color: AppTheme.neonCyan.withOpacity(0.9),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: Colors.white70, size: 26),
+                        onPressed: () => Navigator.pop(modalContext),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Status bar with Round, Question, Genre and Phase badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonPurple.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppTheme.neonPurple),
+                              ),
+                              child: Text(
+                                'ROUND $roundNum',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonCyan.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppTheme.neonCyan),
+                              ),
+                              child: Text(
+                                'Q$questionNum / 10',
+                                style: const TextStyle(
+                                  color: AppTheme.neonCyan,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: statusColor, width: 1.5),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Question Card Scrollable
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardSurface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'VENUE QUESTION PROMPT',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                                if (activeQ != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white10,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      activeQ.category,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              activeQ?.questionText ?? 'Ready to start trivia round. Press Start Game or Next Question.',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Option Cards with Correct Answer Highlight
+                            if (activeQ != null) ...[
+                              ...{
+                                'A': activeQ.optionA,
+                                'B': activeQ.optionB,
+                                'C': activeQ.optionC,
+                                'D': activeQ.optionD,
+                              }.entries.map((entry) {
+                                final isCorrect = entry.key == activeQ.correctOption;
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isCorrect
+                                        ? AppTheme.neonGreen.withOpacity(0.18)
+                                        : Colors.white.withOpacity(0.04),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isCorrect ? AppTheme.neonGreen : Colors.white12,
+                                      width: isCorrect ? 2.0 : 1.0,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${entry.key}: ',
+                                        style: TextStyle(
+                                          color: isCorrect ? AppTheme.neonGreen : AppTheme.neonCyan,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          entry.value,
+                                          style: TextStyle(
+                                            color: isCorrect ? Colors.white : Colors.white70,
+                                            fontWeight: isCorrect ? FontWeight.w800 : FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isCorrect)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.neonGreen,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            '✓ CORRECT',
+                                            style: TextStyle(
+                                              color: Colors.black,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // DEDICATED CONTROLS (Pause & Next Question clearly side-by-side)
+                  Row(
+                    children: [
+                      // CLEAR PAUSE / RESUME BUTTON
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            if (isPaused) {
+                              _resumeGameEngine();
+                            } else {
+                              _pauseGameEngine();
+                            }
+                            setModalState(() {});
+                            setState(() {});
+                          },
+                          icon: Icon(
+                            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                            color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
+                            size: 24,
+                          ),
+                          label: Text(
+                            isPaused ? 'RESUME GAME' : 'PAUSE GAME',
+                            style: TextStyle(
+                              color: isPaused ? AppTheme.neonGreen : Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isPaused
+                                ? AppTheme.neonGreen.withOpacity(0.15)
+                                : AppTheme.neonYellow.withOpacity(0.15),
+                            side: BorderSide(
+                              color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
+                              width: 2.0,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // CLEAR NEXT QUESTION BUTTON
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            if (engine.isReviewPhase) {
+                              engine.nextQuestionManual(roomCode: room);
+                            } else if (engine.isRoundCompletedWaitingForNext) {
+                              engine.startNextRoundManual(roomCode: room);
+                              _startPreGameTimer();
+                            } else if (engine.isQuestionTimerRunning || (isRunning && activeQ != null)) {
+                              engine.expireTimerManual(roomCode: room);
+                            }
+                            setModalState(() {});
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 24),
+                          label: const Text(
+                            'NEXT QUESTION',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.neonCyan.withOpacity(0.18),
+                            side: const BorderSide(color: AppTheme.neonCyan, width: 2.0),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // PRIMARY PHASE ACTION BUTTON
+                  if (isPaused)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _resumeGameEngine();
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.black87, size: 24),
+                      label: const Text(
+                        'RESUME GAME',
+                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else if (engine.isRoundCompletedWaitingForNext)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        engine.startNextRoundManual(roomCode: room);
+                        _startPreGameTimer();
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 24),
+                      label: Text(
+                        'START ROUND ${engine.currentRound}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonPurple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else if (engine.isQuestionTimerRunning)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        engine.expireTimerManual(roomCode: room);
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.fast_forward_rounded, color: Colors.black87, size: 24),
+                      label: const Text(
+                        'END TIMER EARLY (REVEAL ANSWER)',
+                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 14),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonYellow,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else if (engine.isReviewPhase)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        engine.nextQuestionManual(roomCode: room);
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 24),
+                      label: const Text(
+                        'NEXT QUESTION',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonCyan,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else if (isRunning)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        engine.startManualTimer(roomCode: room);
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.black87, size: 24),
+                      label: const Text(
+                        'START QUESTION TIMER',
+                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _startPreGameTimer();
+                        setModalState(() {});
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded, color: Colors.black87, size: 24),
+                      label: const Text(
+                        'START GAME (MANUAL MODE)',
+                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

@@ -19,6 +19,7 @@ import 'shared/services/realtime_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'shared/services/weekly_trivia_sync_service.dart';
+import 'utils/app_exit.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -314,7 +315,7 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
                         onPressed: () {
                           if (mounted) setState(() => _isExitDialogOpen = false);
                           Navigator.of(dialogContext).pop();
-                          SystemNavigator.pop();
+                          exitApplication();
                         },
                         child: Text(
                           'Yes',

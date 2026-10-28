@@ -11,7 +11,7 @@ class QrDisplayWidget extends StatelessWidget {
   const QrDisplayWidget({
     super.key,
     required this.roomCode,
-    this.baseUrl = 'https://todd4529.github.io/BarRoomTrivia',
+    this.baseUrl = 'https://barroomstrivia.com',
     this.showRoomCode = true,
     this.compact = false,
   });

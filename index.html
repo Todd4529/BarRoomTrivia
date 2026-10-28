@@ -38,8 +38,162 @@
       <span id="network-status-text">Reconnecting to trivia server...</span>
     </div>
 
+    <!-- 0. MARKETING & ADVERTISING HOME VIEW (barroomstrivia.com) -->
+    <section id="view-marketing" class="view-panel active">
+      <div class="marketing-container">
+        <!-- HERO -->
+        <div class="marketing-hero">
+          <div class="hero-badge">🍺 THE MODERN BAR & TAPROOM TRIVIA PLATFORM</div>
+          <h1 class="hero-title">Packed Taprooms.<br><span class="gradient-text">Interactive Live Trivia.</span></h1>
+          <p class="hero-subtitle">
+            Turn slow weeknights into high-energy events. Players buzz in instantly from their smartphones.
+            Your TVs run the show. Zero paper, zero app installs, 100% automated or bartender-hosted.
+          </p>
+
+          <!-- QUICK JOIN WIDGET -->
+          <div class="quick-join-card">
+            <div class="quick-join-header">
+              <span class="pulse-dot"></span>
+              <strong>WALKED IN TO PLAY TRIVIA?</strong>
+            </div>
+            <form id="marketing-join-form" class="quick-join-form">
+              <input type="text" id="marketing-room-input" maxlength="8" placeholder="ENTER 4-LETTER ROOM CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+              <button type="submit" class="btn-quick-join">JOIN GAME NOW ⚡</button>
+            </form>
+            <div class="quick-join-hint">Or point your phone's camera at any trivia screen to buzz in instantly!</div>
+          </div>
+
+          <!-- ACTION BUTTONS -->
+          <div class="hero-actions">
+            <button type="button" class="hero-btn primary" data-view="host" id="btn-marketing-host">
+              🎮 Launch Host Dashboard
+            </button>
+            <button type="button" class="hero-btn secondary" data-view="tv" id="btn-marketing-tv">
+              📺 Open Web TV Display
+            </button>
+          </div>
+        </div>
+
+        <!-- VALUE PROPOSITION / FEATURES GRID -->
+        <div class="marketing-section">
+          <div class="section-title-wrap">
+            <span class="section-tag">BUILT FOR HOSPITALITY</span>
+            <h2 class="section-title">Everything Your Venue Needs to Win</h2>
+            <p class="section-desc">Traditional trivia requires expensive third-party hosts, paper slips, and lost pencils. Bar Rooms Trivia is modern, seamless, and runs itself.</p>
+          </div>
+
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(0, 229, 255, 0.15); color: #00e5ff;">📱</div>
+              <h3>Zero App Installs for Patrons</h3>
+              <p>Players simply scan the TV QR code or go to <strong>barroomstrivia.com/play</strong> on any smartphone. They enter a nickname, buzz in, and compete in real-time.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(255, 0, 122, 0.15); color: #ff007a;">📢</div>
+              <h3>Built-In Digital Ad Signage</h3>
+              <p>Promote your kitchen specials, Taco Tuesdays, Happy Hour craft beers, and weekend live music on the big screen between trivia rounds.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(124, 77, 255, 0.15); color: #7c4dff;">🤖</div>
+              <h3>Automated or Host-Controlled</h3>
+              <p>Let our automated game engine run countdowns, reveal correct answers, and calculate leaderboards on autopilot, or give your bartender full control from any tablet.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(255, 214, 0, 0.15); color: #ffd600;">🧠</div>
+              <h3>Vast Question Library</h3>
+              <p>Thousands of curated questions across 80s/90s Pop Culture, Movies, Sports, Craft Beer & Cocktails, History, and Music, updated weekly.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(0, 230, 118, 0.15); color: #00e676;">🏆</div>
+              <h3>Live Big-Screen Leaderboards</h3>
+              <p>Real-time scoring animations, round recaps, streak multipliers, and celebratory confetti overlays keep your bar energized until last call.</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon" style="background: rgba(0, 229, 255, 0.15); color: #00e5ff;">📺</div>
+              <h3>Runs on Any Smart TV</h3>
+              <p>Native app for Amazon Fire TV Stick and Android TV, or open it in any web browser connected to your bar's HDMI system.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- HOW IT WORKS (3 SIMPLE STEPS) -->
+        <div class="marketing-section alt-bg">
+          <div class="section-title-wrap">
+            <span class="section-tag">HOW IT WORKS</span>
+            <h2 class="section-title">Up & Running in Under 2 Minutes</h2>
+          </div>
+
+          <div class="steps-grid">
+            <div class="step-card">
+              <div class="step-badge">STEP 1</div>
+              <h3>Put It on the TV</h3>
+              <p>Launch the TV screen on Fire TV, Android TV, or open <strong>barroomstrivia.com/tv</strong> on any HDMI-connected screen.</p>
+            </div>
+            <div class="step-card">
+              <div class="step-badge">STEP 2</div>
+              <h3>Patrons Scan & Join</h3>
+              <p>Players point their smartphone camera at the TV QR code. No registration, passwords, or downloads required.</p>
+            </div>
+            <div class="step-card">
+              <div class="step-badge">STEP 3</div>
+              <h3>Play, Buzz In & Win</h3>
+              <p>Questions appear on the TV, players tap their 4-button mobile buzzer, and live leaderboards crown the night's champions!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- PLATFORM DOWNLOAD BADGES -->
+        <div class="marketing-section download-section">
+          <h2 class="section-title">Get Started Today</h2>
+          <p class="section-desc">Download our native TV apps or run directly in your web browser.</p>
+          <div class="download-badges">
+            <div class="store-badge">
+              <span class="badge-icon">🔥</span>
+              <div class="badge-text">
+                <span class="badge-sub">Available for</span>
+                <strong class="badge-main">Amazon Fire TV</strong>
+              </div>
+            </div>
+            <div class="store-badge">
+              <span class="badge-icon">🤖</span>
+              <div class="badge-text">
+                <span class="badge-sub">Available on</span>
+                <strong class="badge-main">Google Play Store</strong>
+              </div>
+            </div>
+            <div class="store-badge">
+              <span class="badge-icon">🌐</span>
+              <div class="badge-text">
+                <span class="badge-sub">Instant Access</span>
+                <strong class="badge-main">Any Web Browser</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER -->
+        <footer class="marketing-footer">
+          <div class="footer-links">
+            <a href="./play">Player Buzzer</a>
+            <a href="./host">Host Dashboard</a>
+            <a href="./tv">TV Display</a>
+            <a href="./privacy.html">Privacy Policy</a>
+            <a href="./terms.html">Terms of Service</a>
+          </div>
+          <div class="footer-copy">
+            &copy; 2026 Bar Rooms Trivia &bull; barroomstrivia.com &bull; All Rights Reserved.
+          </div>
+        </footer>
+      </div>
+    </section>
+
     <!-- 1. HOST SIGN-IN / SIGN-UP VIEW (Opens when Host scans TV QR Code) -->
-    <section id="view-auth" class="view-panel active">
+    <section id="view-auth" class="view-panel">
       <div class="auth-card-wrapper">
         <div class="auth-card">
           <div class="auth-brand">
@@ -383,7 +537,7 @@
               <canvas id="tv-host-qr-canvas"></canvas>
             </div>
             <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); padding: 8px 14px; border-radius: 12px; margin-bottom: 20px; word-break: break-all; font-size: 12px; color: var(--accent-cyan);">
-              🔗 <span id="tv-host-qr-url-text">https://todd4529.github.io/BarRoomTrivia/?view=host</span>
+              🔗 <span id="tv-host-qr-url-text">https://barroomstrivia.com/?view=host</span>
             </div>
             <button id="btn-tv-close-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               BACK TO TV DISPLAY
@@ -403,6 +557,21 @@
             </div>
             <button id="btn-tv-close-empty-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               RETURN TO TV DISPLAY
+            </button>
+          </div>
+        </div>
+
+        <!-- FULLSCREEN APPLICATION EXITED SCREEN -->
+        <div id="tv-exited-screen" class="result-modal-backdrop hidden" style="z-index: 9999; background: #0a0b10 !important;">
+          <div class="result-modal-card" style="max-width: 460px; border-color: rgba(255, 255, 255, 0.2); box-shadow: none; text-align: center; padding: 36px 28px;">
+            <div style="font-size: 54px; margin-bottom: 14px;">👋</div>
+            <h2 style="font-size: 24px; font-weight: 900; color: #fff; letter-spacing: 1px; margin-bottom: 10px;">APPLICATION CLOSED</h2>
+            <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; line-height: 1.5; margin-bottom: 24px;">
+              Bar Rooms Trivia has ended and disconnected.<br>
+              You may now safely close this browser window or press the Home button on your remote.
+            </p>
+            <button id="btn-reopen-app" class="btn btn-secondary btn-block" style="border-radius: 14px; font-weight: 800; letter-spacing: 0.5px; padding: 14px; cursor: pointer;">
+              🔄 Re-open Bar Rooms Trivia
             </button>
           </div>
         </div>
@@ -436,8 +605,12 @@
 
       <!-- Player 4-Button Controller Screen with Questions & Answers -->
       <div id="player-controller-screen" class="controller-container hidden">
-        <!-- STICKY TOP SECTION: PLAYER STICKER CARD -->
+        <!-- STICKY TOP SECTION: PLAYER BRAND + STICKER CARD -->
         <div id="player-sticky-top-wrap" class="player-sticky-top-wrap">
+          <div class="player-brand-bar">
+            <img src="./assets/images/app_logo.png" alt="Bar Rooms Trivia Logo" class="player-brand-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';">
+            <span class="player-brand-title-text">BAR ROOMS TRIVIA</span>
+          </div>
           <!-- TOP STICKER CARD (NAME, COUNTER, POINTS) -->
           <div id="player-sticker-card" class="controller-header sticker-card">
             <div class="player-info">
@@ -568,7 +741,7 @@
                 NEXT ROUND STARTING IN.....
               </div>
               <div style="font-size: 34px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
-                0:<span id="player-winner-next-round-timer">15</span>
+                <span id="player-winner-next-round-timer">2:00</span>
               </div>
             </div>
           </div>
@@ -901,7 +1074,7 @@
                     <label for="host-ad-files-input" class="ad-dropzone" id="host-ad-dropzone" style="padding: 14px 16px;">
                       <span class="dropzone-icon">📄</span>
                       <div class="dropzone-text">
-                        <strong>Upload Ad Files (PDF or Images)</strong>
+                        <strong>Upload Ad Files</strong>
                       </div>
                       <span class="btn btn-secondary btn-sm">Browse Files</span>
                     </label>
@@ -911,12 +1084,12 @@
                     <!-- Ad Slides Gallery / Manager (Nested within Upload Box) -->
                     <div class="ad-gallery-section">
                       <div class="gallery-header">
-                        <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">1</span>)</span>
+                        <span class="gallery-title">Active Ad Slides (<span id="host-ad-count">0</span>)</span>
                         <button type="button" id="btn-clear-all-ads" class="btn btn-secondary btn-xs btn-clear-ads">Clear Custom Ads</button>
                       </div>
                       <div id="host-ad-gallery" class="ad-gallery-strip">
                         <div class="ad-gallery-empty" id="host-ad-empty-placeholder">
-                          <span>Upload custom drink specials, food menus, or event flyers above to rotate alongside the official Bar Rooms Trivia ad!</span>
+                          <span>No custom ad slides uploaded yet. Upload custom drink specials, food menus, or event flyers above!</span>
                         </div>
                       </div>
                     </div>
@@ -947,7 +1120,7 @@
                 <div class="legal-links-row" style="display: flex; gap: 14px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
                   <a href="privacy.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">🔒 Privacy Policy</a>
                   <a href="terms.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">📜 Terms of Service</a>
-                  <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.40 Official Release</span>
+                  <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.82 Official Release</span>
                 </div>
               </div>
             </div>
@@ -959,9 +1132,15 @@
         <div class="host-sticky-bottom-dock">
           <!-- Contextual Manual Control Action Bar (Visible in Manual Mode) -->
           <div id="host-manual-dock-banner" class="hidden" style="margin-bottom: 8px; width: 100%;">
-            <button type="button" id="btn-manual-primary" class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 15px; font-weight: 900; letter-spacing: 0.8px; border-radius: 14px; background: var(--neon-green); color: #000; box-shadow: 0 0 20px rgba(0, 230, 118, 0.4);">
-              ⏱️ START QUESTION TIMER
-            </button>
+            <div style="display: flex; gap: 8px; width: 100%;">
+              <button type="button" id="btn-open-manual-modal" class="btn btn-secondary" style="flex: 1; padding: 12px 8px; font-size: 13px; font-weight: 800; border-radius: 12px; border: 1.5px solid var(--neon-cyan); color: #fff; background: rgba(0, 229, 255, 0.12); display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <span>🎙️</span>
+                <span>MC CONSOLE</span>
+              </button>
+              <button type="button" id="btn-manual-primary" class="btn btn-primary" style="flex: 1.6; padding: 12px 10px; font-size: 14px; font-weight: 900; letter-spacing: 0.5px; border-radius: 12px; background: var(--neon-green); color: #000; box-shadow: 0 0 16px rgba(0, 230, 118, 0.35);">
+                ⏱️ START TIMER
+              </button>
+            </div>
           </div>
 
           <div class="dock-actions-flex">
@@ -990,6 +1169,85 @@
               </span>
               <span class="btn-dock-text" id="btn-reset-text">Reset</span>
             </button>
+          </div>
+        </div>
+
+        <!-- F. ROBUST MANUAL LIVE HOST MC MODAL POP-UP -->
+        <div id="host-manual-modal-overlay" class="host-manual-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="manual-modal-title">
+          <div class="host-manual-modal-backdrop" id="host-manual-modal-backdrop"></div>
+          <div class="host-manual-modal-card">
+            
+            <!-- Modal Header -->
+            <div class="manual-modal-header">
+              <div class="manual-modal-title-wrap">
+                <span class="manual-modal-icon">🎙️</span>
+                <div>
+                  <h3 id="manual-modal-title" class="manual-modal-title">LIVE MC HOST CONSOLE</h3>
+                  <span class="manual-modal-subtitle">Manual Live Host Mode Active</span>
+                </div>
+              </div>
+              <button type="button" class="btn-manual-modal-close" id="btn-close-manual-modal" title="Minimize Host Console" aria-label="Close">
+                ✕
+              </button>
+            </div>
+
+            <!-- Status Indicator Bar -->
+            <div class="manual-modal-status-bar">
+              <div class="manual-status-pills">
+                <span id="manual-modal-round-indicator" class="manual-pill-round">ROUND 1</span>
+                <span id="manual-modal-q-indicator" class="manual-pill-q">Q1 / 10</span>
+                <span id="manual-modal-genre-pill" class="manual-pill-genre">General Trivia</span>
+              </div>
+              <div id="manual-modal-phase-badge" class="manual-phase-badge phase-reading">
+                📖 READING QUESTION
+              </div>
+            </div>
+
+            <!-- Active Question & Correct Answer Card -->
+            <div class="manual-modal-question-box">
+              <div class="manual-q-prompt-header">
+                <span class="manual-q-label">PROMPT & ANSWER KEY:</span>
+                <span id="manual-modal-timer-countdown" class="manual-timer-display hidden">⏱️ <strong id="manual-timer-num">20</strong>s</span>
+              </div>
+              <p id="manual-modal-question-text" class="manual-q-text">Ready to launch trivia question.</p>
+              
+              <div id="manual-modal-options-list" class="manual-options-grid">
+                <!-- Dynamically populated options with correct answer illuminated -->
+              </div>
+            </div>
+
+            <!-- Dedicated Action Controls -->
+            <div class="manual-modal-controls">
+              <!-- Clear PAUSE and NEXT QUESTION Buttons -->
+              <div class="manual-quick-actions-row">
+                <button type="button" id="btn-manual-modal-pause" class="btn-manual-pause" title="Pause or Resume Live Game">
+                  <span class="manual-btn-icon" id="btn-manual-modal-pause-icon">⏸️</span>
+                  <div class="manual-btn-labels">
+                    <span class="manual-btn-main" id="btn-manual-modal-pause-text">PAUSE GAME</span>
+                    <span class="manual-btn-sub" id="btn-manual-modal-pause-sub">Hold live timer</span>
+                  </div>
+                </button>
+
+                <button type="button" id="btn-manual-modal-next-q" class="btn-manual-next-q" title="Advance to Next Question">
+                  <span class="manual-btn-icon">⏭️</span>
+                  <div class="manual-btn-labels">
+                    <span class="manual-btn-main">NEXT QUESTION</span>
+                    <span class="manual-btn-sub">Advance step</span>
+                  </div>
+                </button>
+              </div>
+
+              <!-- Primary Phase Action Button (Start Timer / Reveal Answer / Next Round) -->
+              <button type="button" id="btn-manual-modal-phase-action" class="btn-manual-phase-action" title="Execute Phase Step">
+                ⏱️ START QUESTION TIMER
+              </button>
+            </div>
+
+            <!-- Host Tips Footer -->
+            <div class="manual-modal-footer">
+              <span class="manual-footer-tip">💡 Read question aloud to venue before starting countdown timer.</span>
+            </div>
+
           </div>
         </div>
 
