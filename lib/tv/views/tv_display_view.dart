@@ -1402,7 +1402,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     setState(() => _isExitDialogOpen = true);
 
     bool isCancelFocused = false;
-    bool isYesFocused = false;
+    bool isYesFocused = true;
 
     showDialog(
       context: context,
@@ -1501,6 +1501,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         children: [
                           Expanded(
                             child: Focus(
+                              autofocus: true,
                               onFocusChange: (f) => setBtnState(() => isYesFocused = f),
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
@@ -1508,13 +1509,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                   foregroundColor: isYesFocused ? Colors.black : Colors.redAccent,
                                   side: BorderSide(
                                     color: isYesFocused ? AppTheme.neonCyan : Colors.redAccent,
-                                    width: isYesFocused ? 2.0 : 1.5,
+                                    width: isYesFocused ? 2.5 : 1.5,
                                   ),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  elevation: isYesFocused ? 6 : 0,
+                                  elevation: isYesFocused ? 8 : 0,
+                                  shadowColor: isYesFocused ? AppTheme.neonCyan.withOpacity(0.7) : Colors.transparent,
                                 ),
                                 icon: Icon(
                                   Icons.power_settings_new_rounded,

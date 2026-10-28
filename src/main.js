@@ -1385,7 +1385,12 @@ function initTvExitAndRecoveryMenu() {
   const tvHostQrEmptyRoom = document.getElementById('tv-host-qr-empty-room');
 
   function openTvExitDialog() {
-    if (tvExitOverlay) tvExitOverlay.classList.remove('hidden');
+    if (tvExitOverlay) {
+      tvExitOverlay.classList.remove('hidden');
+      setTimeout(() => {
+        btnTvExitYes?.focus();
+      }, 30);
+    }
   }
 
   function closeTvExitDialog() {

@@ -4140,6 +4140,23 @@ body.auth-mode .main-container {
   pointer-events: auto !important;
 }
 
+/* Exit Dialog Yes Button Highlighted as Default */
+#btn-tv-exit-yes {
+  background: #ff4d4d !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 0 20px rgba(255, 77, 77, 0.7) !important;
+}
+
+#btn-tv-exit-yes:focus,
+#btn-tv-exit-yes:focus-visible,
+#btn-tv-exit-yes:hover {
+  background: var(--accent-cyan) !important;
+  color: #000000 !important;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.8) !important;
+}
+
 /* Exit Dialog Cancel Button Full Color Blue on Focus / Highlight */
 #btn-tv-exit-cancel:focus,
 #btn-tv-exit-cancel:hover {
