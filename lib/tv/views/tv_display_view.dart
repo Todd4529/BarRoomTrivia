@@ -72,7 +72,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _adSlideDurationSeconds = 60;
   List<Map<String, dynamic>> _customAdSlides = [];
 
-  int get _totalAdSlides => _customAdSlides.isEmpty ? 1 : (1 + _customAdSlides.length);
+  int get _totalAdSlides {
+    if (_customAdSlides.isEmpty) return 3;
+    final maxPairs = max(3, _customAdSlides.length);
+    return maxPairs * 2;
+  }
   List<Map<String, dynamic>> _top3Winners = [];
   bool _showRoundWinnersOverlay = false;
   Timer? _roundWinnersOverlayTimer;
@@ -2431,30 +2435,40 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     );
   }
 
-  /// Selects the appropriate rich full-screen advertisement poster for Signage Mode.
-  /// If host has uploaded custom slides, rotates between the default official game ad
-  /// (at index 0) and each custom slide (at indices 1..N).
-  /// If no slides are uploaded, only the official default ad is displayed.
+  /// Selects the appropriate advertisement poster for Signage Mode.
+  /// The official default ad is broken up into 3 clean, uncluttered slides:
+  /// - Slide 0: "HOW TO PLAY ON YOUR MOBILE PHONE" (Scan QR, Real-Time Buzzer, Win & Rank)
+  /// - Slide 1: "HOST YOUR OWN PUB TRIVIA NIGHT" (Automated Host, 30+ Genres, Hook Up Any TV)
+  /// - Slide 2: "BAR ROOMS TRIVIA APP" (Google Play App, Features, Instant Web Play)
+  ///
+  /// When host uploads custom slides, the 3 default slides rotate IN-BETWEEN the host uploaded slides:
+  /// Default 0 -> Custom 0 -> Default 1 -> Custom 1 -> Default 2 -> Custom 2 (or loop)
   Widget _buildFullscreenAdSlide(int index) {
-    if (_customAdSlides.isNotEmpty) {
-      if (index == 0) {
-        return _buildFullscreenSlide0();
-      }
-      final customIndex = index - 1;
-      if (customIndex < _customAdSlides.length) {
-        return _buildCustomAdSlide(_customAdSlides[customIndex]);
-      }
-      return _buildFullscreenSlide0();
+    if (_customAdSlides.isEmpty) {
+      final defaultIdx = index % 3;
+      if (defaultIdx == 0) return _buildFullscreenSlide0();
+      if (defaultIdx == 1) return _buildFullscreenSlide1();
+      return _buildFullscreenSlide2();
     }
-    // Default ad for this game
-    return _buildFullscreenSlide0();
+    // Rotate default slides in-between host uploaded slides:
+    // Even indices: default slides (0, 1, 2)
+    // Odd indices: custom host uploaded slides
+    if (index % 2 == 0) {
+      final defaultIdx = (index ~/ 2) % 3;
+      if (defaultIdx == 0) return _buildFullscreenSlide0();
+      if (defaultIdx == 1) return _buildFullscreenSlide1();
+      return _buildFullscreenSlide2();
+    } else {
+      final customIdx = (index ~/ 2) % _customAdSlides.length;
+      return _buildCustomAdSlide(_customAdSlides[customIdx]);
+    }
   }
 
-  /// Signage Slide 0: Official Bar Rooms Trivia App & Home Party Flyer
+  /// Signage Slide 0: How to Play & Join on Mobile Phone (Player Focus)
   Widget _buildFullscreenSlide0() {
     final playUrl = _getPlayUrl();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 24),
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2469,7 +2483,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   border: Border.all(color: AppTheme.neonCyan, width: 1.5),
                 ),
                 child: const Text(
-                  '⚡ OFFICIAL BAR & HOME TRIVIA APP ⚡',
+                  '⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡',
                   style: TextStyle(
                     color: AppTheme.neonCyan,
                     fontWeight: FontWeight.w900,
@@ -2486,7 +2500,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   border: Border.all(color: Colors.white24),
                 ),
                 child: const Text(
-                  'PLAY ON ANY DEVICE • NO DOWNLOAD REQUIRED',
+                  'FAST 30-SECOND JOIN',
                   style: TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.w700,
@@ -2498,116 +2512,170 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ],
           ),
           const SizedBox(height: 8),
+          Text(
+            'HOW TO PLAY ON YOUR MOBILE PHONE',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2,
+              shadows: [
+                Shadow(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                  blurRadius: 18,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'JOIN THE GAME SHOW IN UNDER 30 SECONDS RIGHT FROM YOUR TABLE!',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 68,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '1',
+                    '📱',
+                    'SCAN THE QR CODE',
+                    AppTheme.neonCyan,
+                    'PLAY ON ANY PHONE! Open your camera and point it at the TV screen. Tap the link to join instantly without downloading an app.',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '2',
+                    '⚡',
+                    'BUZZ IN & WIN',
+                    AppTheme.neonYellow,
+                    'REAL-TIME MULTIPLAYER! 4 color-coded answers appear on your phone. Tap fast before the timer hits zero for speed bonus points!',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildSignageStepCard(
+                    '3',
+                    '🏆',
+                    'CLIMB THE LIVE TV LEADERBOARD',
+                    AppTheme.neonGreen,
+                    'LIVE TV LEADERBOARD! Watch standings update in real-time on the big screen! Top 3 players win round championship bonuses.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'NO APPS TO INSTALL • WORKS ON ANY SMARTPHONE CAMERA'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Signage Slide 1: Host Your Own Pub Trivia Night (Home & Venues)
+  Widget _buildFullscreenSlide1() {
+    final playUrl = _getPlayUrl();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
-                      blurRadius: 18,
-                    ),
-                  ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonGreen, width: 1.5),
+                ),
+                child: const Text(
+                  '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡',
+                  style: TextStyle(
+                    color: AppTheme.neonGreen,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 1.5,
+                  ),
                 ),
               ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.neonYellow,
-                      letterSpacing: 1,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Text(
+                  '100% AUTOMATED HOST',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
+          Text(
+            'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2,
+              shadows: [
+                Shadow(
+                  color: AppTheme.neonGreen.withValues(alpha: 0.6),
+                  blurRadius: 18,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'BRING THE EXCITEMENT OF PUB TRIVIA HOME! Turn any TV and mobile phones into an interactive game show.',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 12),
           Expanded(
-            flex: 54,
+            flex: 68,
             child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '📱',
-                          'PLAY ON ANY PHONE',
-                          AppTheme.neonCyan,
-                          'No app download needed for players! Guests scan the TV QR code with their mobile cameras to buzz in and play instantly.',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '🎯',
-                          '30+ TRIVIA GENRES',
-                          AppTheme.neonGreen,
-                          'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions!',
-                        ),
-                      ),
-                    ],
+                  child: _buildSignageFeatureCard(
+                    '🤖',
+                    'AUTOMATED GAME HOST',
+                    AppTheme.neonPurple,
+                    'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.',
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '⚡',
-                          'REAL-TIME MULTIPLAYER',
-                          AppTheme.neonCyan,
-                          'Instant countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '🤖',
-                          'AUTOMATED GAME HOST',
-                          AppTheme.neonPurple,
-                          'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.',
-                        ),
-                      ),
-                    ],
+                  child: _buildSignageFeatureCard(
+                    '🎯',
+                    '30+ TRIVIA GENRES',
+                    AppTheme.neonGreen,
+                    'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions!',
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '🏆',
-                          'LIVE TV LEADERBOARD',
-                          AppTheme.neonYellow,
-                          'Standings update in real-time on the big screen! Watch players climb the ranks with speed bonuses and round bonuses.',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: _buildSignageFeatureCard(
-                          '🏠',
-                          'PERFECT FOR PARTIES',
-                          AppTheme.neonYellow,
-                          'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!',
-                        ),
-                      ),
-                    ],
+                  child: _buildSignageFeatureCard(
+                    '🏠',
+                    'PERFECT FOR PARTIES',
+                    AppTheme.neonYellow,
+                    'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!',
                   ),
                 ),
               ],
@@ -2615,103 +2683,156 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           ),
           const SizedBox(height: 10),
           Expanded(
-            flex: 42,
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO JOIN NOW • PLAY BAR ROOMS TRIVIA ON ANY PHONE!'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Signage Slide 2: Official Bar Rooms Trivia App & Google Play Store
+  Widget _buildFullscreenSlide2() {
+    final playUrl = _getPlayUrl();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                ),
+                child: const Text(
+                  '📲 OFFICIAL APP ON GOOGLE PLAY & THE WEB 📲',
+                  style: TextStyle(
+                    color: AppTheme.neonCyan,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Text(
+                  'FREE FOR ALL DEVICES',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'BAR ROOMS TRIVIA',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 2,
+              shadows: [
+                Shadow(
+                  color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                  blurRadius: 18,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'DOWNLOAD THE OFFICIAL APP OR PLAY INSTANTLY ONLINE IN ANY BROWSER',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 68,
             child: Row(
               children: [
                 Expanded(
-                  flex: 62,
+                  flex: 52,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
                       color: Colors.black26,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neonGreen.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppTheme.neonGreen),
-                              ),
-                              child: const Text(
-                                '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES',
-                                style: TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.w900, fontSize: 11),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Text(
-                          'BRING THE EXCITEMENT OF PUB TRIVIA HOME!',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.white),
-                        ),
-                        const Text(
-                          'No pens, no paper sheets! Hook up any smart TV or tablet, gather friends & family, and start playing in under 60 seconds.',
-                          style: TextStyle(fontSize: 12.5, color: Colors.white70),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const Text(
-                          '★ Compatible with any Smart TV, Projector, Laptop, Tablet, Android Phone & iPhone ★',
-                          style: TextStyle(fontSize: 11.5, color: Colors.white60, fontWeight: FontWeight.w600),
-                        ),
+                      children: const [
+                        Text('⭐ EVERYTHING YOU NEED TO HOST & PLAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
+                        Text('✓ 100% Free: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        Text('✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzers', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        Text('✓ Custom Signage & Ads: Rotate venue specials and party flyers on TV', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        Text('✓ Offline Fallback: Local questions ensure the trivia night never stops', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 14),
                 Expanded(
-                  flex: 38,
+                  flex: 48,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
                       color: Colors.black38,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: AppTheme.neonYellow.withValues(alpha: 0.5), width: 1.5),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: QrImageView(
-                            data: playUrl,
-                            version: QrVersions.auto,
-                            size: 80,
-                            backgroundColor: Colors.white,
-                          ),
+                        const Text(
+                          'DOWNLOAD FROM GOOGLE PLAY',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.white30),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
-                                'SCAN TO JOIN NOW',
-                                style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'ROOM: $_displayRoomCode',
-                                style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 17, letterSpacing: 2),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Search "Bar Rooms Trivia" on Google Play Store',
-                                style: TextStyle(color: Colors.white70, fontSize: 11),
+                              const Icon(Icons.play_arrow_rounded, color: AppTheme.neonGreen, size: 28),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text('GET IT ON', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                                  Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                                ],
                               ),
                             ],
                           ),
+                        ),
+                        const Text(
+                          'Search "Bar Rooms Trivia" on Google Play Store',
+                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const Text(
+                          '🌐 Play instantly online: todd4529.github.io/BarRoomTrivia',
+                          style: TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w700, fontSize: 13),
                         ),
                       ],
                     ),
@@ -2720,7 +2841,27 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          Expanded(
+            flex: 26,
+            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO PLAY BAR ROOMS TRIVIA FROM YOUR TABLE!'),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVenueChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.neonCyan.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 11),
       ),
     );
   }
@@ -2847,205 +2988,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     );
   }
 
-  /// Signage Slide 2: 3 Easy Steps to Play (Smartphone Walkthrough Poster)
-  Widget _buildFullscreenSlide2() {
-    final playUrl = _getPlayUrl();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
-                ),
-                child: const Text(
-                  '📱 100% FREE TO PLAY • NO APP DOWNLOAD REQUIRED 📱',
-                  style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5),
-                ),
-              ),
-              const Text(
-                'FAST & EASY SETUP',
-                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'HOW TO PLAY ON YOUR MOBILE PHONE',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(color: AppTheme.neonCyan.withValues(alpha: 0.6), blurRadius: 18),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'JOIN THE GAME SHOW IN UNDER 30 SECONDS RIGHT FROM YOUR TABLE!',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            flex: 68,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildSignageStepCard(
-                    '1',
-                    '📷',
-                    'SCAN THE QR CODE',
-                    AppTheme.neonCyan,
-                    'Point your smartphone camera at the QR code on the TV screen. Tap the link to open Bar Rooms Trivia in your mobile browser immediately.',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSignageStepCard(
-                    '2',
-                    '🏷️',
-                    'CHOOSE NICKNAME',
-                    AppTheme.neonYellow,
-                    'Type your player nickname or team handle. Your name appears instantly on the big screen TV lobby ready for the action!',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSignageStepCard(
-                    '3',
-                    '⏱️',
-                    'BUZZ IN & WIN',
-                    AppTheme.neonGreen,
-                    '4 multiple-choice answers display on your phone. Tap your answer fast! Faster correct answers earn maximum speed bonus points.',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            flex: 26,
-            child: _buildSignageBottomJoinBanner(playUrl, 'NO APPS TO INSTALL • WORKS ON ANY SMARTPHONE CAMERA'),
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// Signage Slide 3: Live Tournament Leaderboard & Championship Glory Flyer
-  Widget _buildFullscreenSlide3() {
-    final playUrl = _getPlayUrl();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonPurple.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonPurple, width: 1.5),
-                ),
-                child: const Text(
-                  '🏆 REAL-TIME TOURNAMENT & LEADERBOARD 🏆',
-                  style: TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5),
-                ),
-              ),
-              const Text(
-                'LIVE COMPETITIVE SCORING',
-                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'CLIMB THE LIVE TV LEADERBOARD',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(color: AppTheme.neonPurple.withValues(alpha: 0.6), blurRadius: 18),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'ACCURACY & LIGHTNING SPEED WIN THE ROUND PODIUM AND GLORY!',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonCyan),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            flex: 68,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildVenuePosterCard(
-                    '⚡',
-                    'SPEED MULTIPLIERS',
-                    AppTheme.neonCyan,
-                    'FAST BUZZERS SCORE MORE',
-                    [
-                      'Answer within the first few seconds for max points',
-                      'Every second counts against opposing teams',
-                      'Chain correct answers for streak bonuses',
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildVenuePosterCard(
-                    '🥇',
-                    'ROUND PODIUMS',
-                    AppTheme.neonYellow,
-                    'END-OF-ROUND CELEBRATION',
-                    [
-                      'Top 3 players celebrated on the TV screen',
-                      'Fanfare sound effects and victory animations',
-                      'Live score tallies update in real time',
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildVenuePosterCard(
-                    '👑',
-                    'PUB CHAMPIONS',
-                    AppTheme.neonPurple,
-                    'BECOME THE TRIVIA LEGEND',
-                    [
-                      'Compete against friends and the entire room',
-                      'Show off your general knowledge mastery',
-                      'Claim the #1 spot and win tonight\'s title',
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            flex: 26,
-            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO JOIN BEFORE THE NEXT QUESTION BEGINS!'),
-          ),
-        ],
-      ),
-    );
-  }
 
   /// Helper card for 6-feature grid on Slide 0
   Widget _buildSignageFeatureCard(String icon, String title, Color color, String desc) {
@@ -3093,77 +3036,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     );
   }
 
-  /// Helper card for venue food/drinks/prizes poster cards
-  Widget _buildVenuePosterCard(String icon, String badge, Color color, String title, List<String> bulletPoints) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.5),
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 16, spreadRadius: 1),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withValues(alpha: 0.5)),
-                ),
-                child: Text(icon, style: const TextStyle(fontSize: 22)),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color),
-                ),
-                child: Text(
-                  badge,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 10.5, letterSpacing: 1),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 0.8),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: bulletPoints.map((pt) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('• ', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-                    Expanded(
-                      child: Text(
-                        pt,
-                        style: const TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.2),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   /// Helper card for 3 step cards on Slide 2
   Widget _buildSignageStepCard(String stepNum, String icon, String title, Color color, String desc) {

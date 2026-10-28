@@ -268,20 +268,16 @@ void main() {
     test('tv_display_view.dart defines default official ad and custom uploaded slide renderer', () {
       expect(tvViewContent.contains('_buildFullscreenSlide0()'), isTrue);
       expect(tvViewContent.contains('_buildCustomAdSlide(Map<String, dynamic> slide)'), isTrue);
-      expect(tvViewContent.contains('_buildFullscreenSlide1()'), isFalse,
-          reason: "Tonight's specials & refreshments ad was deleted");
+      expect(tvViewContent.contains('_buildFullscreenSlide1()'), isTrue);
+      expect(tvViewContent.contains('_buildFullscreenSlide2()'), isTrue);
     });
 
-    test('Slide 0 includes official Bar Rooms Trivia brand and 6 feature cards', () {
+    test('Slide 0 focuses on player phone walkthrough: Scan QR, Buzz In, and Climb Leaderboard', () {
       expect(tvViewContent.contains('OFFICIAL BAR & HOME TRIVIA APP'), isTrue);
-      expect(tvViewContent.contains('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!'), isTrue);
-      expect(tvViewContent.contains('PLAY ON ANY PHONE'), isTrue);
-      expect(tvViewContent.contains('REAL-TIME MULTIPLAYER'), isTrue);
-      expect(tvViewContent.contains('LIVE TV LEADERBOARD'), isTrue);
-      expect(tvViewContent.contains('30+ TRIVIA GENRES'), isTrue);
-      expect(tvViewContent.contains('AUTOMATED GAME HOST'), isTrue);
-      expect(tvViewContent.contains('PERFECT FOR PARTIES'), isTrue);
-      expect(tvViewContent.contains('USE AT HOME FOR TRIVIA NIGHT PARTIES'), isTrue);
+      expect(tvViewContent.contains('HOW TO PLAY ON YOUR MOBILE PHONE'), isTrue);
+      expect(tvViewContent.contains('SCAN THE QR CODE'), isTrue);
+      expect(tvViewContent.contains('BUZZ IN & WIN'), isTrue);
+      expect(tvViewContent.contains('CLIMB THE LIVE TV LEADERBOARD'), isTrue);
     });
 
     test('Deleted Tonight\'s specials & refreshments is absent and uses active host slides instead', () {
@@ -291,18 +287,19 @@ void main() {
       expect(tvViewContent.contains('_totalAdSlides'), isTrue);
     });
 
-    test('Slide 2 includes 3 easy steps to play walkthrough', () {
-      expect(tvViewContent.contains('HOW TO PLAY ON YOUR MOBILE PHONE'), isTrue);
-      expect(tvViewContent.contains('SCAN THE QR CODE'), isTrue);
-      expect(tvViewContent.contains('CHOOSE NICKNAME'), isTrue);
-      expect(tvViewContent.contains('BUZZ IN & WIN'), isTrue);
+    test('Slide 1 focuses on hosting pub trivia night at home and venues', () {
+      expect(tvViewContent.contains('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!'), isTrue);
+      expect(tvViewContent.contains('USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES'), isTrue);
+      expect(tvViewContent.contains('AUTOMATED GAME HOST'), isTrue);
+      expect(tvViewContent.contains('30+ TRIVIA GENRES'), isTrue);
+      expect(tvViewContent.contains('PERFECT FOR PARTIES'), isTrue);
     });
 
-    test('Slide 3 includes live tournament leaderboard and championship glory', () {
-      expect(tvViewContent.contains('CLIMB THE LIVE TV LEADERBOARD'), isTrue);
-      expect(tvViewContent.contains('SPEED MULTIPLIERS'), isTrue);
-      expect(tvViewContent.contains('ROUND PODIUMS'), isTrue);
-      expect(tvViewContent.contains('PUB CHAMPIONS'), isTrue);
+    test('Slide 2 focuses on Google Play Store app and instant web play', () {
+      expect(tvViewContent.contains('BAR ROOMS TRIVIA'), isTrue);
+      expect(tvViewContent.contains('DOWNLOAD FROM GOOGLE PLAY'), isTrue);
+      expect(tvViewContent.contains('Google Play'), isTrue);
+      expect(tvViewContent.contains('GET IT ON'), isTrue);
     });
 
     test('All slides feature embedded live QR code pointing to game room', () {

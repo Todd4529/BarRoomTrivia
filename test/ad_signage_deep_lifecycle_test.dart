@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bar_rooms_trivia/shared/services/game_engine.dart';
@@ -47,7 +48,7 @@ void main() {
     });
 
     test('Official ad generator creates 1920x1080 canvas graphic', () {
-      expect(jsContent.contains('function generateOfficialBarRoomsTriviaAdDataUrl()'), isTrue);
+      expect(jsContent.contains('function generateOfficialBarRoomsTriviaAdDataUrl('), isTrue);
       expect(jsContent.contains('canvas.width = 1920'), isTrue);
       expect(jsContent.contains('canvas.height = 1080'), isTrue);
     });
@@ -89,20 +90,19 @@ void main() {
       expect(jsContent.contains('isSystemPermanent: true'), isTrue);
       expect(jsContent.contains("type: 'system'"), isTrue);
       expect(jsContent.contains('page: 1'), isTrue);
-      expect(jsContent.contains('totalPages: 1'), isTrue);
+      expect(jsContent.contains('totalPages: 3'), isTrue);
     });
 
     test('getAllActiveAdSlides always includes official ad at index 0', () {
       expect(jsContent.contains('function getAllActiveAdSlides() {'), isTrue);
-      expect(jsContent.contains('const officialAd = getOfficialBarRoomsTriviaAdSlide();'), isTrue);
-      expect(jsContent.contains('return [officialAd, ...customAdSlides];'), isTrue);
+      expect(jsContent.contains('getOfficialBarRoomsTriviaAdSlides();'), isTrue);
     });
 
     test('Host gallery prevents removal of the system permanent ad', () {
       expect(jsContent.contains('card.className = slide.isSystemPermanent ? \'ad-thumb-card system-card\' : \'ad-thumb-card\';'), isTrue);
       expect(jsContent.contains('⭐ OFFICIAL APP AD'), isTrue);
       expect(jsContent.contains('🔒'), isTrue);
-      expect(jsContent.contains("const customIndex = index - 1; // 0-based index in customAdSlides"), isTrue);
+      expect(jsContent.contains("const customIndex = index - officialSlides.length; // 0-based index in customAdSlides"), isTrue);
       expect(jsContent.contains("title=\"Delete Custom Slide\""), isTrue);
     });
 
@@ -234,18 +234,18 @@ void main() {
       // Step 1: In Lobby, ad mode is enabled
       bool isAdModeActive = true;
       int customSlidesCount = 0; // 0 custom slides uploaded
-      int totalActiveSlides = 1; // Exactly 1: the official permanent ad
+      int totalActiveSlides = 3; // 3 official permanent ads broken up for readability
       String currentScreen = 'tv-ad-signage-screen';
 
       expect(isAdModeActive, isTrue);
       expect(customSlidesCount, equals(0));
-      expect(totalActiveSlides, equals(1));
+      expect(totalActiveSlides, equals(3));
       expect(currentScreen, equals('tv-ad-signage-screen'));
 
       // Step 2: Host uploads 2 custom drink special flyers
       customSlidesCount = 2;
-      totalActiveSlides = 1 + customSlidesCount; // 3 slides total in rotation
-      expect(totalActiveSlides, equals(3));
+      totalActiveSlides = max(3, customSlidesCount) * 2; // 6 interleaved slides total in rotation
+      expect(totalActiveSlides, equals(6));
 
       // Step 3: Host starts the game (transition to PRE_GAME countdown)
       engine.currentRound = 1;
@@ -284,8 +284,8 @@ void main() {
 
       // Step 7: Host clears all custom ads -> Rotation still active with 1 official ad
       customSlidesCount = 0;
-      totalActiveSlides = 1; // Official ad remains permanent
-      expect(totalActiveSlides, equals(1));
+      totalActiveSlides = 3; // Official ads remain permanent
+      expect(totalActiveSlides, equals(3));
       expect(currentScreen, equals('tv-ad-signage-screen'));
     });
   });

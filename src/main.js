@@ -3657,9 +3657,9 @@ async function renderImageFileToSlide(file) {
 
 // 5. Official Bar Rooms Trivia Permanent System Ad Generator
 const OFFICIAL_SYSTEM_AD_ID = 'system_bar_rooms_trivia_official_ad';
-let cachedOfficialAdSlide = null;
+let cachedOfficialAdSlides = null;
 
-function generateOfficialBarRoomsTriviaAdDataUrl() {
+function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
   const canvas = document.createElement('canvas');
   canvas.width = 1920;
   canvas.height = 1080;
@@ -3688,7 +3688,6 @@ function generateOfficialBarRoomsTriviaAdDataUrl() {
   drawGlow(960, 120, 600, 'rgba(0, 229, 255, 0.16)');
   drawGlow(200, 850, 500, 'rgba(255, 214, 0, 0.14)');
   drawGlow(1700, 850, 550, 'rgba(124, 77, 255, 0.20)');
-  drawGlow(1600, 200, 400, 'rgba(255, 0, 122, 0.10)');
 
   // Helper: Rounded Rectangle
   function roundRect(x, y, w, h, r, fill, stroke, strokeWidth) {
@@ -3739,261 +3738,434 @@ function generateOfficialBarRoomsTriviaAdDataUrl() {
     ctx.restore();
   }
 
-  // 3. Outer Neon Accent Border
+  // Outer Neon Accent Border
   roundRect(24, 24, 1872, 1032, 28, null, 'rgba(0, 229, 255, 0.35)', 2);
 
-  // 4. Header Section
-  // Pill Badge at top
-  roundRect(710, 48, 500, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
-  ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#00e5ff';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚡ OFFICIAL BAR & HOME TRIVIA APP ⚡', 960, 72);
-
-  // App Title
-  ctx.font = "900 60px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
-  ctx.shadowBlur = 24;
-  ctx.fillText('BAR ROOMS TRIVIA', 960, 142);
-  ctx.shadowBlur = 0;
-
-  // Catchy Hook
-  ctx.font = "800 26px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#ffd600';
-  ctx.fillText('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!', 960, 184);
-
-  // Subhead
-  ctx.font = "500 16px 'Inter', sans-serif";
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText('Turn any TV and mobile phones into an interactive game show for parties, game nights & events.', 960, 214);
-
-  // 5. 6 Key Feature Cards Grid (3 cols x 2 rows)
-  const features = [
-    {
-      icon: '📱',
-      title: 'PLAY ON ANY PHONE',
-      color: '#00e5ff',
-      desc: 'No app download needed for players! Guests scan the TV QR code with their mobile cameras to join and buzz in instantly.'
-    },
-    {
-      icon: '⚡',
-      title: 'REAL-TIME MULTIPLAYER',
-      color: '#00e5ff',
-      desc: 'Instant countdown timers, live buzzer answers, and synchronized scoring on both TV and phones with zero lag.'
-    },
-    {
-      icon: '🏆',
-      title: 'LIVE TV LEADERBOARD',
-      color: '#ffd600',
-      desc: 'Standings update in real-time on the big screen! Watch players climb the ranks with speed bonuses and round bonuses.'
-    },
-    {
-      icon: '🎯',
-      title: '30+ TRIVIA GENRES',
-      color: '#00e676',
-      desc: 'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions!'
-    },
-    {
-      icon: '🤖',
-      title: 'AUTOMATED GAME HOST',
-      color: '#ff007a',
-      desc: 'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.'
-    },
-    {
-      icon: '🏠',
-      title: 'PERFECT FOR TRIVIA PARTIES',
-      color: '#ffd600',
-      desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!'
-    }
-  ];
-
-  ctx.textAlign = 'left';
-  features.forEach((feat, idx) => {
-    const col = idx % 3;
-    const row = Math.floor(idx / 3);
-    const cardX = 80 + col * 600;
-    const cardY = 246 + row * 194;
-    const cardW = 560;
-    const cardH = 176;
-
-    // Card background & border
-    roundRect(cardX, cardY, cardW, cardH, 16, 'rgba(22, 22, 34, 0.88)', 'rgba(255, 255, 255, 0.12)', 1.5);
-
-    // Feature Icon circle
-    roundRect(cardX + 20, cardY + 24, 48, 48, 12, 'rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.15)', 1);
-    ctx.font = '26px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(feat.icon, cardX + 44, cardY + 58);
-
-    // Feature Title
-    ctx.font = "800 20px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = feat.color;
-    ctx.textAlign = 'left';
-    ctx.fillText(feat.title, cardX + 82, cardY + 54);
-
-    // Feature Description
-    wrapText(feat.desc, cardX + 22, cardY + 104, cardW - 44, 23, '#cbd5e1', "400 14px 'Inter', sans-serif");
-  });
-
-  // 6. Bottom Section: Home Party Highlight (Left) & Google Play Store Badge (Right)
-  const botY = 650;
-  const botH = 370;
-
-  // Left Card: Home Party Highlight
-  const leftW = 1170;
-  roundRect(80, botY, leftW, botH, 20, 'rgba(18, 18, 30, 0.92)', 'rgba(0, 229, 255, 0.35)', 2);
-
-  // Badge pill
-  roundRect(110, botY + 28, 360, 32, 16, 'rgba(0, 230, 118, 0.15)', 'rgba(0, 230, 118, 0.5)', 1);
-  ctx.font = "800 13px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#00e676';
-  ctx.textAlign = 'center';
-  ctx.fillText('🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES', 290, botY + 49);
-
-  // Big Headline
-  ctx.font = "900 32px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left';
-  ctx.fillText('BRING THE EXCITEMENT OF PUB TRIVIA HOME!', 110, botY + 115);
-
-  // Explanatory Paragraph
-  const homeDesc = 'No pens, no paper answer sheets, and no manual score calculation! Hook up your laptop, tablet, or smart TV, gather your friends and family, and start playing in under 60 seconds.';
-  wrapText(homeDesc, 110, botY + 165, leftW - 80, 32, '#94a3b8', "500 20px 'Inter', sans-serif");
-
-  // Home party chips: Family Game Nights, Friends & House Parties, Office & Team Socials, Holiday & Birthday Parties
-  const homePartyChips = ['Family Game Nights', 'Friends & House Parties', 'Office & Team Socials', 'Holiday & Birthday Parties'];
-  let chipX = 110;
-  homePartyChips.forEach(chip => {
-    ctx.font = "600 14px 'Inter', sans-serif";
-    const chipW = ctx.measureText(chip).width + 24;
-    roundRect(chipX, botY + 235, chipW, 28, 14, 'rgba(0, 229, 255, 0.1)', 'rgba(0, 229, 255, 0.35)', 1);
+  if (slideNumber === 1) {
+    // ==========================================
+    // SLIDE 1: HOW TO PLAY & JOIN ON YOUR PHONE
+    // ==========================================
+    roundRect(660, 48, 600, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
+    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡', 960, 72);
+
+    ctx.font = "900 56px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
+    ctx.shadowBlur = 24;
+    ctx.fillText('BAR ROOMS TRIVIA', 960, 140);
+    ctx.shadowBlur = 0;
+
+    ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('HOW TO PLAY ON YOUR MOBILE PHONE', 960, 182);
+
+    ctx.font = "500 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Scan the TV QR code with your phone camera to join the game in 30 seconds!', 960, 214);
+
+    const steps = [
+      {
+        step: 'STEP 1',
+        icon: '📱',
+        title: 'SCAN THE QR CODE',
+        color: '#00e5ff',
+        headline: 'PLAY ON ANY PHONE',
+        desc: 'Open your phone camera and point it at the TV screen. Tap the link to join instantly without downloading an app or creating an account!',
+        badge: '✓ iPhone & Android Ready'
+      },
+      {
+        step: 'STEP 2',
+        icon: '⚡',
+        title: 'BUZZ IN ANSWERS',
+        color: '#ffd600',
+        headline: 'REAL-TIME MULTIPLAYER',
+        desc: 'Questions and options appear on the TV. Tap your color-coded answer on your phone before the timer hits zero for maximum speed points!',
+        badge: '✓ Fast Live Buzzer Sync'
+      },
+      {
+        step: 'STEP 3',
+        icon: '🏆',
+        title: 'CLIMB & WIN',
+        color: '#00e676',
+        headline: 'LIVE TV LEADERBOARD',
+        desc: 'Watch standings update in real-time on the big screen! Top 3 players win round championship bonuses. Take home the venue crown!',
+        badge: '✓ Real-Time Standings'
+      }
+    ];
+
+    steps.forEach((s, idx) => {
+      const cardX = 80 + idx * 600;
+      const cardY = 250;
+      const cardW = 560;
+      const cardH = 550;
+
+      roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(22, 22, 34, 0.90)', 'rgba(255, 255, 255, 0.12)', 1.5);
+
+      roundRect(cardX + 24, cardY + 28, 64, 64, 18, 'rgba(255, 255, 255, 0.08)', s.color, 1.5);
+      ctx.font = '34px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.icon, cardX + 56, cardY + 74);
+
+      roundRect(cardX + 410, cardY + 34, 120, 32, 10, 'rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.2)', 1);
+      ctx.font = "800 13px 'Outfit', 'Inter', sans-serif";
+      ctx.fillStyle = s.color;
+      ctx.fillText(s.step, cardX + 470, cardY + 55);
+
+      ctx.textAlign = 'left';
+      ctx.font = "900 24px 'Outfit', 'Inter', sans-serif";
+      ctx.fillStyle = s.color;
+      ctx.fillText(s.title, cardX + 26, cardY + 135);
+
+      ctx.font = "800 16px 'Outfit', 'Inter', sans-serif";
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(s.headline, cardX + 26, cardY + 168);
+
+      wrapText(s.desc, cardX + 26, cardY + 215, cardW - 52, 28, '#cbd5e1', "400 17px 'Inter', sans-serif");
+
+      roundRect(cardX + 26, cardY + cardH - 64, cardW - 52, 40, 10, 'rgba(255, 255, 255, 0.05)', s.color, 1);
+      ctx.font = "700 14px 'Inter', sans-serif";
+      ctx.fillStyle = s.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(s.badge, cardX + (cardW / 2), cardY + cardH - 39);
+    });
+
+    const botY = 830;
+    const botH = 180;
+    roundRect(80, botY, 1760, botH, 20, 'rgba(18, 18, 30, 0.95)', 'rgba(0, 229, 255, 0.4)', 2);
+
     ctx.textAlign = 'left';
-    ctx.fillText(chip, chipX + 12, botY + 254);
-    chipX += chipW + 12;
-  });
+    ctx.font = "900 22px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('⚡ READY TO PLAY? SCAN THE QR CODE ON THE TV TO BUZZ IN NOW!', 120, botY + 58);
 
-  // Footer Tagline on Left Card
-  ctx.font = "600 16px 'Inter', sans-serif";
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.fillText('★ Compatible with any Smart TV, Projector, Laptop, Tablet, Android Phone & iPhone ★', 110, botY + 285);
+    ctx.font = "600 18px 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('🌐 Or Play Instantly Online in Any Browser: todd4529.github.io/BarRoomTrivia', 120, botY + 104);
 
-  // Right Corner Card: Google Play Store Callout
-  const rightX = 1270;
-  const rightW = 570;
-  roundRect(rightX, botY, rightW, botH, 20, 'rgba(16, 16, 26, 0.96)', 'rgba(0, 229, 255, 0.5)', 2);
+    ctx.font = "500 15px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Ask your host for the 4-letter room code displayed on the screen. No download or registration needed!', 120, botY + 144);
 
-  // Header inside right card
-  roundRect(rightX + 30, botY + 28, 260, 32, 16, 'rgba(0, 229, 255, 0.18)', 'rgba(0, 229, 255, 0.6)', 1.5);
-  ctx.font = "800 13px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#00e5ff';
-  ctx.textAlign = 'center';
-  ctx.fillText('📱 GET THE HOST APP', rightX + 160, botY + 49);
+  } else if (slideNumber === 2) {
+    // ==========================================
+    // SLIDE 2: HOST YOUR OWN PUB TRIVIA NIGHT
+    // ==========================================
+    roundRect(660, 48, 600, 36, 18, 'rgba(0, 230, 118, 0.15)', 'rgba(0, 230, 118, 0.6)', 1.5);
+    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e676';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡', 960, 72);
 
-  // Action text
-  ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left';
-  ctx.fillText('DOWNLOAD FROM GOOGLE PLAY', rightX + 30, botY + 98);
+    ctx.font = "900 50px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 230, 118, 0.7)';
+    ctx.shadowBlur = 24;
+    ctx.fillText('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!', 960, 138);
+    ctx.shadowBlur = 0;
 
-  ctx.font = "400 14px 'Inter', sans-serif";
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText('Install the official app on your Android Phone, Tablet or Google TV:', rightX + 30, botY + 128);
+    ctx.font = "800 22px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('BRING THE EXCITEMENT OF PUB TRIVIA HOME!', 960, 180);
 
-  // Official-looking Google Play Store Badge Button
-  const badgeX = rightX + 30;
-  const badgeY = botY + 152;
-  const badgeW = 510;
-  const badgeH = 96;
-  roundRect(badgeX, badgeY, badgeW, badgeH, 16, '#000000', 'rgba(255, 255, 255, 0.35)', 2);
+    ctx.font = "500 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Turn any TV and mobile phones into an interactive game show for parties, game nights & events.', 960, 214);
 
-  // Draw Google Play Multi-Color Triangle Icon
-  const iconCenterX = badgeX + 46;
-  const iconCenterY = badgeY + 48;
+    const hostFeats = [
+      {
+        icon: '🤖',
+        title: 'AUTOMATED GAME HOST',
+        color: '#ff007a',
+        headline: 'HANDS-FREE HOSTING',
+        desc: 'Sit back, grab a beverage, and enjoy your party! Built-in automated host mode runs rounds, reads questions, manages timers, and tallies winners hands-free.',
+        badge: '✓ Zero Host Stress'
+      },
+      {
+        icon: '🎯',
+        title: '30+ TRIVIA GENRES',
+        color: '#00e676',
+        headline: 'THOUSANDS OF QUESTIONS',
+        desc: 'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions with continuous non-repeating play!',
+        badge: '✓ Tailored Playlists'
+      },
+      {
+        icon: '🏠',
+        title: 'PERFECT FOR TRIVIA PARTIES',
+        color: '#ffd600',
+        headline: 'BIG SCREEN VISUAL STAGE',
+        desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events! Connect any Smart TV or projector.',
+        badge: '✓ Ready in Under 60 Seconds'
+      }
+    ];
 
-  // Blue segment
-  ctx.fillStyle = '#00e5ff';
-  ctx.beginPath();
-  ctx.moveTo(iconCenterX - 20, iconCenterY - 26);
-  ctx.lineTo(iconCenterX + 16, iconCenterY);
-  ctx.lineTo(iconCenterX - 4, iconCenterY);
-  ctx.closePath();
-  ctx.fill();
+    hostFeats.forEach((f, idx) => {
+      const cardX = 80 + idx * 600;
+      const cardY = 250;
+      const cardW = 560;
+      const cardH = 550;
 
-  // Green segment
-  ctx.fillStyle = '#00e676';
-  ctx.beginPath();
-  ctx.moveTo(iconCenterX + 16, iconCenterY);
-  ctx.lineTo(iconCenterX + 28, iconCenterY + 10);
-  ctx.lineTo(iconCenterX - 20, iconCenterY + 26);
-  ctx.closePath();
-  ctx.fill();
+      roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(22, 22, 34, 0.90)', 'rgba(255, 255, 255, 0.12)', 1.5);
 
-  // Yellow segment
-  ctx.fillStyle = '#ffd600';
-  ctx.beginPath();
-  ctx.moveTo(iconCenterX + 16, iconCenterY);
-  ctx.lineTo(iconCenterX + 28, iconCenterY - 10);
-  ctx.lineTo(iconCenterX - 20, iconCenterY - 26);
-  ctx.closePath();
-  ctx.fill();
+      roundRect(cardX + 24, cardY + 28, 64, 64, 18, 'rgba(255, 255, 255, 0.08)', f.color, 1.5);
+      ctx.font = '34px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(f.icon, cardX + 56, cardY + 74);
 
-  // Red/Pink segment
-  ctx.fillStyle = '#ff007a';
-  ctx.beginPath();
-  ctx.moveTo(iconCenterX + 16, iconCenterY);
-  ctx.lineTo(iconCenterX + 28, iconCenterY - 10);
-  ctx.lineTo(iconCenterX + 28, iconCenterY + 10);
-  ctx.closePath();
-  ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.font = "900 22px 'Outfit', 'Inter', sans-serif";
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.title, cardX + 26, cardY + 135);
 
-  // Badge Text
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = "600 14px 'Inter', sans-serif";
-  ctx.fillText('GET IT ON', badgeX + 90, badgeY + 36);
+      ctx.font = "800 16px 'Outfit', 'Inter', sans-serif";
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(f.headline, cardX + 26, cardY + 168);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = "800 32px 'Outfit', 'Inter', sans-serif";
-  ctx.fillText('Google Play', badgeX + 90, badgeY + 74);
+      wrapText(f.desc, cardX + 26, cardY + 215, cardW - 52, 28, '#cbd5e1', "400 17px 'Inter', sans-serif");
 
-  // Sub-badge callout
-  ctx.font = "700 13px 'Outfit', 'Inter', sans-serif";
-  ctx.fillStyle = '#00e5ff';
-  ctx.fillText('✓ Search "Bar Rooms Trivia" on Google Play Store', rightX + 30, botY + 280);
+      roundRect(cardX + 26, cardY + cardH - 64, cardW - 52, 40, 10, 'rgba(255, 255, 255, 0.05)', f.color, 1);
+      ctx.font = "700 14px 'Inter', sans-serif";
+      ctx.fillStyle = f.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(f.badge, cardX + (cardW / 2), cardY + cardH - 39);
+    });
 
-  // Web play link
-  roundRect(rightX + 30, botY + 300, 510, 48, 10, 'rgba(255, 255, 255, 0.05)', 'rgba(255, 214, 0, 0.3)', 1);
-  ctx.font = "700 14px 'Inter', sans-serif";
-  ctx.fillStyle = '#ffd600';
-  ctx.fillText('🌐 Or Play Instantly Online: todd4529.github.io/BarRoomTrivia', rightX + 46, botY + 330);
+    const botY = 830;
+    const botH = 180;
+    roundRect(80, botY, 1760, botH, 20, 'rgba(18, 18, 30, 0.95)', 'rgba(0, 230, 118, 0.4)', 2);
 
-  return canvas.toDataURL('image/jpeg', 0.92);
+    ctx.textAlign = 'left';
+    ctx.font = "900 22px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('🎉 PERFECT FOR ALL SOCIAL GATHERINGS & EVENTS:', 120, botY + 58);
+
+    const partyChips = ['Family Game Nights', 'Friends & House Parties', 'Office & Team Socials', 'Holiday & Birthday Parties', 'Breweries & Taprooms'];
+    let chipX = 120;
+    partyChips.forEach(chip => {
+      ctx.font = "700 15px 'Inter', sans-serif";
+      const chipW = ctx.measureText(chip).width + 28;
+      roundRect(chipX, botY + 86, chipW, 36, 18, 'rgba(0, 230, 118, 0.15)', 'rgba(0, 230, 118, 0.4)', 1);
+      ctx.fillStyle = '#00e676';
+      ctx.textAlign = 'left';
+      ctx.fillText(chip, chipX + 14, botY + 110);
+      chipX += chipW + 16;
+    });
+
+    ctx.font = "500 15px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('★ Compatible with any Smart TV, Projector, Android TV, Google TV, Fire TV, iPad & Laptop ★', 120, botY + 154);
+
+  } else {
+    // ==========================================
+    // SLIDE 3: GOOGLE PLAY STORE & WEB APP
+    // ==========================================
+    roundRect(660, 48, 600, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
+    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.textAlign = 'center';
+    ctx.fillText('📲 AVAILABLE ON GOOGLE PLAY & THE WEB 📲', 960, 72);
+
+    ctx.font = "900 56px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
+    ctx.shadowBlur = 24;
+    ctx.fillText('BAR ROOMS TRIVIA', 960, 140);
+    ctx.shadowBlur = 0;
+
+    ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('DOWNLOAD FROM GOOGLE PLAY', 960, 182);
+
+    ctx.font = "500 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Install the official app on your Android Phone, Tablet or Google TV for full-screen performance.', 960, 214);
+
+    const cardY = 250;
+    const cardH = 550;
+    roundRect(80, cardY, 960, cardH, 20, 'rgba(22, 22, 34, 0.90)', 'rgba(0, 229, 255, 0.35)', 2);
+
+    ctx.textAlign = 'left';
+    ctx.font = "900 26px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('⭐ EVERYTHING YOU NEED TO HOST & PLAY', 120, cardY + 60);
+
+    const appBullets = [
+      '✓ 100% Free Forever: Unlimited trivia games and unlimited connected players.',
+      '✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzer scoring.',
+      '✓ Mobile Host Controls: Skip questions, pause anytime, and manage player roster.',
+      '✓ Custom Signage & Ads: Upload food specials, drink menus, and flyer ads.',
+      '✓ Offline Fallback: Local question cache ensures the party never stops!'
+    ];
+
+    appBullets.forEach((bullet, bIdx) => {
+      ctx.font = "600 18px 'Inter', sans-serif";
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(bullet, 120, cardY + 120 + bIdx * 54);
+    });
+
+    roundRect(120, cardY + cardH - 80, 880, 48, 12, 'rgba(0, 229, 255, 0.1)', 'rgba(0, 229, 255, 0.4)', 1);
+    ctx.font = "700 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('★ Compatible with Android Phones, Tablets, Google TV, Fire TV & iPads ★', 140, cardY + cardH - 50);
+
+    const rightX = 1080;
+    roundRect(rightX, cardY, 760, cardH, 20, 'rgba(16, 16, 26, 0.96)', 'rgba(255, 214, 0, 0.4)', 2);
+
+    ctx.textAlign = 'left';
+    ctx.font = "900 26px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('GET IT ON GOOGLE PLAY', rightX + 40, cardY + 60);
+
+    ctx.font = "500 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Available now on the Google Play Store for Android & Google TV:', rightX + 40, cardY + 100);
+
+    const badgeX = rightX + 40;
+    const badgeY = cardY + 140;
+    const badgeW = 600;
+    const badgeH = 110;
+    roundRect(badgeX, badgeY, badgeW, badgeH, 18, '#000000', 'rgba(255, 255, 255, 0.35)', 2);
+
+    const iconCenterX = badgeX + 60;
+    const iconCenterY = badgeY + 55;
+
+    ctx.fillStyle = '#00e5ff';
+    ctx.beginPath();
+    ctx.moveTo(iconCenterX - 24, iconCenterY - 30);
+    ctx.lineTo(iconCenterX + 20, iconCenterY);
+    ctx.lineTo(iconCenterX - 4, iconCenterY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#00e676';
+    ctx.beginPath();
+    ctx.moveTo(iconCenterX + 20, iconCenterY);
+    ctx.lineTo(iconCenterX + 34, iconCenterY + 12);
+    ctx.lineTo(iconCenterX - 24, iconCenterY + 30);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffd600';
+    ctx.beginPath();
+    ctx.moveTo(iconCenterX + 20, iconCenterY);
+    ctx.lineTo(iconCenterX + 34, iconCenterY - 12);
+    ctx.lineTo(iconCenterX - 24, iconCenterY - 30);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ff007a';
+    ctx.beginPath();
+    ctx.moveTo(iconCenterX + 20, iconCenterY);
+    ctx.lineTo(iconCenterX + 34, iconCenterY - 12);
+    ctx.lineTo(iconCenterX + 34, iconCenterY + 12);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = "600 16px 'Inter', sans-serif";
+    ctx.fillText('GET IT ON', badgeX + 115, badgeY + 42);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "800 38px 'Outfit', 'Inter', sans-serif";
+    ctx.fillText('Google Play', badgeX + 115, badgeY + 86);
+
+    ctx.font = "700 18px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('✓ Search "Bar Rooms Trivia" on Google Play Store', rightX + 40, cardY + 310);
+
+    roundRect(rightX + 40, cardY + 350, 680, 70, 14, 'rgba(255, 255, 255, 0.05)', 'rgba(255, 214, 0, 0.4)', 1.5);
+    ctx.font = "800 18px 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('🌐 Or Play Instantly Online in Any Browser:', rightX + 64, cardY + 392);
+    ctx.font = "700 18px 'Outfit', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('todd4529.github.io/BarRoomTrivia', rightX + 440, cardY + 392);
+
+    const botY = 830;
+    const botH = 180;
+    roundRect(80, botY, 1760, botH, 20, 'rgba(18, 18, 30, 0.95)', 'rgba(0, 229, 255, 0.4)', 2);
+
+    ctx.textAlign = 'left';
+    ctx.font = "900 22px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('⚡ BAR ROOMS TRIVIA — HOST THE ULTIMATE TRIVIA NIGHT AT HOME & VENUES', 120, botY + 58);
+
+    ctx.font = "600 18px 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.fillText('🌐 Free for all players • No installation required to play • Runs on any smart TV or phone', 120, botY + 104);
+
+    ctx.font = "500 15px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('Join the game by scanning the TV QR code with your camera, or visit todd4529.github.io/BarRoomTrivia', 120, botY + 144);
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.90);
+}
+
+function getOfficialBarRoomsTriviaAdSlides() {
+  if (cachedOfficialAdSlides && cachedOfficialAdSlides.length === 3) {
+    return cachedOfficialAdSlides;
+  }
+  try {
+    cachedOfficialAdSlides = [
+      {
+        id: `${OFFICIAL_SYSTEM_AD_ID}_1`,
+        name: 'How to Play (Official Ad 1/3)',
+        dataUrl: generateOfficialBarRoomsTriviaAdDataUrl(1),
+        type: 'system',
+        page: 1,
+        totalPages: 3,
+        isSystemPermanent: true,
+        timestamp: 0
+      },
+      {
+        id: `${OFFICIAL_SYSTEM_AD_ID}_2`,
+        name: 'Host Trivia Night (Official Ad 2/3)',
+        dataUrl: generateOfficialBarRoomsTriviaAdDataUrl(2),
+        type: 'system',
+        page: 2,
+        totalPages: 3,
+        isSystemPermanent: true,
+        timestamp: 0
+      },
+      {
+        id: `${OFFICIAL_SYSTEM_AD_ID}_3`,
+        name: 'Google Play & Web App (Official Ad 3/3)',
+        dataUrl: generateOfficialBarRoomsTriviaAdDataUrl(3),
+        type: 'system',
+        page: 3,
+        totalPages: 3,
+        isSystemPermanent: true,
+        timestamp: 0
+      }
+    ];
+  } catch (err) {
+    console.error('Error generating official Bar Rooms Trivia ads:', err);
+  }
+  return cachedOfficialAdSlides || [];
 }
 
 function getOfficialBarRoomsTriviaAdSlide() {
-  if (cachedOfficialAdSlide) return cachedOfficialAdSlide;
-  try {
-    const dataUrl = generateOfficialBarRoomsTriviaAdDataUrl();
-    cachedOfficialAdSlide = {
-      id: OFFICIAL_SYSTEM_AD_ID,
-      name: 'Bar Rooms Trivia (Official App Ad)',
-      dataUrl: dataUrl,
-      type: 'system',
-      page: 1,
-      totalPages: 1,
-      isSystemPermanent: true,
-      timestamp: 0
-    };
-  } catch (err) {
-    console.error('Error generating official Bar Rooms Trivia ad:', err);
-  }
-  return cachedOfficialAdSlide;
+  const slides = getOfficialBarRoomsTriviaAdSlides();
+  return (slides && slides.length > 0) ? slides[0] : null;
 }
 
 function getAllActiveAdSlides() {
-  const officialAd = getOfficialBarRoomsTriviaAdSlide();
-  return [officialAd, ...customAdSlides];
+  const officialSlides = getOfficialBarRoomsTriviaAdSlides();
+  if (!customAdSlides || customAdSlides.length === 0) {
+    return officialSlides;
+  }
+  // Rotate default slides in-between the host uploaded slides:
+  // Alternates between official default slide and custom uploaded slide
+  const result = [];
+  const maxPairs = Math.max(officialSlides.length, customAdSlides.length);
+  for (let i = 0; i < maxPairs; i++) {
+    result.push(officialSlides[i % officialSlides.length]);
+    result.push(customAdSlides[i % customAdSlides.length]);
+  }
+  return result;
 }
 
 // 6. TV Ad Signage Synchronization & Carousel Rotation
@@ -4137,13 +4309,14 @@ function displayAdSlide(index) {
 function renderHostAdGallery() {
   const gallery = document.getElementById('host-ad-gallery');
   const countEl = document.getElementById('host-ad-count');
-  const allSlides = getAllActiveAdSlides();
-  if (countEl) countEl.textContent = allSlides.length;
+  const officialSlides = getOfficialBarRoomsTriviaAdSlides();
+  const allDisplaySlides = [...officialSlides, ...customAdSlides];
+  if (countEl) countEl.textContent = allDisplaySlides.length;
 
   if (!gallery) return;
 
   gallery.innerHTML = '';
-  allSlides.forEach((slide, index) => {
+  allDisplaySlides.forEach((slide, index) => {
     const card = document.createElement('div');
     card.className = slide.isSystemPermanent ? 'ad-thumb-card system-card' : 'ad-thumb-card';
     card.setAttribute('data-slide-id', slide.id);
@@ -4160,7 +4333,7 @@ function renderHostAdGallery() {
         <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
       `;
     } else {
-      const customIndex = index - 1; // 0-based index in customAdSlides
+      const customIndex = index - officialSlides.length; // 0-based index in customAdSlides
       card.innerHTML = `
         <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
         <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
@@ -4480,6 +4653,7 @@ window.idbAdStorage = idbAdStorage;
 window.customAdSlides = customAdSlides;
 window.isAdModeActive = () => isAdModeActive;
 window.getOfficialBarRoomsTriviaAdSlide = getOfficialBarRoomsTriviaAdSlide;
+window.getOfficialBarRoomsTriviaAdSlides = getOfficialBarRoomsTriviaAdSlides;
 window.getAllActiveAdSlides = getAllActiveAdSlides;
 window.syncTvSignageDisplay = syncTvSignageDisplay;
 window.startTvAdSignageRotation = startTvAdSignageRotation;
