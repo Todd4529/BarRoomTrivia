@@ -74,6 +74,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   @override
   void initState() {
     super.initState();
+    _nicknameController.clear();
     // Default room code for auto-join in development
     _roomCodeController.text = 'TRIV';
     if (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty) {
@@ -228,12 +229,20 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           // Check if this broadcast is simply a state-sync or re-broadcast of the active question
           final isSameRound = incomingRound == _currentRound;
           final isSameIndex = qNumInRound == _questionNumberInRound;
-          final isSameQuestion = isSameRound &&
-              isSameIndex &&
-              _currentQuestion != null &&
+          final isSameQuestion = _currentQuestion != null &&
               (_currentQuestion!.id == question.id ||
                   (_currentQuestion!.questionText.isNotEmpty &&
-                      _currentQuestion!.questionText == question.questionText));
+                      _currentQuestion!.questionText == question.questionText) ||
+                  (isSameRound && isSameIndex));
+
+          if (isSameQuestion &&
+              (_isReviewPhase ||
+                  _showResultOverlay ||
+                  _isInterQuestionPhase ||
+                  _isScoredForThisQuestion)) {
+            // Player is currently reviewing or already scored this question; ignore duplicate broadcast.
+            return;
+          }
 
           if (isSameQuestion && _selectedOption != null) {
             // Player already locked in their answer! Keep their answer and locked inputs intact.
@@ -248,8 +257,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             return;
           }
 
-          if (isSameQuestion && (_isReviewPhase || _showResultOverlay)) {
-            // Player is currently reviewing the exact same question.
+          if (isSameQuestion && _localTimer != null && _localTimer!.isActive) {
+            // Timer is already actively counting down for this question.
             return;
           }
 
@@ -336,7 +345,16 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _startLocalCountdown();
       },
       onTimerExpiredBroadcast: (payload) {
-        _lockInputsAndReveal(payload['correct_option'] as String?);
+        final incomingQId = (payload['question_id'] ?? payload['id'])?.toString();
+        if (incomingQId != null &&
+            incomingQId.isNotEmpty &&
+            _currentQuestion != null &&
+            _currentQuestion!.id.isNotEmpty &&
+            incomingQId != _currentQuestion!.id) {
+          return;
+        }
+        final incomingCorrect = (payload['correct_option'] ?? payload['correctOption'])?.toString();
+        _lockInputsAndReveal(incomingCorrect);
 
         final mode = payload['game_play_mode'] as String? ?? 'Auto';
         final rawNext = payload['next_question_starts_at_epoch_ms'] ?? payload['nextQuestionStartsAtEpochMs'];
@@ -381,12 +399,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               _interQuestionTimer?.cancel();
               if (mounted) {
                 setState(() {
-                  _isInterQuestionPhase = false;
                   _interQuestionSecondsRemaining = 0;
                   _showResultOverlay = false;
-                  _isReviewPhase = false;
                 });
-                _realtimeService.broadcastSyncRequest(roomCode: _player?.roomCode ?? 'TRIV');
+                Future.delayed(const Duration(milliseconds: 1500), () {
+                  if (mounted && _isInterQuestionPhase) {
+                    _realtimeService.broadcastSyncRequest(roomCode: _player?.roomCode ?? 'TRIV');
+                  }
+                });
               }
             }
           });
@@ -815,8 +835,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               }
             }
             final now = DateTime.now().millisecondsSinceEpoch;
-            // Only sync active question if timer is not heavily expired
-            if (timerEndsAt != null && (now - timerEndsAt) > 60000) {
+            // Do not restart or re-sync a question whose timer has already expired
+            if (status != 'active_reading' && timerEndsAt != null && timerEndsAt <= now) {
               return;
             }
             final qData = res['question_data'] as Map<String, dynamic>?;
@@ -829,14 +849,20 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               }
               final q = Question.fromJson(qData);
               final sessionR = rNum ?? _currentRound;
+              final isSameQ = _currentQuestion != null &&
+                  (_currentQuestion!.id == q.id ||
+                      (_currentQuestion!.questionText.isNotEmpty &&
+                          _currentQuestion!.questionText == q.questionText) ||
+                      (sessionR == _currentRound && calcQNum == _questionNumberInRound));
               final isNewQuestion = _currentQuestion == null ||
-                  _isInterQuestionPhase ||
+                  (!isSameQ &&
+                  (_isInterQuestionPhase ||
                   _isInterRoundPhase ||
                   _showRoundWinnersOverlay ||
                   _isReviewPhase ||
                   sessionR != _currentRound ||
                   calcQNum != _questionNumberInRound ||
-                  (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText);
+                  (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText)));
 
               if (isNewQuestion) {
                 final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
@@ -966,14 +992,17 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   void _lockInputsAndReveal(String? serverCorrectOption) {
     if (mounted) {
+      _localTimer?.cancel();
       final currentQKey = _currentQuestion?.id ?? '${_currentRound}_$_questionNumberInRound';
       if (_lastGradedQuestionKey == currentQKey && _isScoredForThisQuestion) {
         // Already evaluated and locked in for this exact question; do not flip result or re-score
         return;
       }
 
-      final correct = serverCorrectOption?.trim().toUpperCase() ??
-          _currentQuestion?.correctOption.trim().toUpperCase();
+      final localCorrect = _currentQuestion?.correctOption.trim().toUpperCase();
+      final correct = (localCorrect != null && localCorrect.isNotEmpty)
+          ? localCorrect
+          : serverCorrectOption?.trim().toUpperCase();
       final playerChoice = _selectedOption?.trim().toUpperCase();
       final wasCorrect = playerChoice != null &&
           correct != null &&
@@ -987,8 +1016,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         _correctOption = correct;
         _wasCurrentQuestionCorrect = wasCorrect;
         _lastGradedQuestionKey = currentQKey;
-        if (!_isScoredForThisQuestion && wasCorrect) {
+        if (!_isScoredForThisQuestion) {
           _isScoredForThisQuestion = true;
+          if (wasCorrect) {
           final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
           final nick = _player?.nickname ?? _nicknameController.text.trim();
 
@@ -1038,6 +1068,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               players: SupabaseService.getLocalPlayersJson(room),
             );
           }
+          }
         }
       });
 
@@ -1069,11 +1100,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             } else {
               timer.cancel();
               setState(() {
-                _isInterQuestionPhase = false;
                 _interQuestionSecondsRemaining = 0;
               });
-              final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
-              _realtimeService.requestStateSync(room);
+              Future.delayed(const Duration(milliseconds: 1500), () {
+                if (mounted && _isInterQuestionPhase) {
+                  final room = (_player?.roomCode ?? _roomCodeController.text.trim()).toUpperCase();
+                  _realtimeService.requestStateSync(room);
+                }
+              });
             }
           });
         }
@@ -1554,6 +1588,9 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               TextField(
                 controller: _nicknameController,
                 maxLength: 15,
+                autofillHints: const <String>[],
+                autocorrect: false,
+                enableSuggestions: false,
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'NICKNAME',

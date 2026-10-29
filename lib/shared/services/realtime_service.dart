@@ -627,6 +627,7 @@ class RealtimeService {
         'event': 'timer_expired',
         'room_code': roomCode,
         'correct_option': correctOption,
+        'correctOption': correctOption,
         'next_question_starts_at_epoch_ms': targetEpoch,
         'nextQuestionStartsAtEpochMs': targetEpoch,
         'game_play_mode': gamePlayMode,
@@ -648,6 +649,15 @@ class RealtimeService {
         event: 'timer_expired',
         payload: payload,
       );
+    } catch (_) {}
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase(),
+        'status': 'question_review',
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(targetEpoch).toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
   }
 

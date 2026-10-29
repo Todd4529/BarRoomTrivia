@@ -59,6 +59,8 @@ let selectedGenreQueue = []; // Up to 10 genres in order
 let currentVenueName = safeStorage.getItem('bar_trivia_venue_name') || "OUR PUB";
 let customBarLogoUrl = safeStorage.getItem('bar_trivia_logo_url') || null;
 let isAutomatedEngineRunning = false;
+let isLocalHostEngineMaster = false;
+let activeHostQuestion = null;
 let autoEngineTimeout = null;
 let countdownInterval = null;
 let modalCountdownInterval = null;
@@ -1448,6 +1450,9 @@ function initTvExitAndRecoveryMenu() {
     } catch (_) {}
 
     // 1. Terminate all active running intervals, audio, and loops
+    isAutomatedEngineRunning = false;
+    isLocalHostEngineMaster = false;
+    currentGameState = 'EXITED';
     clearInterval(countdownInterval);
     clearInterval(modalCountdownInterval);
     clearInterval(tvNextQCountdownInterval);
@@ -1485,6 +1490,7 @@ function initTvExitAndRecoveryMenu() {
     const exitedScreen = document.getElementById('tv-exited-screen');
     if (exitedScreen) {
       exitedScreen.classList.remove('hidden');
+      exitedScreen.style.display = 'flex';
     } else {
       document.body.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0a0b10;color:#fff;text-align:center;font-family:sans-serif;padding:24px;">
@@ -1500,7 +1506,11 @@ function initTvExitAndRecoveryMenu() {
   const btnReopenApp = document.getElementById('btn-reopen-app');
   btnReopenApp?.addEventListener('click', () => {
     const exitedScreen = document.getElementById('tv-exited-screen');
-    if (exitedScreen) exitedScreen.classList.add('hidden');
+    if (exitedScreen) {
+      exitedScreen.classList.add('hidden');
+      exitedScreen.style.display = '';
+    }
+    currentGameState = 'LOBBY';
     switchView('tv');
   });
   btnTvShowHostQr?.addEventListener('click', showTvHostQrRecovery);
@@ -1508,13 +1518,47 @@ function initTvExitAndRecoveryMenu() {
   btnTvCloseEmptyHostQr?.addEventListener('click', closeTvHostQrRecovery);
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && document.body.getAttribute('data-view') === 'tv') {
-      if (tvHostQrOverlay && !tvHostQrOverlay.classList.contains('hidden')) {
+    if (document.body.getAttribute('data-view') !== 'tv') return;
+    const isExitOpen = tvExitOverlay && !tvExitOverlay.classList.contains('hidden');
+    const isHostQrOpen = tvHostQrOverlay && !tvHostQrOverlay.classList.contains('hidden');
+
+    if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'GoBack') {
+      if (isHostQrOpen) {
+        e.preventDefault();
         closeTvHostQrRecovery();
-      } else if (tvExitOverlay && !tvExitOverlay.classList.contains('hidden')) {
+      } else if (isExitOpen) {
+        e.preventDefault();
         closeTvExitDialog();
-      } else {
+      } else if (e.key === 'Escape' || e.key === 'GoBack') {
+        e.preventDefault();
         openTvExitDialog();
+      }
+      return;
+    }
+
+    if (isExitOpen) {
+      const activeEl = document.activeElement;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        btnTvExitCancel?.focus();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        btnTvExitYes?.focus();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        btnTvShowHostQr?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        btnTvExitYes?.focus();
+      } else if (e.key === 'Enter' || e.key === 'NumpadEnter' || e.key === 'Select') {
+        e.preventDefault();
+        if (activeEl === btnTvExitCancel) {
+          btnTvExitCancel.click();
+        } else if (activeEl === btnTvShowHostQr) {
+          btnTvShowHostQr.click();
+        } else {
+          btnTvExitYes?.click();
+        }
       }
     }
   });
@@ -2072,14 +2116,6 @@ function handleIncomingQuestionStart(rawPayload) {
     return;
   }
 
-  // A question_start event indicates active gameplay; dismiss all intermission and countdown overlays
-  currentGameState = 'QUESTION_ACTIVE';
-  clearInterval(winnerCountdownInterval);
-  winnerCountdownInterval = null;
-  hideWinnerModals();
-  hideResultModal();
-  hideInterQuestionCountdown();
-
   const qObj = payload.questionData || payload.question_data || payload;
   const opts = qObj.options || payload.options || {};
   const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
@@ -2110,11 +2146,10 @@ function handleIncomingQuestionStart(rawPayload) {
     ? rFromPayload
     : (payload.cumulative_question_index ? Math.floor((payload.cumulative_question_index - 1) / 10) + 1 : (currentRound || 1));
   const prevRound = currentRound;
-  currentRound = roundNum;
 
   let incomingQIndex = null;
   if (payload.cumulative_question_index !== undefined) {
-    incomingQIndex = Number(payload.cumulative_question_index) - 1;
+    incomingQIndex = Math.max(0, Number(payload.cumulative_question_index) - 1);
   } else if (payload.questionIndex !== undefined) {
     incomingQIndex = Number(payload.questionIndex);
   } else if (payload.question_index !== undefined) {
@@ -2124,10 +2159,6 @@ function handleIncomingQuestionStart(rawPayload) {
 
   const prevQIndex = currentQuestionIndex;
   const isDifferentIndex = (incomingQIndex !== null && prevQIndex !== null && incomingQIndex !== prevQIndex) || (prevRound !== roundNum);
-  if (incomingQIndex !== null) {
-    currentQuestionIndex = incomingQIndex;
-  }
-  const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((currentQuestionIndex % 10) + 1));
 
   // Check if player UI is currently showing waiting or blank screen
   const playerQElem = document.getElementById('player-question-text');
@@ -2138,10 +2169,42 @@ function handleIncomingQuestionStart(rawPayload) {
     playerQElem.textContent.includes('NEXT ROUND') ||
     playerQElem.textContent.trim() === '';
 
-  const isSameQuestion = !isDifferentIndex && currentQuestionData && (
-    (currentQuestionData.id && questionData.id && currentQuestionData.id === questionData.id) ||
-    (currentQuestionData.text && questionData.text && currentQuestionData.text.trim() !== '' && currentQuestionData.text === questionData.text)
-  );
+  const isSameQuestion = Boolean(currentQuestionData && (
+    (currentQuestionData.id && questionData.id && String(currentQuestionData.id) === String(questionData.id)) ||
+    (currentQuestionData.text && questionData.text && currentQuestionData.text.trim() !== '' && currentQuestionData.text.trim() === questionData.text.trim()) ||
+    (!isDifferentIndex && currentQuestionData.text && questionData.text)
+  ));
+
+  // CRITICAL: Check review / scored / answered state BEFORE modifying currentGameState or hiding modals!
+  if (isSameQuestion && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
+    return;
+  }
+  if (isSameQuestion && playerChoiceSubmitted !== null) {
+    return;
+  }
+  if (isSameQuestion && !isUiWaiting && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
+    return;
+  }
+  if (isSameQuestion && !isUiWaiting && playerChoiceSubmitted !== null) {
+    return;
+  }
+  if (isSameQuestion && !isUiWaiting && currentGameState === 'QUESTION_ACTIVE' && countdownInterval) {
+    return;
+  }
+
+  currentRound = roundNum;
+  if (incomingQIndex !== null) {
+    currentQuestionIndex = incomingQIndex;
+  }
+  const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((currentQuestionIndex % 10) + 1));
+
+  // A genuinely new question_start event: dismiss intermission and countdown overlays
+  currentGameState = 'QUESTION_ACTIVE';
+  clearInterval(winnerCountdownInterval);
+  winnerCountdownInterval = null;
+  hideWinnerModals();
+  hideResultModal();
+  hideInterQuestionCountdown();
 
   const rawTargetEpoch = payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || payload.timer_ends_at || payload.timerEndsAtEpochMs;
   const now = Date.now();
@@ -2163,26 +2226,10 @@ function handleIncomingQuestionStart(rawPayload) {
   }
   let remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
   if (remainingSecs <= 4 && durationSeconds > 4) {
-    remainingSecs = durationSeconds;
-    timerEndsAtGlobalMs = now + (durationSeconds * 1000);
-  }
-
-  if (isUiWaiting) {
-    // Current UI is stuck on waiting or blank - clear submitted choice so question displays immediately
-    playerChoiceSubmitted = null;
-  }
-  if (isSameQuestion && !isUiWaiting && playerChoiceSubmitted !== null) { // if (isSameQuestion && playerChoiceSubmitted !== null)
-    // Current question is already active and answer submitted.
-    // Preserve their answer selection and do not wipe question scored state
-    currentQuestionData = questionData;
-    if (remainingSecs > 0 && currentGameState !== 'QUESTION_REVIEW') {
-      startCountdown(remainingSecs);
+    if (!payload.is_resumed) {
+      remainingSecs = durationSeconds;
+      timerEndsAtGlobalMs = now + (durationSeconds * 1000);
     }
-    return;
-  }
-  if (isSameQuestion && !isUiWaiting && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
-    currentQuestionData = questionData;
-    return;
   }
 
   currentQuestionData = questionData;
@@ -2197,11 +2244,17 @@ function handleIncomingQuestionStart(rawPayload) {
 
   onQuestionStart({
     questionData,
+    questionIndex: currentQuestionIndex,
+    cumulative_question_index: currentQuestionIndex + 1,
     roundNumber: roundNum,
     questionNumberInRound: qNumInRound,
     durationSeconds: remainingSecs,
     totalTimerDuration: durationSeconds,
+    timerEndsAtMs: timerEndsAtGlobalMs,
     difficulty: questionData.difficulty,
+    timer_state: payload.timer_state,
+    question_phase: payload.question_phase,
+    is_resumed: payload.is_resumed,
   });
 }
 
@@ -2230,7 +2283,14 @@ function handleIncomingTimerExpired(rawPayload) {
                     (Date.now() + 15000);
   onTimerExpired({
     correctOption: payload.correct_option || payload.correctOption || payload.correct,
+    correct_option: payload.correct_option || payload.correctOption || payload.correct,
     correctText: payload.correctText,
+    question_id: payload.question_id || payload.id,
+    id: payload.id || payload.question_id,
+    questionIndex: payload.questionIndex,
+    question_index: payload.question_index,
+    roundNumber: payload.roundNumber || payload.round_number,
+    questionNumberInRound: payload.questionNumberInRound || payload.question_number_in_round,
     next_question_starts_at_epoch_ms: nextEpoch,
     nextQuestionStartsAtEpochMs: nextEpoch,
     game_play_mode: payload.game_play_mode || 'Auto',
@@ -2271,7 +2331,7 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'game_reset') {
     onGameReset();
   } else if (normEvent === 'request_state_sync') {
-    if (isAutomatedEngineRunning) {
+    if (isLocalHostEngineMaster && isAutomatedEngineRunning) {
       if (hostEngineState === 'PRE_GAME') {
         const rem = Math.max(1, Math.ceil((hostTargetEpochMs - Date.now()) / 1000));
         broadcastRealtimeEvent('pre_game_countdown', {
@@ -2281,45 +2341,62 @@ function handleRealtimeIncomingEvent(event, data) {
           roundNumber: currentRound,
           room_code: currentRoomCode
         });
-      } else if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+      } else if ((hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING') && currentQuestionData) {
         const remainingMs = timerEndsAtGlobalMs - Date.now();
         const defaultDur = selectedQuestionDuration || 20;
-        const rem = (remainingMs > 2000) ? Math.ceil(remainingMs / 1000) : defaultDur;
-        const targetEpoch = (remainingMs > 2000) ? timerEndsAtGlobalMs : (Date.now() + defaultDur * 1000);
-        broadcastRealtimeEvent('question_start', {
-          question_index: (currentQuestionIndex % 10) + 1,
-          cumulative_question_index: currentQuestionIndex + 1,
-          question_number_in_round: (currentQuestionIndex % 10) + 1,
-          round_number: currentRound,
-          roundNumber: currentRound,
-          total_questions: 10,
-          total_questions_in_round: 10,
-          id: currentQuestionData.id,
-          question_id: currentQuestionData.id,
-          duration_seconds: defaultDur,
-          remaining_seconds: rem,
-          time_limit_seconds: defaultDur,
-          total_duration: defaultDur,
-          totalTimerDuration: defaultDur,
-          timer_ends_at_epoch_ms: targetEpoch,
-          timerEndsAtMs: targetEpoch,
-          category: currentQuestionData.category,
-          difficulty: selectedDifficulty,
-          question_text: currentQuestionData.text,
-          option_a: currentQuestionData.options.A,
-          option_b: currentQuestionData.options.B,
-          option_c: currentQuestionData.options.C,
-          option_d: currentQuestionData.options.D,
-          options: currentQuestionData.options,
-          questionData: currentQuestionData,
-          correct_option: currentQuestionData.correct,
-        });
+        const isReading = hostEngineState === 'QUESTION_READING';
+        if (isReading || remainingMs > 1000) {
+          const rem = isReading ? defaultDur : Math.ceil(remainingMs / 1000);
+          const targetEpoch = isReading ? 0 : timerEndsAtGlobalMs;
+          broadcastRealtimeEvent('question_start', {
+            questionIndex: currentQuestionIndex,
+            question_index: (currentQuestionIndex % 10) + 1,
+            cumulative_question_index: currentQuestionIndex + 1,
+            question_number_in_round: (currentQuestionIndex % 10) + 1,
+            round_number: currentRound,
+            roundNumber: currentRound,
+            total_questions: 10,
+            total_questions_in_round: 10,
+            id: currentQuestionData.id,
+            question_id: currentQuestionData.id,
+            duration_seconds: defaultDur,
+            remaining_seconds: rem,
+            time_limit_seconds: defaultDur,
+            total_duration: defaultDur,
+            totalTimerDuration: defaultDur,
+            timer_ends_at_epoch_ms: targetEpoch,
+            timerEndsAtMs: targetEpoch,
+            category: currentQuestionData.category,
+            difficulty: selectedDifficulty,
+            question_text: currentQuestionData.text,
+            option_a: currentQuestionData.options.A,
+            option_b: currentQuestionData.options.B,
+            option_c: currentQuestionData.options.C,
+            option_d: currentQuestionData.options.D,
+            options: currentQuestionData.options,
+            questionData: currentQuestionData,
+            correct_option: currentQuestionData.correct,
+            game_play_mode: hostGamePlayMode,
+            question_phase: isReading ? 'reading' : 'countdown',
+            timer_state: isReading ? 'idle' : 'running',
+          });
+        }
       } else if (hostEngineState === 'QUESTION_REVIEW' && currentQuestionData) {
-        broadcastRealtimeEvent('timer_expired', {
-          correct_option: currentQuestionData.correct,
-          correctText: `${currentQuestionData.correct}) ${currentQuestionData.options[currentQuestionData.correct]}`,
-          next_question_starts_at_epoch_ms: hostTargetEpochMs,
-        });
+        if ((hostTargetEpochMs - Date.now()) > 1000) {
+          broadcastRealtimeEvent('timer_expired', {
+            correctOption: currentQuestionData.correct,
+            correct_option: currentQuestionData.correct,
+            correctText: `${currentQuestionData.correct}) ${currentQuestionData.options[currentQuestionData.correct]}`,
+            question_id: currentQuestionData.id,
+            id: currentQuestionData.id,
+            questionIndex: currentQuestionIndex,
+            roundNumber: currentRound,
+            questionNumberInRound: (currentQuestionIndex % 10) + 1,
+            next_question_starts_at_epoch_ms: hostTargetEpochMs,
+            nextQuestionStartsAtEpochMs: hostTargetEpochMs,
+            game_play_mode: hostGamePlayMode,
+          });
+        }
       } else if (hostEngineState === 'ROUND_SUMMARY') {
         const rem = Math.max(1, Math.ceil((hostTargetEpochMs - Date.now()) / 1000));
         broadcastRealtimeEvent('round_completed', {
@@ -2928,6 +3005,7 @@ function initHostControls() {
     hostTargetEpochMs = 0;
 
     isAutomatedEngineRunning = false;
+    isLocalHostEngineMaster = false;
     stopHostHeartbeatLoop();
     clearTimeout(autoEngineTimeout);
     clearInterval(countdownInterval);
@@ -2979,6 +3057,7 @@ function initHostControls() {
   function resumeGameEngine() {
     if (isAutomatedEngineRunning) return;
     isAutomatedEngineRunning = true;
+    isLocalHostEngineMaster = true;
     currentGameState = 'IN PROGRESS';
     updateHostEngineUI('IN PROGRESS');
     updateHostManualDock();
@@ -3141,11 +3220,13 @@ function initHostControls() {
       return;
     }
     isAutomatedEngineRunning = true;
+    isLocalHostEngineMaster = true;
     currentGameState = 'PRE_GAME';
     currentRoundQuestions = [];
     currentQuestionIndex = 0;
     currentRound = 1;
     currentQuestionData = null;
+    activeHostQuestion = null;
     playerChoiceSubmitted = null;
     isCurrentQuestionScored = false;
     updateHostEngineUI('IN PROGRESS');
@@ -3210,12 +3291,21 @@ function initHostControls() {
 
     // 2. Fetch questions during the countdown
     await initOpenTdbToken().catch(() => {});
+    try {
+      currentRoundQuestions = await fetchRealtimeTriviaQuestions(initialGenre, selectedDifficulty, 10);
+    } catch (_) {}
+    if (!currentRoundQuestions || currentRoundQuestions.length < 10) {
+      const needed = 10 - (currentRoundQuestions ? currentRoundQuestions.length : 0);
+      const localPad = getLocalQuestions(initialGenre, selectedDifficulty, needed);
+      currentRoundQuestions = [...(currentRoundQuestions || []), ...localPad];
+    }
 
     // 3. Start Question 1 automatically after countdown finishes
     clearTimeout(autoEngineTimeout);
+    const remainingMs = Math.max(0, startsAtMs - Date.now());
     autoEngineTimeout = setTimeout(() => {
       checkHostEngineTick();
-    }, countdownSecs * 1000);
+    }, remainingMs);
   });
 
   btnPauseAuto?.addEventListener('click', () => {
@@ -3270,6 +3360,8 @@ function initHostControls() {
 
   btnResetGame?.addEventListener('click', () => {
     isAutomatedEngineRunning = false;
+    isLocalHostEngineMaster = false;
+    activeHostQuestion = null;
     pausedHostEngineState = 'IDLE';
     pausedRemainingQuestionSeconds = 0;
     pausedQuestionData = null;
@@ -3313,6 +3405,12 @@ function initHostControls() {
   renderHostPlayersRoster();
 
   async function checkHostActiveGameSession() {
+    // Do NOT overwrite local state if this client is the active master Host engine
+    // or if this client is a Player controller view!
+    if (isLocalHostEngineMaster || hostHeartbeatInterval !== null || currentGameState === 'EXITED') return;
+    const activeView = document.body.getAttribute('data-view');
+    if (activeView === 'player' || document.body.classList.contains('player-mode')) return;
+
     try {
       const code = (currentRoomCode || 'TRIV').trim().toUpperCase();
       let { data } = await supabase.from('game_sessions')
@@ -3354,7 +3452,7 @@ function initHostControls() {
             updateHostEngineUI('IN PROGRESS');
           }
         } else if (session.status === 'question_active') {
-          if (currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY') {
+          if (currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'QUESTION_REVIEW') {
             return;
           }
           let endsAt = session.timer_ends_at;
@@ -3364,21 +3462,28 @@ function initHostControls() {
           } else if (endsAt) {
             endsAt = Number(endsAt);
           }
-          if (!endsAt || isNaN(endsAt)) {
-            endsAt = now + (Number(session.duration_seconds) || 20) * 1000;
-          }
-          if ((endsAt - now) > -35000) {
+          if (endsAt && !isNaN(endsAt) && endsAt > now) {
             isAutomatedEngineRunning = true;
             currentGameState = 'QUESTION_ACTIVE';
             currentRound = session.current_round || session.round_number || currentRound || 1;
-            currentQuestionIndex = session.current_question_index || currentQuestionIndex || 1;
+            if (session.current_question_index !== undefined && session.current_question_index !== null) {
+              currentQuestionIndex = Math.max(0, Number(session.current_question_index) - 1);
+            }
             if (session.question_data) {
               currentQuestionData = session.question_data;
-              const qInRound = ((currentQuestionIndex - 1) % 10) + 1;
+              const qInRound = (currentQuestionIndex % 10) + 1;
               updateHostLiveStagePreviewCard(session.question_data, currentRound, qInRound);
             }
             updateHostEngineUI('IN PROGRESS');
           }
+        } else if (session.status === 'question_review') {
+          isAutomatedEngineRunning = true;
+          currentGameState = 'QUESTION_REVIEW';
+          currentRound = session.current_round || session.round_number || currentRound || 1;
+          if (session.current_question_index !== undefined && session.current_question_index !== null) {
+            currentQuestionIndex = Math.max(0, Number(session.current_question_index) - 1);
+          }
+          updateHostEngineUI('IN PROGRESS');
         } else if (session.status === 'round_summary' || session.status === 'inter_round') {
           currentGameState = 'ROUND_SUMMARY';
           isAutomatedEngineRunning = true;
@@ -3404,7 +3509,9 @@ function initHostControls() {
           isAutomatedEngineRunning = false;
           currentGameState = 'PAUSED';
           if (session.current_round) currentRound = session.current_round;
-          if (session.current_question_index !== undefined) currentQuestionIndex = session.current_question_index;
+          if (session.current_question_index !== undefined && session.current_question_index !== null) {
+            currentQuestionIndex = Math.max(0, Number(session.current_question_index) - 1);
+          }
           if (session.remaining_question_seconds) pausedRemainingQuestionSeconds = Number(session.remaining_question_seconds);
           if (session.question_data) currentQuestionData = session.question_data;
           updateHostEngineUI('PAUSED');
@@ -5000,13 +5107,22 @@ async function runNextAutomatedStep() {
 
     // CACHE 10 QUESTIONS PER ROUND (Avoids OpenTDB rate limiting & network failures per question)
     if (questionInRound === 1 || !currentRoundQuestions || currentRoundQuestions.length < 10) {
-      try {
-        currentRoundQuestions = await fetchRealtimeTriviaQuestions(activeRoundGenre, selectedDifficulty, 10);
-      } catch (err) {
-        console.warn('[Realtime] Failed to fetch round questions, using local:', err);
+      if (!currentRoundQuestions || currentRoundQuestions.length < 10) {
+        try {
+          const fetched = await fetchRealtimeTriviaQuestions(activeRoundGenre, selectedDifficulty, 10);
+          if (fetched && fetched.length > 0) {
+            currentRoundQuestions = fetched;
+          }
+        } catch (err) {
+          console.warn('[Realtime] Failed to fetch round questions, using local:', err);
+        }
       }
       if (!currentRoundQuestions || currentRoundQuestions.length === 0) {
         currentRoundQuestions = getLocalQuestions(activeRoundGenre, selectedDifficulty, 10);
+      } else if (currentRoundQuestions.length < 10) {
+        const needed = 10 - currentRoundQuestions.length;
+        const localPad = getLocalQuestions(activeRoundGenre, selectedDifficulty, needed);
+        currentRoundQuestions = [...currentRoundQuestions, ...localPad];
       }
     }
 
@@ -5031,6 +5147,9 @@ async function runNextAutomatedStep() {
         correct: 'A'
       };
     }
+
+    activeHostQuestion = question;
+    currentQuestionData = question;
 
     const durationSeconds = selectedQuestionDuration || 20;
     const isManual = hostGamePlayMode === 'Manual';
@@ -5182,6 +5301,7 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
 
   const expiredPayload = {
     correctOption: question.correct,
+    correct_option: question.correct,
     correctText: `${question.correct}) ${question.options[question.correct]}`,
     next_question_starts_at_epoch_ms: hostTargetEpochMs,
     nextQuestionStartsAtEpochMs: hostTargetEpochMs,
@@ -5201,6 +5321,18 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   broadcastRealtimeEvent('timer_expired', expiredPayload);
   onTimerExpired(expiredPayload);
   updateHostManualDock();
+
+  try {
+    supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'question_review',
+      current_question_index: currentQuestionIndex + 1,
+      current_round: currentRound,
+      round_number: currentRound,
+      timer_ends_at: new Date(hostTargetEpochMs).toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'room_code' }).catch(() => {});
+  } catch (_) {}
 
   if (anyScoreChanged) {
     broadcastRealtimeEvent('leaderboard_updated', {
@@ -5430,8 +5562,9 @@ function updateHostManualModalUI() {
 
   // Question Prompt & Options Preview
   if (qText) {
-    if (question && question.question) {
-      qText.textContent = question.question;
+    const qPrompt = question?.text || question?.question_text || question?.question;
+    if (qPrompt) {
+      qText.textContent = qPrompt;
     } else if (isAutomatedEngineRunning) {
       qText.textContent = 'Preparing next trivia question...';
     } else {
@@ -5661,6 +5794,7 @@ function updateHostManualDock() {
 
 function startManualQuestionCountdown() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_READING') return;
+  isLocalHostEngineMaster = true;
   const durationSeconds = selectedQuestionDuration || 20;
   timerEndsAtGlobalMs = Date.now() + (durationSeconds * 1000);
   hostTargetEpochMs = timerEndsAtGlobalMs;
@@ -5703,10 +5837,11 @@ function startManualQuestionCountdown() {
 
 function expireManualQuestionEarly() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
+  isLocalHostEngineMaster = true;
   clearInterval(countdownInterval);
   clearTimeout(autoEngineTimeout);
   const questionInRound = (currentQuestionIndex % 10) + 1;
-  let question = currentRoundQuestions?.[questionInRound - 1] || currentQuestionData;
+  let question = activeHostQuestion || currentQuestionData || currentRoundQuestions?.[questionInRound - 1];
   if (!question || !question.options) {
     question = currentQuestionData || { correct: 'A', options: { A: '' } };
   }
@@ -5715,15 +5850,18 @@ function expireManualQuestionEarly() {
 
 function advanceManualNextQuestion() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_REVIEW') return;
+  isLocalHostEngineMaster = true;
   clearTimeout(autoEngineTimeout);
   const questionInRound = (currentQuestionIndex % 10) + 1;
   handleHostAdvanceAfterReview(questionInRound, currentRound);
 }
 
-function handleHostAdvanceAfterRoundSummary() {
+async function handleHostAdvanceAfterRoundSummary() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'ROUND_SUMMARY') return;
+  isLocalHostEngineMaster = true;
   currentRoundQuestions = [];
   currentQuestionData = null;
+  activeHostQuestion = null;
   playerChoiceSubmitted = null;
   isCurrentQuestionScored = false;
 
@@ -5740,7 +5878,8 @@ function handleHostAdvanceAfterRoundSummary() {
   // Pre-game countdown for the new round and genre
   hostEngineState = 'PRE_GAME';
   const preGameSecs = 10;
-  hostTargetEpochMs = Date.now() + (preGameSecs * 1000);
+  const startsAtMs = Date.now() + (preGameSecs * 1000);
+  hostTargetEpochMs = startsAtMs;
 
   broadcastRealtimeEvent('pre_game_countdown', {
     countdown_seconds: preGameSecs,
@@ -5748,14 +5887,14 @@ function handleHostAdvanceAfterRoundSummary() {
     current_genre: nextGenre,
     category: nextGenre,
     round_number: nextRound,
-    starts_at_epoch_ms: hostTargetEpochMs,
+    starts_at_epoch_ms: startsAtMs,
   });
 
   handleIncomingPreGameCountdown({
     countdown_seconds: preGameSecs,
     genre: nextGenre,
     round_number: nextRound,
-    starts_at_epoch_ms: hostTargetEpochMs,
+    starts_at_epoch_ms: startsAtMs,
   });
 
   try {
@@ -5764,15 +5903,25 @@ function handleHostAdvanceAfterRoundSummary() {
       status: 'pre_game_countdown',
       current_question_index: currentQuestionIndex + 1,
       current_round: nextRound,
-      starts_at: hostTargetEpochMs,
+      starts_at: startsAtMs,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'room_code' }).catch(() => {});
   } catch (_) {}
 
+  try {
+    currentRoundQuestions = await fetchRealtimeTriviaQuestions(nextGenre, selectedDifficulty, 10);
+  } catch (_) {}
+  if (!currentRoundQuestions || currentRoundQuestions.length < 10) {
+    const needed = 10 - (currentRoundQuestions ? currentRoundQuestions.length : 0);
+    const localPad = getLocalQuestions(nextGenre, selectedDifficulty, needed);
+    currentRoundQuestions = [...(currentRoundQuestions || []), ...localPad];
+  }
+
   clearTimeout(autoEngineTimeout);
+  const remainingMs = Math.max(0, startsAtMs - Date.now());
   autoEngineTimeout = setTimeout(() => {
     checkHostEngineTick();
-  }, preGameSecs * 1000);
+  }, remainingMs);
 }
 
 function checkHostEngineTick() {
@@ -5786,7 +5935,7 @@ function checkHostEngineTick() {
     } else if (hostEngineState === 'QUESTION_ACTIVE') {
       currentRound = Math.max(currentRound, Math.floor(currentQuestionIndex / 10) + 1);
       const questionInRound = (currentQuestionIndex % 10) + 1;
-      let question = currentRoundQuestions?.[questionInRound - 1];
+      let question = activeHostQuestion || currentQuestionData || currentRoundQuestions?.[questionInRound - 1];
       if (!question || !question.options) {
         question = currentQuestionData || { correct: 'A', options: { A: '' } };
       }
@@ -6116,22 +6265,30 @@ function startCountdown(seconds) {
     if (remainingTimerSeconds <= 0) {
       clearInterval(countdownInterval);
       playSound('buzz');
-      // Autonomous fallback: if timer expired and still in QUESTION_ACTIVE,
-      // reveal answer locally and prepare to sync if host was delayed!
+      // If this client is the active master Host engine, trigger the host engine timeout handler directly
+      if (isLocalHostEngineMaster && isAutomatedEngineRunning && hostEngineState === 'QUESTION_ACTIVE') {
+        hostTargetEpochMs = Date.now();
+        checkHostEngineTick();
+        return;
+      }
+      // Autonomous fallback for Player / passive TV: if timer expired and still in QUESTION_ACTIVE,
+      // reveal answer locally using currentQuestionData!
       if (currentGameState === 'QUESTION_ACTIVE') {
         currentGameState = 'QUESTION_REVIEW';
-        const targetEpoch = Date.now() + 15000;
+        const qInRound = ((currentQuestionIndex % 10) + 1);
+        const reviewDur = (qInRound === 10) ? 20000 : 15000;
+        const targetEpoch = Date.now() + reviewDur;
         onTimerExpired({
           correctOption: currentQuestionData?.correct,
+          correct_option: currentQuestionData?.correct,
+          question_id: currentQuestionData?.id,
+          id: currentQuestionData?.id,
+          questionNumberInRound: qInRound,
+          roundNumber: currentRound,
           next_question_starts_at_epoch_ms: targetEpoch,
           nextQuestionStartsAtEpochMs: targetEpoch,
           game_play_mode: 'Auto',
         });
-        setTimeout(() => {
-          if (currentGameState === 'QUESTION_REVIEW') {
-            broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
-          }
-        }, 15000);
       }
     }
   }, 500);
@@ -6212,10 +6369,14 @@ function startPlayerReviewCountdown(seconds, targetEpochMs, isLastQ = false) {
       if (rem <= 0) {
         clearInterval(playerReviewInterval);
         hideResultModal();
-        if (typeof triggerActiveSessionSync === 'function') {
-          triggerActiveSessionSync();
-        }
-        broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+        setTimeout(() => {
+          if (currentGameState === 'QUESTION_REVIEW') {
+            if (typeof triggerActiveSessionSync === 'function') {
+              triggerActiveSessionSync();
+            }
+            broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+          }
+        }, 1500);
       }
     }, 500);
   }
@@ -6223,9 +6384,27 @@ function startPlayerReviewCountdown(seconds, targetEpochMs, isLastQ = false) {
 
 // 6. TIMER EXPIRED -> HIGHLIGHT CORRECT OPTION TILE ON TV & START NEXT QUESTION COUNTDOWN TIMER ON TV
 function onTimerExpired(payload) {
-  const rawCorrect = payload?.correct_option || payload?.correctOption || payload?.correct || currentQuestionData?.correct || '';
+  const incomingQId = payload?.question_id || payload?.id;
+  if (incomingQId && currentQuestionData?.id && String(incomingQId) !== String(currentQuestionData.id)) {
+    // Ignore stale timer_expired event belonging to a different question
+    return;
+  }
+
+  clearInterval(countdownInterval);
+  currentGameState = 'QUESTION_REVIEW';
+
+  const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
+  if (lastScoredQuestionKey === qIdentifier && isCurrentQuestionScored) {
+    // Already evaluated and scored for this exact question; do not flip result or overwrite modal/UI
+    return;
+  }
+
+  const rawCorrect = currentQuestionData?.correct || payload?.correct_option || payload?.correctOption || payload?.correct || '';
   const correctOpt = rawCorrect.toUpperCase().trim();
-  const correctTextStr = payload?.correctText || `${correctOpt}) ${currentQuestionData?.options?.[correctOpt] || ''}`;
+  const localOptText = currentQuestionData?.options?.[correctOpt];
+  const correctTextStr = localOptText
+    ? `${correctOpt}) ${localOptText}`
+    : (payload?.correctText || `${correctOpt}) ${currentQuestionData?.options?.[correctOpt] || ''}`);
 
   const btnTvBack = document.getElementById('btn-tv-back');
   if (btnTvBack) btnTvBack.classList.remove('question-hidden');
@@ -6281,6 +6460,7 @@ function onTimerExpired(payload) {
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
+    btn.classList.remove('review-correct', 'review-wrong');
     const choice = (btn.dataset.choice || '').toUpperCase();
     const existingBadge = btn.querySelector('.player-correct-badge');
     if (existingBadge) existingBadge.remove();
@@ -6361,13 +6541,6 @@ function onTimerExpired(payload) {
   tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
-  const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
-  
-  if (lastScoredQuestionKey === qIdentifier && isCurrentQuestionScored) {
-    // Already evaluated and scored for this exact question; do not flip result or overwrite modal
-    return;
-  }
-
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);
 
   if (!isCurrentQuestionScored) {
@@ -6587,10 +6760,15 @@ function showInterQuestionCountdown(targetEpochMs) {
         : 'Loading next question...';
     }
     if (rem <= 0) {
-      if (typeof triggerActiveSessionSync === 'function') {
-        triggerActiveSessionSync();
-      }
-      broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+      clearInterval(playerInterQuestionInterval);
+      setTimeout(() => {
+        if (currentGameState === 'QUESTION_REVIEW') {
+          if (typeof triggerActiveSessionSync === 'function') {
+            triggerActiveSessionSync();
+          }
+          broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
+        }
+      }, 1500);
     }
   };
 
@@ -6948,9 +7126,8 @@ function initPlayerControls() {
   const answerBtns = document.querySelectorAll('.btn-answer');
   const nicknameInput = document.getElementById('input-nickname');
 
-  const savedNick = safeStorage.getItem('bar_trivia_player_nickname');
-  if (savedNick && nicknameInput && !nicknameInput.value) {
-    nicknameInput.value = savedNick;
+  if (nicknameInput) {
+    nicknameInput.value = '';
   }
 
   function doJoin() {
@@ -7146,14 +7323,19 @@ function initPlayerControls() {
               endsAt = Number(endsAt);
             }
             const dur = Math.max(5, Number(session.duration_seconds || session.time_limit_seconds || selectedQuestionDuration || 20));
-            if (!endsAt || isNaN(endsAt) || (endsAt - now) <= 4000) {
+            const isReadingPhase = session.status === 'active_reading';
+            // If question_active timer has already expired in the DB, do NOT fabricate a new deadline or restart the question!
+            if (!isReadingPhase && endsAt && !isNaN(endsAt) && endsAt <= now) {
+              return;
+            }
+            if (!endsAt || isNaN(endsAt)) {
               endsAt = now + (dur * 1000);
             }
-            if ((endsAt - now) > -60000) {
-              const sessionQIdx = session.current_question_index || 0;
+            if (isReadingPhase || endsAt > now) {
+              const sessionQIdx = Number(session.current_question_index || 0);
               const curQIdx = (currentQuestionIndex !== null && currentQuestionIndex !== undefined) ? currentQuestionIndex + 1 : 0;
-              const qText = qData.text || qData.question || qData.question_text || '';
-              const curText = currentQuestionData ? (currentQuestionData.text || currentQuestionData.question || currentQuestionData.question_text || '') : '';
+              const qText = decodeHtmlEntities(qData.text || qData.question || qData.question_text || '');
+              const curText = currentQuestionData ? decodeHtmlEntities(currentQuestionData.text || currentQuestionData.question || currentQuestionData.question_text || '') : '';
               
               const playerQElem = document.getElementById('player-question-text');
               const isUiWaiting = !playerQElem ||
@@ -7163,12 +7345,20 @@ function initPlayerControls() {
                 playerQElem.textContent.includes('NEXT ROUND') ||
                 playerQElem.textContent.trim() === '';
 
+              const isSameQ = Boolean(currentQuestionData) && (
+                (qData.id && currentQuestionData.id && String(qData.id) === String(currentQuestionData.id)) ||
+                (qText && curText && qText === curText) ||
+                (sessionQIdx > 0 && sessionQIdx === curQIdx && sessionRound === currentRound)
+              );
+
               const isDifferentQ = !currentQuestionData ||
-                isUiWaiting ||
-                (sessionQIdx > 0 && sessionQIdx !== curQIdx) ||
-                (sessionRound !== currentRound) ||
-                (qData.id && currentQuestionData.id && qData.id !== currentQuestionData.id) ||
-                (qText && curText && qText !== curText);
+                (!isSameQ && (
+                  isUiWaiting ||
+                  (sessionQIdx > 0 && sessionQIdx !== curQIdx) ||
+                  (sessionRound !== currentRound) ||
+                  (qData.id && currentQuestionData.id && qData.id !== currentQuestionData.id) ||
+                  (qText && curText && qText !== curText)
+                ));
 
               if (isDifferentQ) {
                 hideResultModal();
@@ -7249,6 +7439,7 @@ function initPlayerControls() {
     }
 
     function checkActiveGameSession() {
+      if (currentGameState === 'EXITED') return;
       syncSessionFromSupabase();
     }
 
@@ -7474,6 +7665,7 @@ function mergeIncomingLeaderboard(list) {
 
 function onGamePaused(payload) {
   isAutomatedEngineRunning = false;
+  isLocalHostEngineMaster = false;
   currentGameState = 'PAUSED';
   pausedHostEngineState = hostEngineState || 'QUESTION_ACTIVE';
   pausedQuestionData = currentQuestionData;
@@ -7545,6 +7737,8 @@ function onGameResuming(payload) {
 
 // RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL
 function onGameReset() {
+  isLocalHostEngineMaster = false;
+  activeHostQuestion = null;
   playersLeaderboard = [];
   selectedGenreQueue = [];
   currentRound = 1;

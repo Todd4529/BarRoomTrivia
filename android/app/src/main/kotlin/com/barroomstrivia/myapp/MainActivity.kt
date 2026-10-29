@@ -30,13 +30,24 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             } else if (call.method == "exitApp") {
                 result.success(true)
-                try {
-                    finishAndRemoveTask()
-                } catch (_: Exception) {
-                    finishAffinity()
+                runOnUiThread {
+                    try {
+                        moveTaskToBack(true)
+                    } catch (_: Exception) {}
+                    try {
+                        finishAndRemoveTask()
+                    } catch (_: Exception) {
+                        try {
+                            finishAffinity()
+                        } catch (_: Exception) {
+                            finish()
+                        }
+                    }
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        android.os.Process.killProcess(android.os.Process.myPid())
+                        System.exit(0)
+                    }, 250)
                 }
-                android.os.Process.killProcess(android.os.Process.myPid())
-                System.exit(0)
             } else {
                 result.notImplemented()
             }

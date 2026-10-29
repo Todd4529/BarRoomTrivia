@@ -269,33 +269,57 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     bool isCancelFocused = false;
     bool isYesFocused = true;
 
+    void handleConfirmExit(BuildContext dialogContext) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+      Navigator.of(dialogContext).pop();
+      exitApplication();
+    }
+
+    void handleCancelExit(BuildContext dialogContext) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+      Navigator.of(dialogContext).pop();
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {},
-        child: AlertDialog(
-          backgroundColor: AppTheme.cardSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
-          ),
-          title: const Text(
-            'Exit Application',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-          ),
-          actionsAlignment: MainAxisAlignment.end,
-          actions: [
-            StatefulBuilder(
-              builder: (ctx, setBtnState) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Focus(
-                      autofocus: true,
-                      onFocusChange: (hasF) => setBtnState(() => isYesFocused = hasF),
-                      child: OutlinedButton(
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.select): () =>
+                isCancelFocused ? handleCancelExit(dialogContext) : handleConfirmExit(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.enter): () =>
+                isCancelFocused ? handleCancelExit(dialogContext) : handleConfirmExit(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
+                isCancelFocused ? handleCancelExit(dialogContext) : handleConfirmExit(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.gameButtonA): () =>
+                isCancelFocused ? handleCancelExit(dialogContext) : handleConfirmExit(dialogContext),
+          },
+          child: AlertDialog(
+            backgroundColor: AppTheme.cardSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3), width: 1.5),
+            ),
+            title: const Text(
+              'Exit Application',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            actionsAlignment: MainAxisAlignment.end,
+            actions: [
+              StatefulBuilder(
+                builder: (ctx, setBtnState) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OutlinedButton(
+                        autofocus: true,
+                        onFocusChange: (hasF) => setBtnState(() {
+                          isYesFocused = hasF;
+                          if (hasF) isCancelFocused = false;
+                        }),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: isYesFocused ? AppTheme.neonCyan : Colors.transparent,
                           foregroundColor: isYesFocused ? Colors.black : Colors.white70,
@@ -307,11 +331,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           elevation: isYesFocused ? 6 : 0,
                         ),
-                        onPressed: () {
-                          if (mounted) setState(() => _isExitDialogOpen = false);
-                          Navigator.of(dialogContext).pop();
-                          exitApplication();
-                        },
+                        onPressed: () => handleConfirmExit(dialogContext),
                         child: Text(
                           'Yes',
                           style: TextStyle(
@@ -321,11 +341,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Focus(
-                      onFocusChange: (hasF) => setBtnState(() => isCancelFocused = hasF),
-                      child: OutlinedButton(
+                      const SizedBox(width: 12),
+                      OutlinedButton(
+                        onFocusChange: (hasF) => setBtnState(() {
+                          isCancelFocused = hasF;
+                          if (hasF) isYesFocused = false;
+                        }),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
                           foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
@@ -337,10 +358,7 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           elevation: isCancelFocused ? 6 : 0,
                         ),
-                        onPressed: () {
-                          if (mounted) setState(() => _isExitDialogOpen = false);
-                          Navigator.of(dialogContext).pop();
-                        },
+                        onPressed: () => handleCancelExit(dialogContext),
                         child: Text(
                           'Cancel',
                           style: TextStyle(
@@ -350,12 +368,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     ).then((_) {

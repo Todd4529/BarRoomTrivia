@@ -237,6 +237,10 @@ async function fetchSingleGenreQuestions(genre, difficulty, count) {
         }
 
         if (fetched.length > 0) {
+          if (fetched.length < count) {
+            const localFill = getLocalQuestions(genre, difficulty, count - fetched.length);
+            fetched.push(...localFill);
+          }
           return fetched.slice(0, count);
         }
       }

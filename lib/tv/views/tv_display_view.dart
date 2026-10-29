@@ -252,10 +252,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             });
             _startPreGameTimer();
           } else if (status == 'question_active' && !_isGameActive && !_isPreGameCountdown) {
-            // Validate that this question is not stale from a previous game session
-            final timerEndsAt = res['timer_ends_at'] as int?;
+            // Validate that this question is not already expired
+            final rawEnds = res['timer_ends_at'];
+            int? timerEndsAt;
+            if (rawEnds is num) {
+              timerEndsAt = rawEnds.toInt();
+            } else if (rawEnds is String) {
+              final dt = DateTime.tryParse(rawEnds);
+              timerEndsAt = dt?.millisecondsSinceEpoch ?? int.tryParse(rawEnds);
+            }
             final now = DateTime.now().millisecondsSinceEpoch;
-            if (timerEndsAt != null && (now - timerEndsAt) > 60000) {
+            if (timerEndsAt != null && timerEndsAt <= now) {
               return;
             }
             final qData = res['question_data'] as Map<String, dynamic>?;
@@ -915,6 +922,18 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   void _startRoundQuestionOneAutonomously() async {
     if (!mounted || !_isGameActive) return;
 
+    final prevQuestionId = _currentQuestion?.id;
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted ||
+        !_isGameActive ||
+        _isPreGameCountdown ||
+        _isInterRoundPhase ||
+        _showRoundWinnersOverlay ||
+        _isGamePaused ||
+        (_currentQuestion != null && _currentQuestion?.id != prevQuestionId)) {
+      return;
+    }
+
     final question = TriviaRepository.getQuestionForGenres([_activeGenre], 0);
     final duration = _totalDuration > 0 ? _totalDuration : 20;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
@@ -1163,6 +1182,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   void _completeRoundAutonomously() async {
     if (!mounted) return;
 
+    final prevRound = _currentRound;
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted ||
+        _isInterRoundPhase ||
+        _showRoundWinnersOverlay ||
+        _isPreGameCountdown ||
+        _currentRound != prevRound) {
+      return;
+    }
+
     _timer?.cancel();
     _interQuestionTimer?.cancel();
 
@@ -1317,6 +1346,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       return;
     }
 
+    final prevQuestionId = _currentQuestion?.id;
+    final prevIndex = _questionIndex;
+    final prevRound = _currentRound;
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted ||
+        !_isGameActive ||
+        _isPreGameCountdown ||
+        _isInterRoundPhase ||
+        _showRoundWinnersOverlay ||
+        _isGamePaused ||
+        _currentQuestion?.id != prevQuestionId ||
+        _questionIndex != prevIndex ||
+        _currentRound != prevRound) {
+      return;
+    }
+
     final nextIndex = _questionIndex + 1;
     debugPrint('[TV] Autonomously advancing to Question $nextIndex in Round $_currentRound');
 
@@ -1361,7 +1406,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
 
     Future.delayed(const Duration(milliseconds: 350), () {
-      if (mounted && _isGameActive && _questionIndex == nextIndex) {
+      if (mounted &&
+          _isGameActive &&
+          _questionIndex == nextIndex &&
+          _currentQuestion?.id == question.id) {
         _realtimeService.broadcastQuestion(
           roomCode: _displayRoomCode,
           questionIndex: ((_currentRound - 1) * _totalQuestionsInRound) + nextIndex,
@@ -1408,6 +1456,34 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
     bool isCancelFocused = false;
     bool isYesFocused = true;
+    bool isHostQrFocused = false;
+
+    void handleConfirmExit(BuildContext dialogContext) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+      Navigator.of(dialogContext).pop();
+      exitApplication();
+    }
+
+    void handleCancelExit(BuildContext dialogContext) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+      Navigator.of(dialogContext).pop();
+    }
+
+    void handleShowHostQr(BuildContext dialogContext) {
+      if (mounted) setState(() => _isExitDialogOpen = false);
+      Navigator.of(dialogContext).pop();
+      _showHostControlQrDialog();
+    }
+
+    void handleFocusedActivate(BuildContext dialogContext) {
+      if (isCancelFocused) {
+        handleCancelExit(dialogContext);
+      } else if (isHostQrFocused) {
+        handleShowHostQr(dialogContext);
+      } else {
+        handleConfirmExit(dialogContext);
+      }
+    }
 
     showDialog(
       context: context,
@@ -1415,7 +1491,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       builder: (dialogContext) => PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {},
-        child: Dialog(
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.select): () => handleFocusedActivate(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.enter): () => handleFocusedActivate(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.numpadEnter): () => handleFocusedActivate(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.gameButtonA): () => handleFocusedActivate(dialogContext),
+          },
+          child: Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Container(
@@ -1502,118 +1585,128 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 StatefulBuilder(
                   builder: (context, setBtnState) {
                     return FocusTraversalGroup(
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: Focus(
-                              autofocus: true,
-                              onFocusChange: (f) => setBtnState(() => isYesFocused = f),
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isYesFocused ? AppTheme.neonCyan : Colors.redAccent.withOpacity(0.2),
-                                  foregroundColor: isYesFocused ? Colors.black : Colors.redAccent,
-                                  side: BorderSide(
-                                    color: isYesFocused ? AppTheme.neonCyan : Colors.redAccent,
-                                    width: isYesFocused ? 2.5 : 1.5,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  autofocus: true,
+                                  onFocusChange: (f) => setBtnState(() {
+                                    isYesFocused = f;
+                                    if (f) {
+                                      isCancelFocused = false;
+                                      isHostQrFocused = false;
+                                    }
+                                  }),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isYesFocused ? AppTheme.neonCyan : Colors.redAccent.withOpacity(0.2),
+                                    foregroundColor: isYesFocused ? Colors.black : Colors.redAccent,
+                                    side: BorderSide(
+                                      color: isYesFocused ? AppTheme.neonCyan : Colors.redAccent,
+                                      width: isYesFocused ? 2.5 : 1.5,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: isYesFocused ? 8 : 0,
+                                    shadowColor: isYesFocused ? AppTheme.neonCyan.withOpacity(0.7) : Colors.transparent,
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: isYesFocused ? 8 : 0,
-                                  shadowColor: isYesFocused ? AppTheme.neonCyan.withOpacity(0.7) : Colors.transparent,
-                                ),
-                                icon: Icon(
-                                  Icons.power_settings_new_rounded,
-                                  size: 18,
-                                  color: isYesFocused ? Colors.black : Colors.redAccent,
-                                ),
-                                label: Text(
-                                  'Yes',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
+                                  icon: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    size: 18,
                                     color: isYesFocused ? Colors.black : Colors.redAccent,
                                   ),
+                                  label: Text(
+                                    'Yes',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: isYesFocused ? Colors.black : Colors.redAccent,
+                                    ),
+                                  ),
+                                  onPressed: () => handleConfirmExit(dialogContext),
                                 ),
-                                onPressed: () {
-                                  if (mounted) setState(() => _isExitDialogOpen = false);
-                                  Navigator.of(dialogContext).pop();
-                                  exitApplication();
-                                },
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onFocusChange: (f) => setBtnState(() {
+                                    isCancelFocused = f;
+                                    if (f) {
+                                      isYesFocused = false;
+                                      isHostQrFocused = false;
+                                    }
+                                  }),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
+                                    foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
+                                    side: BorderSide(
+                                      color: isCancelFocused ? AppTheme.neonCyan : Colors.white.withOpacity(0.2),
+                                      width: isCancelFocused ? 2.0 : 1.0,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: isCancelFocused ? 6 : 0,
+                                  ),
+                                  onPressed: () => handleCancelExit(dialogContext),
+                                  child: Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: isCancelFocused ? Colors.black : Colors.white70,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Focus(
-                              onFocusChange: (f) => setBtnState(() => isCancelFocused = f),
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  backgroundColor: isCancelFocused ? AppTheme.neonCyan : Colors.transparent,
-                                  foregroundColor: isCancelFocused ? Colors.black : Colors.white70,
-                                  side: BorderSide(
-                                    color: isCancelFocused ? AppTheme.neonCyan : Colors.white.withOpacity(0.2),
-                                    width: isCancelFocused ? 2.0 : 1.0,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: isCancelFocused ? 6 : 0,
-                                ),
-                                onPressed: () {
-                                  if (mounted) setState(() => _isExitDialogOpen = false);
-                                  Navigator.of(dialogContext).pop();
-                                },
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: isCancelFocused ? Colors.black : Colors.white70,
-                                  ),
-                                ),
+                          const SizedBox(height: 14),
+                          // HOST CONTROL QR CODE BUTTON
+                          ElevatedButton.icon(
+                            onFocusChange: (f) => setBtnState(() {
+                              isHostQrFocused = f;
+                              if (f) {
+                                isYesFocused = false;
+                                isCancelFocused = false;
+                              }
+                            }),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isHostQrFocused ? AppTheme.neonCyan : AppTheme.neonYellow,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: isHostQrFocused ? 8 : 6,
+                              shadowColor: (isHostQrFocused ? AppTheme.neonCyan : AppTheme.neonYellow).withOpacity(0.5),
+                            ),
+                            icon: const Icon(Icons.qr_code_2_rounded, size: 24, color: Colors.black),
+                            label: const Text(
+                              'HOST CONTROL QR CODE',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.0,
                               ),
                             ),
+                            onPressed: () => handleShowHostQr(dialogContext),
                           ),
                         ],
                       ),
                     );
                   },
                 ),
-                const SizedBox(height: 14),
-                // HOST CONTROL QR CODE BUTTON
-                ElevatedButton.icon(
-                  autofocus: true,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonYellow,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 6,
-                    shadowColor: AppTheme.neonYellow.withOpacity(0.5),
-                  ),
-                  icon: const Icon(Icons.qr_code_2_rounded, size: 24, color: Colors.black),
-                  label: const Text(
-                    'HOST CONTROL QR CODE',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  onPressed: () {
-                    if (mounted) setState(() => _isExitDialogOpen = false);
-                    Navigator.of(dialogContext).pop();
-                    _showHostControlQrDialog();
-                  },
-                ),
               ],
             ),
           ),
+        ),
         ),
       ),
     ).then((_) {
