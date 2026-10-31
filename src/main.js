@@ -1803,6 +1803,13 @@ function initQrCodes() {
     });
   }
 
+  const canvasMarketingTv = document.getElementById('marketing-tv-qr-canvas');
+  if (canvasMarketingTv) {
+    QRCode.toCanvas(canvasMarketingTv, playUrl, { width: 92, margin: 1 }, (err) => {
+      if (err) console.error('Marketing TV QR Code error:', err);
+    });
+  }
+
   const roomLabels = document.querySelectorAll('.qr-room-code');
   roomLabels.forEach(el => {
     el.textContent = currentRoomCode;

@@ -50,110 +50,197 @@
             Your TVs run the show. Zero paper, zero app installs, 100% automated or bartender-hosted.
           </p>
 
-          <!-- DUAL-DEVICE SHOWCASE: SMART TV DISPLAY + MOBILE CONTROLLER -->
+          <!-- SIDE-BY-SIDE PRODUCT SHOWCASE: REAL IN-GAME TV DISPLAY + REAL PLAYER PHONE DISPLAY -->
           <div class="product-showcase-container">
-            <!-- 16:9 Smart TV Frame -->
-            <div class="tv-mockup-frame">
-              <div class="tv-bezel">
-                <div class="tv-screen-content">
-                  <div class="tv-screen-header">
-                    <div class="tv-mock-brand">
-                      <span class="mock-icon">🍻</span>
-                      <span class="mock-brand-title">BAR ROOMS TRIVIA</span>
-                    </div>
-                    <div class="tv-mock-status-pill">
-                      <span class="pulse-dot"></span> LIVE • ROUND 2
-                    </div>
-                  </div>
-
-                  <div class="tv-mock-body">
-                    <div class="tv-mock-meta-row">
-                      <span class="tv-mock-category-pill">🍺 BEER, WINE & SPIRITS</span>
-                      <span class="tv-mock-timer-pill">⏱️ 18s</span>
-                    </div>
-
-                    <div class="tv-mock-q-text">
-                      Which hop variety is celebrated in American IPAs for imparting bright aromas of grapefruit zest and subtle pine?
-                    </div>
-
-                    <div class="tv-mock-options-grid">
-                      <div class="tv-mock-opt opt-a">
-                        <span class="opt-key">A</span>
-                        <span class="opt-text">Cascade</span>
+            <!-- LEFT COLUMN: 16:9 Bar TV Display (Exact match to #view-tv Live Stage) -->
+            <div class="showcase-device-col showcase-tv-col">
+              <div class="showcase-device-label">
+                <span>📺</span> BAR TV DISPLAY
+              </div>
+              <div class="tv-mockup-frame">
+                <div class="tv-bezel">
+                  <div class="mkt-tv-viewport">
+                    <!-- Exact TV Top Header -->
+                    <div class="mkt-tv-header">
+                      <div class="mkt-tv-brand">
+                        <span class="mkt-tv-brand-icon">🍻</span>
+                        <span class="mkt-tv-brand-name">BAR ROOMS TRIVIA</span>
                       </div>
-                      <div class="tv-mock-opt opt-b">
-                        <span class="opt-key">B</span>
-                        <span class="opt-text">Munich Malt</span>
-                      </div>
-                      <div class="tv-mock-opt opt-c">
-                        <span class="opt-key">C</span>
-                        <span class="opt-text">Belgian Candi</span>
-                      </div>
-                      <div class="tv-mock-opt opt-d">
-                        <span class="opt-key">D</span>
-                        <span class="opt-text">Roasted Barley</span>
+                      <div class="mkt-tv-mode-toggle">
+                        <span class="mkt-tv-toggle-btn">📣 Promo Ads</span>
+                        <span class="mkt-tv-toggle-btn active">🎯 Live Stage</span>
                       </div>
                     </div>
 
-                    <!-- TV Bottom Bar: Code & Leaderboard Preview -->
-                    <div class="tv-mock-bottom-bar">
-                      <div class="tv-mock-join-code">
-                        <span>JOIN AT <strong>BARROOMSTRIVIA.COM/PLAY</strong></span>
-                        <span class="tv-code-box">ROOM: <strong>TRIV</strong></span>
+                    <!-- Exact 65% / 35% TV Body Grid -->
+                    <div class="mkt-tv-body-grid">
+                      <!-- Left Stage (65%): Question, Circular Timer & 2x2 Options Grid -->
+                      <div class="mkt-tv-stage">
+                        <div class="mkt-tv-stage-header">
+                          <div class="mkt-tv-pills-row">
+                            <span class="category-pill mkt-cat-pill">🍺 BEER, WINE & SPIRITS</span>
+                            <span class="difficulty-pill diff-standard mkt-diff-pill">🎯 STANDARD</span>
+                          </div>
+                          <div class="mkt-tv-timer-block">
+                            <div class="mkt-timer-ring-wrapper">
+                              <svg class="timer-svg" viewBox="0 0 100 100">
+                                <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
+                                <circle class="timer-stroke" cx="50" cy="50" r="42" style="stroke-dashoffset: 26;"></circle>
+                              </svg>
+                              <div class="timer-text-container">
+                                <span class="mkt-timer-number">18</span>
+                                <span class="mkt-timer-label">SEC</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="mkt-question-container">
+                          <div class="genre-icon-box mkt-genre-icon-box">
+                            <span class="mkt-genre-big-icon">🍺</span>
+                          </div>
+                          <span class="mkt-round-tracker">ROUND 1 • QUESTION 4/10</span>
+                          <h2 class="mkt-question-headline">
+                            Which hop variety is celebrated in American IPAs for imparting bright aromas of grapefruit zest and subtle pine?
+                          </h2>
+                        </div>
+
+                        <div class="mkt-options-grid">
+                          <div class="mkt-option-tile tile-a">
+                            <span class="lbl">A</span>
+                            <span>Cascade</span>
+                          </div>
+                          <div class="mkt-option-tile tile-b">
+                            <span class="lbl">B</span>
+                            <span>Munich Malt</span>
+                          </div>
+                          <div class="mkt-option-tile tile-c">
+                            <span class="lbl">C</span>
+                            <span>Belgian Candi</span>
+                          </div>
+                          <div class="mkt-option-tile tile-d">
+                            <span class="lbl">D</span>
+                            <span>Roasted Barley</span>
+                          </div>
+                        </div>
                       </div>
-                      <div class="tv-mock-top-player">
-                        <span>🥇 1ST PLACE: <strong>HOPHEAD (340 PTS)</strong></span>
+
+                      <!-- Right Sidebar (35%): Join Game QR Code & Live Leaderboard -->
+                      <div class="mkt-tv-sidebar">
+                        <div class="mkt-qr-card">
+                          <span class="mkt-qr-title">SCAN TO PLAY</span>
+                          <div class="mkt-qr-code-wrapper">
+                            <canvas id="marketing-tv-qr-canvas"></canvas>
+                          </div>
+                          <div class="mkt-qr-room-info">
+                            <span>ROOM CODE</span>
+                            <strong class="qr-room-code">TRIV</strong>
+                          </div>
+                        </div>
+
+                        <div class="mkt-leaderboard-card">
+                          <div class="mkt-lb-header">
+                            <span>🏆 LIVE LEADERBOARD</span>
+                          </div>
+                          <ul class="mkt-lb-list">
+                            <li class="mkt-lb-item top-1">
+                              <div class="mkt-lb-left">
+                                <span class="mkt-lb-rank">#1</span>
+                                <span>HOPHEAD</span>
+                              </div>
+                              <span class="mkt-lb-score">340 pts</span>
+                            </li>
+                            <li class="mkt-lb-item top-2">
+                              <div class="mkt-lb-left">
+                                <span class="mkt-lb-rank">#2</span>
+                                <span>SARAH_B</span>
+                              </div>
+                              <span class="mkt-lb-score">280 pts</span>
+                            </li>
+                            <li class="mkt-lb-item top-3">
+                              <div class="mkt-lb-left">
+                                <span class="mkt-lb-rank">#3</span>
+                                <span>MALT_MASTER</span>
+                              </div>
+                              <span class="mkt-lb-score">250 pts</span>
+                            </li>
+                          </ul>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+                <div class="tv-chin-logo">BAR ROOMS TRIVIA</div>
+                <div class="tv-stand-neck"></div>
+                <div class="tv-stand-base"></div>
               </div>
-              <div class="tv-chin-logo">BAR ROOMS TRIVIA</div>
-              <div class="tv-stand-neck"></div>
-              <div class="tv-stand-base"></div>
             </div>
 
-            <!-- Overlapping Smartphone Mobile Controller Mockup -->
-            <div class="phone-mockup-frame">
-              <div class="phone-island"></div>
-              <div class="phone-screen-content">
-                <div class="phone-header">
-                  <div class="phone-brand">
-                    <span class="phone-avatar">⚡</span>
-                    <div class="phone-player-info">
-                      <strong class="phone-player-name">SARAH_B</strong>
-                      <span class="phone-player-score">280 PTS • STREAK 3🔥</span>
+            <!-- RIGHT COLUMN: Smartphone Player Controller (Exact match to #view-player) -->
+            <div class="showcase-device-col showcase-phone-col">
+              <div class="showcase-device-label">
+                <span>📱</span> PLAYER PHONE DISPLAY
+              </div>
+              <div class="phone-mockup-frame">
+                <div class="phone-island"></div>
+                <div class="phone-screen-content">
+                  <!-- Exact Player Brand Bar -->
+                  <div class="mkt-player-brand-bar">
+                    <img src="./assets/images/app_logo.png" alt="Bar Rooms Trivia Logo" class="mkt-player-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';">
+                    <span class="mkt-player-brand-title">BAR ROOMS TRIVIA</span>
+                  </div>
+
+                  <!-- Exact Player Sticker Card (Nickname, Room/Round, Timer Badge, Points Pill) -->
+                  <div class="mkt-controller-header">
+                    <div class="mkt-player-info">
+                      <span class="mkt-nickname-highlight">SARAH_B</span>
+                      <span class="mkt-room-sub">ROOM: TRIV • ROUND 1 (Q4/10)</span>
+                    </div>
+                    <div class="mkt-header-right-badges">
+                      <div class="mkt-player-timer-badge">
+                        ⏱️ <span>18</span>s
+                      </div>
+                      <div class="mkt-player-score-pill">
+                        <span>280</span> PTS
+                      </div>
                     </div>
                   </div>
-                  <div class="phone-room-pill">ROOM: TRIV</div>
-                </div>
 
-                <div class="phone-question-card">
-                  <div class="phone-meta">QUESTION 4 OF 10 • ROUND 2</div>
-                  <div class="phone-q-title">Which hop variety imparts bright grapefruit zest and pine?</div>
-                </div>
+                  <!-- Exact Player Question Card -->
+                  <div class="mkt-player-question-card">
+                    <div class="mkt-card-meta">
+                      <div class="mkt-meta-pills">
+                        <span class="category-pill-sm mkt-p-cat">🍺 BEER, WINE & SPIRITS</span>
+                        <span class="difficulty-pill-sm diff-standard mkt-p-diff">🎯 STANDARD</span>
+                      </div>
+                      <div class="mkt-status-badge">
+                        <span>⏱️</span> <span>UNLOCKED</span>
+                      </div>
+                    </div>
+                    <h3 class="mkt-player-q-headline">
+                      Which hop variety is celebrated in American IPAs for imparting bright aromas of grapefruit zest and subtle pine?
+                    </h3>
+                  </div>
 
-                <div class="phone-buzzer-grid">
-                  <button type="button" class="phone-btn phone-btn-a selected">
-                    <span class="btn-letter">A</span>
-                    <span class="btn-label">Cascade</span>
-                  </button>
-                  <button type="button" class="phone-btn phone-btn-b">
-                    <span class="btn-letter">B</span>
-                    <span class="btn-label">Munich Malt</span>
-                  </button>
-                  <button type="button" class="phone-btn phone-btn-c">
-                    <span class="btn-letter">C</span>
-                    <span class="btn-label">Belgian Candi</span>
-                  </button>
-                  <button type="button" class="phone-btn phone-btn-d">
-                    <span class="btn-letter">D</span>
-                    <span class="btn-label">Roasted Barley</span>
-                  </button>
-                </div>
-
-                <div class="phone-footer-hint">
-                  ✓ Answer locked in! Waiting for timer...
+                  <!-- Exact 2x2 Full-Color Answer Button Grid -->
+                  <div class="mkt-button-grid-2x2">
+                    <div class="mkt-btn-answer btn-a">
+                      <span class="mkt-btn-lbl">A</span>
+                      <span class="mkt-btn-text">Cascade</span>
+                    </div>
+                    <div class="mkt-btn-answer btn-b">
+                      <span class="mkt-btn-lbl">B</span>
+                      <span class="mkt-btn-text">Munich Malt</span>
+                    </div>
+                    <div class="mkt-btn-answer btn-c">
+                      <span class="mkt-btn-lbl">C</span>
+                      <span class="mkt-btn-text">Belgian Candi</span>
+                    </div>
+                    <div class="mkt-btn-answer btn-d">
+                      <span class="mkt-btn-lbl">D</span>
+                      <span class="mkt-btn-text">Roasted Barley</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -218,7 +305,7 @@
             <div class="step-card">
               <div class="step-badge">STEP 1</div>
               <h3>Put It on the TV</h3>
-              <p>Launch the TV screen on Fire TV, Android TV, or open <strong>barroomstrivia.com/tv</strong> on any HDMI-connected screen.</p>
+              <p>Launch the TV screen on Fire TV or Android TV.</p>
             </div>
             <div class="step-card">
               <div class="step-badge">STEP 2</div>
