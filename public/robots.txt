@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /play
+Disallow: /host
+Disallow: /tv
+Disallow: /tv-auth
+
+Sitemap: https://barroomstrivia.com/sitemap.xml

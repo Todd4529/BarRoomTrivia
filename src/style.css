@@ -4730,18 +4730,22 @@ body.auth-mode .main-container {
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(0, 229, 255, 0.1);
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  justify-content: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.16));
+  border: 2px solid rgba(0, 229, 255, 0.55);
   color: var(--accent-cyan);
-  padding: 8px 18px;
+  padding: 14px 32px;
   border-radius: 999px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  font-family: var(--font-heading);
+  font-size: clamp(18px, 2.8vw, 30px);
+  font-weight: 900;
+  letter-spacing: 2px;
+  line-height: 1.25;
   text-transform: uppercase;
-  margin-bottom: 24px;
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+  margin-bottom: 28px;
+  box-shadow: 0 0 32px rgba(0, 229, 255, 0.35), inset 0 0 12px rgba(0, 229, 255, 0.15);
+  text-shadow: 0 0 16px rgba(0, 229, 255, 0.45);
 }
 
 .hero-title {
@@ -5608,6 +5612,49 @@ body.auth-mode .main-container {
   color: var(--text-muted);
   line-height: 1.72;
   margin-bottom: 0;
+}
+
+/* FAQ Grid (SEO & Venue Info) */
+.faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 28px;
+}
+
+.faq-card {
+  background: var(--surface-card);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 32px;
+  text-align: left;
+  transition: border-color 0.25s ease, transform 0.25s ease;
+}
+
+.faq-card:hover {
+  border-color: rgba(0, 229, 255, 0.3);
+  transform: translateY(-3px);
+}
+
+.faq-card h3 {
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 12px;
+  line-height: 1.35;
+}
+
+.faq-card p {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.72;
+  margin-bottom: 0;
+}
+
+@media (max-width: 680px) {
+  .faq-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Download Section */

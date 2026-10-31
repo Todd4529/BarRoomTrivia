@@ -24,6 +24,10 @@
 <IfModule mod_mime.c>
   AddType application/manifest+json .webmanifest
   AddType application/json .json
+  AddType application/xml .xml
+  AddType text/plain .txt
+  AddType image/x-icon .ico
+  AddType image/png .png
   AddType audio/mpeg .mp3
   AddType audio/wav .wav
   AddType image/svg+xml .svg
