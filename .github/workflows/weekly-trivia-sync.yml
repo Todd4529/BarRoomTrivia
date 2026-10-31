@@ -2,8 +2,8 @@ name: Weekly Automated Internet Trivia Ingestion
 
 on:
   schedule:
-    # Runs every Sunday at 04:00 AM UTC (12:00 AM EST)
-    - cron: '0 4 * * 0'
+    # Runs twice weekly: Sunday & Wednesday at 04:00 AM UTC (12:00 AM EST)
+    - cron: '0 4 * * 0,3'
   workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard anytime
 
 permissions:

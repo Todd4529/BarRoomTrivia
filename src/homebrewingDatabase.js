@@ -187,65 +187,268 @@ export function generate500HomebrewingQuestions() {
 
   const allEquipmentDefs = equipmentAndTechniques.map(e => e.def);
 
+  const hopOriginTemplates = [
+    (h) => `Where was the "${h.name}" hop cultivar originally bred and cultivated for brewing?`,
+    (h) => `Which country is the original home of the "${h.name}" hop variety?`,
+    (h) => `A brewer picks up a bag of "${h.name}" hop pellets—which country do these hops hail from?`,
+    (h) => `In which hop-growing nation did the "${h.name}" variety originate?`,
+    (h) => `If you are brewing with authentic regional "${h.name}" hops, where were they developed?`,
+    (h) => `Trace the pedigree of "${h.name}" hops: which country introduced them to the brewing world?`,
+  ];
+
+  const hopFlavorTemplates = [
+    (h) => `What signature sensory notes do "${h.name}" hops bring to a finished beer?`,
+    (h) => `Why do brewers reach for "${h.name}" when building a hop profile?`,
+    (h) => `Tasting a single-hop beer brewed with "${h.name}" reveals which dominant flavor and aroma profile?`,
+    (h) => `How would a certified beer judge describe the aroma of "${h.name}" hops?`,
+    (h) => `Crushing fresh "${h.name}" hop cones between your palms releases which primary aromas?`,
+    (h) => `Which tasting notes are the hallmark of "${h.name}" hops in craft brewing?`,
+  ];
+
+  const hopTypeTemplates = [
+    (h) => `How do brewers classify "${h.name}" hops based on their primary kettle and cellar role?`,
+    (h) => `Under which functional brewing category is the "${h.name}" hop variety grouped?`,
+    (h) => `When designing a hop schedule, how is "${h.name}" traditionally categorized?`,
+    (h) => `Is "${h.name}" considered a bittering hop, an aroma hop, or a dual-purpose variety?`,
+    (h) => `On a hop supplier spec sheet, what usage classification is assigned to "${h.name}"?`,
+  ];
+
+  const hopAlphaTemplates = [
+    (h) => `Roughly what alpha acid percentage range can a brewer expect from a harvest of "${h.name}" hops?`,
+    (h) => `When calculating IBU additions, what is the typical alpha acid rating of "${h.name}" hops?`,
+    (h) => `How much bittering potential (alpha acid %) is packed inside "${h.name}" hops?`,
+    (h) => `Check the label on a nitrogen-flushed foil pouch of "${h.name}" hops—what alpha acid range is typical?`,
+    (h) => `What is the standard alpha acid range for "${h.name}" when plugging it into brewing software?`,
+  ];
+
   // 1. Hop questions
-  hopsData.forEach(h => {
+  hopsData.forEach((h, idx) => {
     const dOrig = pickRandomDistractors(allHopOrigins, h.origin, 3, ['Germany', 'USA', 'United Kingdom', 'New Zealand', 'Australia', 'Czech Republic']);
     const dFlav = pickRandomDistractors(allHopFlavors, h.flavor, 3);
     const dType = pickRandomDistractors(allHopTypes, h.type, 3, ['Aroma', 'Bittering', 'Dual-Purpose', 'Late Hop']);
     const dAlpha = pickRandomDistractors(allHopAlphas, h.alpha, 3, ['1-2% Alpha Acids', '30-40% Alpha Acids', '8-10% Alpha Acids']);
-    pushQ('h_orig', `In homebrewing recipes, where does the popular "${h.name}" hop variety originate from?`, h.origin, dOrig[0], dOrig[1], dOrig[2]);
-    pushQ('h_flav', `What distinct aroma profile is the "${h.name}" hop celebrated for imparting in craft beer?`, h.flavor, dFlav[0], dFlav[1], dFlav[2]);
-    pushQ('h_type', `What is the primary brewing category designation for "${h.name}" hops?`, h.type, dType[0], dType[1], dType[2]);
-    pushQ('h_alpha', `What is the approximate alpha acid bittering potential of "${h.name}" hops?`, h.alpha, dAlpha[0], dAlpha[1], dAlpha[2]);
+    pushQ('h_orig', hopOriginTemplates[idx % hopOriginTemplates.length](h), h.origin, dOrig[0], dOrig[1], dOrig[2]);
+    pushQ('h_flav', hopFlavorTemplates[idx % hopFlavorTemplates.length](h), h.flavor, dFlav[0], dFlav[1], dFlav[2]);
+    pushQ('h_type', hopTypeTemplates[idx % hopTypeTemplates.length](h), h.type, dType[0], dType[1], dType[2]);
+    pushQ('h_alpha', hopAlphaTemplates[idx % hopAlphaTemplates.length](h), h.alpha, dAlpha[0], dAlpha[1], dAlpha[2]);
   });
 
+  const maltRoleTemplates = [
+    (m) => `What job does "${m.name}" perform when added to a brewer's grist?`,
+    (m) => `Why do recipe designers include "${m.name}" in an all-grain mash bill?`,
+    (m) => `How does "${m.name}" shape the character of a homebrewed beer?`,
+    (m) => `At thehomebrew shop mill, a brewer weighs out "${m.name}"—what is its main purpose in the recipe?`,
+    (m) => `Which description best captures the brewing role of "${m.name}"?`,
+  ];
+
+  const maltSrmTemplates = [
+    (m) => `How dark is "${m.name}" on the Standard Reference Method (SRM) Lovibond color scale?`,
+    (m) => `What SRM color rating does "${m.name}" contribute to the wort?`,
+    (m) => `When estimating beer color in recipe software, what SRM value corresponds to "${m.name}"?`,
+    (m) => `Where does "${m.name}" fall on the maltster's SRM color chart?`,
+    (m) => `Which SRM color range is typical for "${m.name}"?`,
+  ];
+
+  const maltOriginTemplates = [
+    (m) => `Which country or region is traditionally renowned for malting "${m.name}"?`,
+    (m) => `Where did the malting tradition for "${m.name}" originate?`,
+    (m) => `If a recipe calls for authentic regional "${m.name}", which part of the world is famous for producing it?`,
+    (m) => `Which brewing region is most closely associated with "${m.name}"?`,
+  ];
+
   // 2. Malt questions
-  maltsData.forEach(m => {
+  maltsData.forEach((m, idx) => {
     const dRole = pickRandomDistractors(allMaltRoles, m.role, 3);
     const dSrm = pickRandomDistractors(allMaltSrms, m.srm, 3, ['10-20 SRM', '50 SRM', '150 SRM']);
     const dOrig = pickRandomDistractors(allMaltOrigins, m.origin, 3, ['Germany', 'UK', 'USA', 'Belgium']);
-    pushQ('m_role', `What primary functional role does "${m.name}" provide in a homebrew grain bill?`, m.role, dRole[0], dRole[1], dRole[2]);
-    pushQ('m_srm', `What approximate SRM color contribution does "${m.name}" add to brewing wort?`, m.srm, dSrm[0], dSrm[1], dSrm[2]);
-    pushQ('m_orig', `What world region is historically famous for producing "${m.name}"?`, m.origin, dOrig[0], dOrig[1], dOrig[2]);
+    pushQ('m_role', maltRoleTemplates[idx % maltRoleTemplates.length](m), m.role, dRole[0], dRole[1], dRole[2]);
+    pushQ('m_srm', maltSrmTemplates[idx % maltSrmTemplates.length](m), m.srm, dSrm[0], dSrm[1], dSrm[2]);
+    pushQ('m_orig', maltOriginTemplates[idx % maltOriginTemplates.length](m), m.origin, dOrig[0], dOrig[1], dOrig[2]);
   });
+
+  const yeastProfileTemplates = [
+    (y) => `What fermentation character can you expect when pitching "${y.name}"?`,
+    (y) => `How does "${y.name}" influence the flavor and attenuation of fermenting wort?`,
+    (y) => `Why would a homebrewer choose "${y.name}" for their fermenter?`,
+    (y) => `Which sensory and flocculation traits set "${y.name}" apart from other brewing strains?`,
+  ];
+
+  const yeastTempTemplates = [
+    (y) => `At what temperature range does "${y.name}" perform best during active fermentation?`,
+    (y) => `Where should you set your fermentation chamber controller when fermenting with "${y.name}"?`,
+    (y) => `What is the sweet-spot temperature window recommended by yeast labs for "${y.name}"?`,
+    (y) => `To avoid unwanted off-flavors, what fermentation temperature range suits "${y.name}"?`,
+  ];
 
   // 3. Yeast questions
-  yeastData.forEach(y => {
+  yeastData.forEach((y, idx) => {
     const dProf = pickRandomDistractors(allYeastProfiles, y.profile, 3);
     const dTemp = pickRandomDistractors(allYeastTemps, y.temp, 3, ['55°F - 65°F', '68°F - 72°F', '75°F - 82°F']);
-    pushQ('y_prof', `Which fermentation profile and ester character identifies "${y.name}"?`, y.profile, dProf[0], dProf[1], dProf[2]);
-    pushQ('y_temp', `What is the recommended fermentation temperature range for "${y.name}"?`, y.temp, dTemp[0], dTemp[1], dTemp[2]);
+    pushQ('y_prof', yeastProfileTemplates[idx % yeastProfileTemplates.length](y), y.profile, dProf[0], dProf[1], dProf[2]);
+    pushQ('y_temp', yeastTempTemplates[idx % yeastTempTemplates.length](y), y.temp, dTemp[0], dTemp[1], dTemp[2]);
   });
 
+  const styleIbuTemplates = [
+    (s) => `Under BJCP style guidelines, what IBU bitterness range is on target for a "${s.name}"?`,
+    (s) => `How many International Bitterness Units (IBUs) define a classic "${s.name}"?`,
+    (s) => `If you are entering a "${s.name}" in a homebrew competition, what IBU window do judges expect?`,
+    (s) => `What is the target bitterness range (in IBUs) for a well-balanced "${s.name}"?`,
+  ];
+
+  const styleAbvTemplates = [
+    (s) => `What alcohol by volume (ABV) percentage is standard for a traditional "${s.name}"?`,
+    (s) => `How strong is a classic "${s.name}" in terms of alcohol by volume (ABV)?`,
+    (s) => `When formulating a "${s.name}" to style, what ABV range should your hydrometer readings hit?`,
+    (s) => `Which ABV bracket matches the BJCP specification for "${s.name}"?`,
+  ];
+
+  const styleFeatTemplates = [
+    (s) => `What sensory profile are judges looking for when evaluating a "${s.name}"?`,
+    (s) => `How does a textbook "${s.name}" present in the glass?`,
+    (s) => `Which flavor, aroma, and appearance traits best describe a classic "${s.name}"?`,
+    (s) => `Pouring a pint of homebrewed "${s.name}"—what are its signature style characteristics?`,
+  ];
+
   // 4. Style questions
-  stylesData.forEach(s => {
+  stylesData.forEach((s, idx) => {
     const dIbu = pickRandomDistractors(allStyleIbus, s.ibu, 3, ['15-25 IBU', '35-50 IBU', '60-80 IBU']);
     const dAbv = pickRandomDistractors(allStyleAbvs, s.abv, 3, ['4.5-5.5% ABV', '6.0-7.0% ABV', '8.0-9.5% ABV']);
     const dFeat = pickRandomDistractors(allStyleFeatures, s.feature, 3);
-    pushQ('s_ibu', `According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s.name}"?`, s.ibu, dIbu[0], dIbu[1], dIbu[2]);
-    pushQ('s_abv', `What is the typical alcohol by volume (ABV) range for a classic "${s.name}"?`, s.abv, dAbv[0], dAbv[1], dAbv[2]);
-    pushQ('s_feat', `Which sensory characteristic accurately identifies a homebrewed "${s.name}"?`, s.feature, dFeat[0], dFeat[1], dFeat[2]);
+    pushQ('s_ibu', styleIbuTemplates[idx % styleIbuTemplates.length](s), s.ibu, dIbu[0], dIbu[1], dIbu[2]);
+    pushQ('s_abv', styleAbvTemplates[idx % styleAbvTemplates.length](s), s.abv, dAbv[0], dAbv[1], dAbv[2]);
+    pushQ('s_feat', styleFeatTemplates[idx % styleFeatTemplates.length](s), s.feature, dFeat[0], dFeat[1], dFeat[2]);
   });
+
+  const equipTemplatesA = [
+    (e) => `What is the role of "${e.term}" on brew day or in the cellar?`,
+    (e) => `In a homebrewer's vocabulary, what does "${e.term}" mean?`,
+    (e) => `How does "${e.term}" fit into the homebrewing process?`,
+    (e) => `A fellow brewer mentions "${e.term}"—what are they referring to?`,
+    (e) => `Which statement accurately explains "${e.term}" in craft brewing?`,
+  ];
+
+  const equipTemplatesB = [
+    (e) => `What problem or task does "${e.term}" address when making beer at home?`,
+    (e) => `When you encounter "${e.term}" in a brewing guide, what is being described?`,
+    (e) => `Why is "${e.term}" important to understand for quality homebrewing?`,
+    (e) => `Which brewing function or phenomenon is associated with "${e.term}"?`,
+    (e) => `How would an experienced brewmaster explain "${e.term}" to a beginner?`,
+  ];
 
   // 5. Equipment & Technique questions
-  equipmentAndTechniques.forEach(e => {
+  equipmentAndTechniques.forEach((e, idx) => {
     const dDef = pickRandomDistractors(allEquipmentDefs, e.def, 3);
-    pushQ('eq_def', `In all-grain homebrewing, what is the definition and purpose of "${e.term}"?`, e.def, dDef[0], dDef[1], dDef[2]);
-    pushQ('eq_goal', `Why would a homebrewer utilize "${e.term}" during a brew session?`, e.def, dDef[0], dDef[1], dDef[2]);
+    const dDef2 = pickRandomDistractors(allEquipmentDefs, e.def, 3);
+    pushQ('eq_def', equipTemplatesA[idx % equipTemplatesA.length](e), e.def, dDef[0], dDef[1], dDef[2]);
+    pushQ('eq_goal', equipTemplatesB[idx % equipTemplatesB.length](e), e.def, dDef2[0], dDef2[1], dDef2[2]);
   });
 
-  // 6. Systematic factual generation to ensure 500+ distinct questions
-  hopsData.forEach(h => {
-    stylesData.forEach(s => {
-      pushQ('gen_hop_ipa', `When crafting an authentic ${s.name}, how does dry-hopping with ${h.name} hops impact the final aroma?`, `Infuses vibrant ${h.flavor} without extracting bitter alpha acids`, 'Doubles the alcohol content instantly', 'Causes the beer to turn jet black', 'Eliminates all carbonation');
-      pushQ('gen_chem_bjcp', `To achieve target BJCP specifications for ${s.name} (Target: ${s.ibu}), how should boiling additions of ${h.name} be scheduled?`, `Add at 60 minutes for clean bitterness and at flameout/whirlpool for aroma`, 'Boil for 24 hours continuously', 'Add only to the mash tun cold', 'Inject into bottle caps dry');
+  // 6. Diverse Recipe Formulation, Hop Scheduling, Malt Pairing & Brewing Science (500+ total unique questions)
+  const hopStyleDryHopTemplates = [
+    (h, s) => `You're dry-hopping a 5-gallon batch of ${s.name} with ${h.name}—what sensory lift does that addition give the finished pint?`,
+    (h, s) => `If a brewer adds ${h.name} pellets to the fermenter for a ${s.name}, what aroma profile will dominate the nose?`,
+    (h, s) => `Why might a recipe for ${s.name} call for a late dry-hop charge of ${h.name}?`,
+    (h, s) => `What happens to the aroma of a ${s.name} when it is conditioned on ${h.name} hops after primary fermentation?`,
+    (h, s) => `For a brewer looking to accent a ${s.name} with ${h.name} in the whirlpool or dry-hop, what flavors come through?`,
+    (h, s) => `How does a post-fermentation dose of ${h.name} transform the bouquet of a homebrewed ${s.name}?`,
+    (h, s) => `Tapping a fresh keg of ${s.name} hopped late with ${h.name}—what aromatic notes greet the drinker?`,
+    (h, s) => `Suppose you swap your usual finishing hop in a ${s.name} for ${h.name}; what character does ${h.name} contribute?`,
+    (h, s) => `In a competition ${s.name} recipe, what aromatic payoff comes from steeping ${h.name} hops cold in the fermenter?`,
+    (h, s) => `Which aroma contribution makes ${h.name} a standout finishing hop choice when brewing a ${s.name}?`,
+  ];
+
+  const hopStyleBoilTemplates = [
+    (h, s) => `When timing kettle additions of ${h.name} for a ${s.name} (${s.ibu}), how do early boil vs. flameout charges behave?`,
+    (h, s) => `You have ${h.name} (${h.alpha}) on hand for a ${s.name}—how does kettle timing split its bittering and aromatic effects?`,
+    (h, s) => `To hit ${s.ibu} in a ${s.name} using ${h.name} hops while preserving volatile hop oils, how should additions be staged?`,
+    (h, s) => `How does boiling ${h.name} for 60 minutes compare to adding it at whirlpool when brewing a ${s.name}?`,
+    (h, s) => `In kettle hop scheduling for a ${s.name}, why would you split ${h.name} between the start of the boil and flameout?`,
+    (h, s) => `A brew-day sheet for ${s.name} lists ${h.name} at both 60 minutes and 0 minutes—what is the purpose of that two-stage schedule?`,
+    (h, s) => `What is the best way to schedule ${h.name} in the kettle to balance ${s.ibu} bitterness and fresh hop aroma in a ${s.name}?`,
+    (h, s) => `When brewing a ${s.name} with ${h.name}, how does thermal isomerization in the boil differ from a sub-180°F hop stand?`,
+  ];
+
+  const hopDryHopEffectPool = hopsData.map(h => `Layers in ${h.flavor.toLowerCase()} without adding harsh isomerized bitterness`);
+  const hopScheduleCorrectPool = [
+    'Early 60-minute boil additions isomerize alpha acids for bitterness, while flameout/whirlpool additions preserve volatile aroma oils',
+    'Boil early charges for clean iso-alpha bitterness and steep late charges below 180°F to lock in essential hop aromatics',
+    'Use a 60-minute kettle charge to reach target IBUs and a late whirlpool addition to capture delicate hop oils before chilling',
+    'Add the bittering portion at the start of the boil for alpha-acid conversion and reserve aroma charges for flameout',
+  ];
+  const hopScheduleDistractorPool = [
+    'Add all hops directly into the cold mash tun before sparging so grain enzymes isomerize the alpha acids',
+    'Boil the entire hop charge for 3 hours uncovered to prevent essential oils from evaporating',
+    'Pitch hop cones exclusively into the priming sugar solution during bottle capping to generate 60 IBUs',
+    'Freeze the hops in ice cubes and drop them into the mash out water at 170°F for maximum bitterness',
+    'Mix hops with Star San sanitizer prior to mashing to convert beta acids into fermentable maltose',
+    'Steep hops only in cold sparge water at 50°F to achieve full alpha-acid isomerization',
+  ];
+
+  let comboIdx = 0;
+  hopsData.forEach((h) => {
+    stylesData.forEach((s) => {
+      const dhPrompt = hopStyleDryHopTemplates[comboIdx % hopStyleDryHopTemplates.length](h, s);
+      const dhCorrect = `Layers in ${h.flavor.toLowerCase()} without adding harsh isomerized bitterness`;
+      const dhDistractors = pickRandomDistractors(hopDryHopEffectPool, dhCorrect, 3);
+      pushQ('gen_hop_ipa', dhPrompt, dhCorrect, dhDistractors[0], dhDistractors[1], dhDistractors[2]);
+
+      const boilPrompt = hopStyleBoilTemplates[comboIdx % hopStyleBoilTemplates.length](h, s);
+      const boilCorrect = hopScheduleCorrectPool[comboIdx % hopScheduleCorrectPool.length];
+      const boilDistractors = pickRandomDistractors(hopScheduleDistractorPool, boilCorrect, 3);
+      pushQ('gen_chem_bjcp', boilPrompt, boilCorrect, boilDistractors[0], boilDistractors[1], boilDistractors[2]);
+      comboIdx++;
     });
   });
 
-  maltsData.forEach(m => {
-    stylesData.forEach(s => {
-      pushQ('gen_malt_mash', `In an all-grain recipe for ${s.name}, what sensory contribution is provided by adding ${m.name}?`, `Contributes ${m.role} with ${m.srm} color`, 'Adds artificial lemon flavor', 'Prevents all yeast reproduction', 'Filters out water minerals');
-      pushQ('gen_mash_enzyme', `During the mash rest for ${s.name} using ${m.name}, which enzyme converts grain starches into fermentable maltose?`, 'Beta-Amylase (active at 145°F - 150°F)', 'Protease only', 'Lactase enzyme', 'Zymase');
+  const maltStyleTemplates = [
+    (m, s) => `If you work ${m.name} into the grain bill for a ${s.name}, what does it bring to the finished beer?`,
+    (m, s) => `A brewer tweaks their ${s.name} grist by adding ${m.name}—what color and flavor impact should they expect?`,
+    (m, s) => `Why would a recipe formulation for ${s.name} include ${m.name} in the mash tun?`,
+    (m, s) => `How does ${m.name} influence the wort when mashing an all-grain batch of ${s.name}?`,
+    (m, s) => `When designing a ${s.name} from scratch, what role does ${m.name} play in the grist?`,
+    (m, s) => `Evaluating a homebrewed ${s.name} brewed with ${m.name}: what contribution comes from that grain?`,
+    (m, s) => `Suppose your ${s.name} recipe calls for ${m.name}—what properties does it impart to the wort?`,
+    (m, s) => `In the mash bill for a ${s.name}, what specific traits does ${m.name} supply?`,
+  ];
+
+  const mashScienceTemplates = [
+    (m, s) => `While mashing ${m.name} for a ${s.name} at a lower 148°F (64°C) rest, how does enzyme activity shape the wort?`,
+    (m, s) => `If you mash a ${s.name} grist containing ${m.name} at a warmer 156°F (69°C) rest, what happens to the wort's fermentability?`,
+    (m, s) => `During the saccharification rest for a ${s.name} with ${m.name}, why is keeping mash pH between 5.2 and 5.6 so important?`,
+    (m, s) => `When lautering a ${s.name} mash made with ${m.name}, why must sparge water stay at or below 170°F (77°C)?`,
+    (m, s) => `In an all-grain ${s.name} mash featuring ${m.name}, how do alpha-amylase and beta-amylase work together?`,
+    (m, s) => `Before draining the mash tun on a ${s.name} brewed with ${m.name}, a brewer performs a vorlauf—what does this step accomplish?`,
+    (m, s) => `Why would a brewer test a drop of ${s.name} wort (mashed with ${m.name}) against iodophor or iodine tincture?`,
+    (m, s) => `After mashing ${m.name} for a ${s.name}, raising the grain bed to 168°F (76°C) for a mash-out serves what purpose?`,
+  ];
+
+  const mashScienceAnswers = [
+    'Beta-amylase thrives at 148°F, cleaving starches into highly fermentable maltose for a drier, crisper finish',
+    'Alpha-amylase dominates at 156°F, leaving more unfermentable dextrins for fuller body and residual mouthfeel',
+    'A mash pH of 5.2–5.6 optimizes amylase enzyme conversion, improves hop extraction, and prevents harsh husk tannin leaching',
+    'Keeping sparge water at or below 170°F prevents extracting harsh, mouth-puckering polyphenol tannins from the grain husks',
+    'Alpha-amylase randomly splits long starch chains into smaller dextrins while beta-amylase chops them from the ends into maltose',
+    'Recirculating the first runnings sets the grain bed as a natural filter so clear, husk-free wort flows into the boil kettle',
+    'Iodine stays reddish-amber when starch conversion is complete, but turns dark blue-black if unconverted starch remains',
+    'Halts enzymatic activity to lock in the fermentable-to-dextrin sugar profile and thins the wort for smoother lautering',
+  ];
+
+  const maltContributionPool = maltsData.map(m => `${m.role} (${m.srm})`);
+
+  let maltComboIdx = 0;
+  maltsData.forEach((m) => {
+    stylesData.forEach((s) => {
+      const mPrompt = maltStyleTemplates[maltComboIdx % maltStyleTemplates.length](m, s);
+      const mCorrect = `${m.role} (${m.srm})`;
+      const mDistractors = pickRandomDistractors(maltContributionPool, mCorrect, 3);
+      pushQ('gen_malt_mash', mPrompt, mCorrect, mDistractors[0], mDistractors[1], mDistractors[2]);
+
+      const sciIdx = maltComboIdx % mashScienceTemplates.length;
+      const sciPrompt = mashScienceTemplates[sciIdx](m, s);
+      const sciCorrect = mashScienceAnswers[sciIdx];
+      const sciDistractors = pickRandomDistractors(mashScienceAnswers, sciCorrect, 3);
+      pushQ('gen_mash_enzyme', sciPrompt, sciCorrect, sciDistractors[0], sciDistractors[1], sciDistractors[2]);
+      maltComboIdx++;
     });
   });
 
@@ -298,67 +501,6 @@ export function generate500HomebrewingQuestions() {
 
     declustered.push(pending.splice(foundIdx, 1)[0]);
   }
-  shuffled = declustered;
 
-  // Anti-Repetition Sanitization:
-  // Ensure that no two consecutive questions ever share identical wrong answers!
-  const allWrongs = [];
-  shuffled.forEach(q => {
-    const correctLetter = q.correct;
-    const correctVal = q.options[correctLetter];
-    Object.values(q.options).forEach(v => {
-      if (v !== correctVal) allWrongs.push(v);
-    });
-  });
-
-  let prevWrongs = new Set();
-  shuffled.forEach(q => {
-    const correctLetter = q.correct;
-    const correctVal = q.options[correctLetter];
-    const currentWrongs = Object.entries(q.options)
-      .filter(([k]) => k !== correctLetter)
-      .map(([_, v]) => v);
-
-    const hasOverlap = currentWrongs.some(w => prevWrongs.has(w.toLowerCase()));
-    if (hasOverlap && allWrongs.length >= 6) {
-      const candidates = allWrongs.filter(c => 
-        c.toLowerCase() !== correctVal.toLowerCase() &&
-        !currentWrongs.map(w => w.toLowerCase()).includes(c.toLowerCase()) &&
-        !prevWrongs.has(c.toLowerCase())
-      );
-      // Replace overlapping options
-      const newWrongs = [...currentWrongs];
-      currentWrongs.forEach((w, idx) => {
-        if (prevWrongs.has(w.toLowerCase()) && candidates.length > 0) {
-          const randIdx = Math.floor(Math.random() * candidates.length);
-          newWrongs[idx] = candidates.splice(randIdx, 1)[0];
-        }
-      });
-      // Rebuild options
-      const optList = [
-        { text: correctVal, isCorrect: true },
-        { text: newWrongs[0], isCorrect: false },
-        { text: newWrongs[1], isCorrect: false },
-        { text: newWrongs[2], isCorrect: false },
-      ];
-      for (let i = optList.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [optList[i], optList[j]] = [optList[j], optList[i]];
-      }
-      const letters = ['A', 'B', 'C', 'D'];
-      const newCorrectIdx = optList.findIndex(o => o.isCorrect);
-      q.correct = letters[newCorrectIdx];
-      q.options = {
-        A: optList[0].text,
-        B: optList[1].text,
-        C: optList[2].text,
-        D: optList[3].text,
-      };
-      prevWrongs = new Set(newWrongs.map(w => w.toLowerCase()));
-    } else {
-      prevWrongs = new Set(currentWrongs.map(w => w.toLowerCase()));
-    }
-  });
-
-  return shuffled;
+  return declustered;
 }

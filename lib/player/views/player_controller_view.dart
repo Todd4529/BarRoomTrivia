@@ -65,6 +65,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
   bool _showRoundWinnersOverlay = false;
   bool _isInterRoundPhase = false;
   int _interRoundSecondsRemaining = 120;
+  int? _interRoundTargetEpochMs;
   Timer? _interRoundTimer;
   Timer? _roundWinnersOverlayTimer;
   bool _showResultOverlay = false;
@@ -227,13 +228,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           final incomingRound = (rFromPayload != null && rFromPayload > 0) ? rFromPayload : _currentRound;
 
           // Check if this broadcast is simply a state-sync or re-broadcast of the active question
-          final isSameRound = incomingRound == _currentRound;
-          final isSameIndex = qNumInRound == _questionNumberInRound;
           final isSameQuestion = _currentQuestion != null &&
               (_currentQuestion!.id == question.id ||
                   (_currentQuestion!.questionText.isNotEmpty &&
-                      _currentQuestion!.questionText == question.questionText) ||
-                  (isSameRound && isSameIndex));
+                      _currentQuestion!.questionText == question.questionText));
 
           if (isSameQuestion &&
               (_isReviewPhase ||
@@ -600,6 +598,14 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         final rawNext = (payload['next_round'] as num?)?.toInt() ??
             (payload['nextRound'] as num?)?.toInt();
         final nextR = rawNext ?? (rawCompleted != null ? rawCompleted + 1 : _currentRound);
+        final wasAlreadyInInterRound = _isInterRoundPhase && _currentRound == nextR;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (nextStartsAt != null && nextStartsAt > nowMs) {
+          _interRoundTargetEpochMs = nextStartsAt;
+        } else if (!wasAlreadyInInterRound || _interRoundTargetEpochMs == null || _interRoundTargetEpochMs! <= nowMs) {
+          _interRoundTargetEpochMs = nowMs + (delaySec * 1000);
+        }
+        final effectiveRemSec = ((_interRoundTargetEpochMs! - nowMs) / 1000).ceil().clamp(1, 660);
         _currentRound = nextR;
 
         if (parsedWinners.isNotEmpty) {
@@ -632,9 +638,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           _currentRound = nextR;
           _questionNumberInRound = 1;
           _isInterRoundPhase = true;
-          _interRoundSecondsRemaining = delaySec;
+          _interRoundSecondsRemaining = effectiveRemSec;
           _top3Winners = parsedWinners;
-          _showRoundWinnersOverlay = true;
+          if (!wasAlreadyInInterRound) {
+            _showRoundWinnersOverlay = true;
+          }
           _showResultOverlay = false;
           _isInterQuestionPhase = false;
           _currentQuestion = null;
@@ -646,15 +654,17 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         });
 
         // Dismiss Top 3 Winners overlay after 20s so player view shows clean countdown card
-        final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;
-        _roundWinnersOverlayTimer?.cancel();
-        _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
-          if (mounted && _showRoundWinnersOverlay) {
-            setState(() {
-              _showRoundWinnersOverlay = false;
-            });
-          }
-        });
+        if (!wasAlreadyInInterRound) {
+          final winnerDisplaySec = effectiveRemSec > 20 ? 20 : effectiveRemSec;
+          _roundWinnersOverlayTimer?.cancel();
+          _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
+            if (mounted && _showRoundWinnersOverlay) {
+              setState(() {
+                _showRoundWinnersOverlay = false;
+              });
+            }
+          });
+        }
 
         _interRoundTimer?.cancel();
         _interRoundTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -662,8 +672,8 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             timer.cancel();
             return;
           }
-          final rem = nextStartsAt != null
-              ? max(0, ((nextStartsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil())
+          final rem = _interRoundTargetEpochMs != null
+              ? max(0, ((_interRoundTargetEpochMs! - DateTime.now().millisecondsSinceEpoch) / 1000).ceil())
               : (_interRoundSecondsRemaining - 1);
           if (rem > 0) {
             setState(() {
@@ -852,8 +862,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               final isSameQ = _currentQuestion != null &&
                   (_currentQuestion!.id == q.id ||
                       (_currentQuestion!.questionText.isNotEmpty &&
-                          _currentQuestion!.questionText == q.questionText) ||
-                      (sessionR == _currentRound && calcQNum == _questionNumberInRound));
+                          _currentQuestion!.questionText == q.questionText));
               final isNewQuestion = _currentQuestion == null ||
                   (!isSameQ &&
                   (_isInterQuestionPhase ||
@@ -922,6 +931,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 : ((res['duration_seconds'] as num?)?.toInt() ?? 120);
 
             if (!_isInterRoundPhase && !_showRoundWinnersOverlay) {
+              _interRoundTargetEpochMs = targetMs ?? (DateTime.now().millisecondsSinceEpoch + (remSec * 1000));
               setState(() {
                 _isInterRoundPhase = true;
                 if (rNum != null && rNum > 0) _currentRound = rNum;
@@ -930,8 +940,30 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 _inputsLocked = true;
                 _interRoundSecondsRemaining = remSec;
               });
-            } else if (_isInterRoundPhase && targetMs != null) {
-              _interRoundSecondsRemaining = remSec;
+              _interRoundTimer?.cancel();
+              _interRoundTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+                if (!mounted) {
+                  timer.cancel();
+                  return;
+                }
+                final rem = _interRoundTargetEpochMs != null
+                    ? max(0, ((_interRoundTargetEpochMs! - DateTime.now().millisecondsSinceEpoch) / 1000).ceil())
+                    : (_interRoundSecondsRemaining - 1);
+                if (rem > 0) {
+                  setState(() {
+                    _interRoundSecondsRemaining = rem;
+                  });
+                } else {
+                  timer.cancel();
+                  if (mounted) {
+                    setState(() {
+                      _interRoundSecondsRemaining = 0;
+                      _isInterRoundPhase = false;
+                      _showRoundWinnersOverlay = false;
+                    });
+                  }
+                }
+              });
             }
           }
         }
@@ -1249,7 +1281,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                                     const Icon(Icons.timer_rounded, color: AppTheme.neonCyan, size: 18),
                                     const SizedBox(width: 6),
                                     Text(
-                                      'NEXT ROUND IN ${_interRoundSecondsRemaining >= 60 ? "${_interRoundSecondsRemaining ~/ 60} MINUTES" : "$_interRoundSecondsRemaining SECONDS"}',
+                                      'NEXT ROUND IN ${_interRoundSecondsRemaining >= 60 ? "${_interRoundSecondsRemaining ~/ 60}:${(_interRoundSecondsRemaining % 60).toString().padLeft(2, '0')}" : "$_interRoundSecondsRemaining SECONDS"}',
                                       style: const TextStyle(
                                         color: AppTheme.neonCyan,
                                         fontWeight: FontWeight.w900,

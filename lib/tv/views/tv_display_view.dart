@@ -85,6 +85,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _interRoundDurationSeconds = 120;
   bool _isInterRoundPhase = false;
   int _interRoundSecondsRemaining = 120;
+  int _interRoundTargetEpochMs = 0;
   bool _isExitDialogOpen = false;
   bool _isAdSignageModeActive = false;
   bool _isSoundEffectsEnabled = true;
@@ -691,7 +692,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           final nextR = (payload['next_round'] as num?)?.toInt() ??
               (payload['nextRound'] as num?)?.toInt() ??
               (completedR + 1);
-          final interRoundTargetEpochMs = nextStartsAt ?? (DateTime.now().millisecondsSinceEpoch + delaySec * 1000);
+          final wasAlreadyInInterRound = _isInterRoundPhase && _currentRound == nextR;
+          if (nextStartsAt != null && nextStartsAt > DateTime.now().millisecondsSinceEpoch) {
+            _interRoundTargetEpochMs = nextStartsAt;
+          } else if (!wasAlreadyInInterRound || _interRoundTargetEpochMs <= DateTime.now().millisecondsSinceEpoch) {
+            _interRoundTargetEpochMs = DateTime.now().millisecondsSinceEpoch + delaySec * 1000;
+          }
+          final effectiveRemSec = ((_interRoundTargetEpochMs - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(1, 600);
           setState(() {
             _isGameActive = false;
             _currentQuestion = null;
@@ -700,26 +707,31 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isInterQuestionPhase = false;
             _interQuestionSecondsRemaining = 0;
             _isInterRoundPhase = true;
-            _interRoundSecondsRemaining = delaySec;
+            _interRoundSecondsRemaining = effectiveRemSec;
             _top3Winners = parsed;
-            _showRoundWinnersOverlay = parsed.isNotEmpty;
+            if (!wasAlreadyInInterRound) {
+              _showRoundWinnersOverlay = parsed.isNotEmpty;
+            }
             _currentRound = nextR;
           });
 
-          if (parsed.isNotEmpty) {
+          if (!wasAlreadyInInterRound && parsed.isNotEmpty) {
             SoundService.playSound('fanfare');
           }
 
           // Display the Top 3 Winners overlay for 20 seconds, then dismiss it
           // so the ad signage is displayed uncovered for the rest of the intermission
-          final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;
-          _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
-            if (mounted && _showRoundWinnersOverlay) {
-              setState(() {
-                _showRoundWinnersOverlay = false;
-              });
-            }
-          });
+          if (!wasAlreadyInInterRound) {
+            _roundWinnersOverlayTimer?.cancel();
+            final winnerDisplaySec = effectiveRemSec > 20 ? 20 : effectiveRemSec;
+            _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
+              if (mounted && _showRoundWinnersOverlay) {
+                setState(() {
+                  _showRoundWinnersOverlay = false;
+                });
+              }
+            });
+          }
 
           // Maintain countdown timer for the entire intermission time (e.g. 2 minutes)
           _interRoundCountdownTimer?.cancel();
@@ -729,7 +741,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               return;
             }
             final now = DateTime.now().millisecondsSinceEpoch;
-            final rem = ((interRoundTargetEpochMs - now) / 1000).ceil();
+            final rem = ((_interRoundTargetEpochMs - now) / 1000).ceil();
             if (rem > 0) {
               if (_interRoundSecondsRemaining != rem) {
                 setState(() {
@@ -808,13 +820,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final sender = payload['sender']?.toString();
         if (sender == 'tv') return;
 
-        if (_showRoundWinnersOverlay) {
+        if (_isInterRoundPhase || _showRoundWinnersOverlay) {
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          final targetMs = _interRoundTargetEpochMs > nowMs
+              ? _interRoundTargetEpochMs
+              : (nowMs + (_interRoundSecondsRemaining * 1000));
+          final remSec = ((targetMs - nowMs) / 1000).ceil().clamp(1, 600);
           _realtimeService.broadcastRoundCompleted(
             roomCode: _displayRoomCode,
             roundNumber: _currentRound > 1 ? _currentRound - 1 : 1,
             nextRound: _currentRound,
-            top3Winners: SupabaseService.getTop3RoundWinners(_displayRoomCode),
-            nextRoundStartsAtEpochMs: DateTime.now().millisecondsSinceEpoch + 15000,
+            top3Winners: _top3Winners.isNotEmpty
+                ? _top3Winners
+                : SupabaseService.getTop3RoundWinners(_displayRoomCode),
+            nextRoundStartsAtEpochMs: targetMs,
+            delaySeconds: remSec,
           );
         } else if (_isPreGameCountdown) {
           _realtimeService.broadcastGameStarting(
@@ -923,7 +943,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     if (!mounted || !_isGameActive) return;
 
     final prevQuestionId = _currentQuestion?.id;
-    await Future.delayed(const Duration(milliseconds: 2500));
+    await Future.delayed(const Duration(milliseconds: 4500));
     if (!mounted ||
         !_isGameActive ||
         _isPreGameCountdown ||
@@ -1253,6 +1273,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final nextRound = _currentRound + 1;
     final interRoundSec = _interRoundDurationSeconds > 0 ? _interRoundDurationSeconds : 120;
     final nextStartsAt = DateTime.now().millisecondsSinceEpoch + (interRoundSec * 1000);
+    _interRoundTargetEpochMs = nextStartsAt;
 
     setState(() {
       _currentQuestion = null;
@@ -1273,7 +1294,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       await _realtimeService.broadcastRoundCompleted(
         roomCode: _displayRoomCode,
         top3Winners: winners,
-        roundNumber: nextRound,
+        roundNumber: prevRound,
+        nextRound: nextRound,
         nextRoundStartsAtEpochMs: nextStartsAt,
         delaySeconds: interRoundSec,
       );
@@ -1349,7 +1371,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final prevQuestionId = _currentQuestion?.id;
     final prevIndex = _questionIndex;
     final prevRound = _currentRound;
-    await Future.delayed(const Duration(milliseconds: 2500));
+    await Future.delayed(const Duration(milliseconds: 4500));
     if (!mounted ||
         !_isGameActive ||
         _isPreGameCountdown ||

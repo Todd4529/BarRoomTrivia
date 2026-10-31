@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { generateNaturalHomebrewBatch } = require('./generate_natural_homebrew.cjs');
 
 // Category mapping to BarRoomTrivia 30 standard genres
 const GENRE_MAPPING = {
@@ -281,7 +282,17 @@ async function run() {
   const otdbQuestions = await fetchOpenTdbQuestions();
   const apiNinjasQuestions = await fetchApiNinjasQuestions();
 
-  const combined = [...ttaQuestions, ...otdbQuestions, ...apiNinjasQuestions];
+  // Generate 25 natural, human-phrased homebrewing questions
+  console.log('Generating fresh natural Homebrewing batch (Option 2 - zero AI cost)...');
+  const homebrewBatch = generateNaturalHomebrewBatch({ count: 25 }).map(q => ({
+    ...q,
+    question_hash: computeQuestionHash(q.question_text),
+    source: 'Homebrewing Core Engine',
+    difficulty: q.difficulty || 'medium'
+  }));
+  console.log(`✓ Generated ${homebrewBatch.length} fresh homebrewing questions.`);
+
+  const combined = [...ttaQuestions, ...otdbQuestions, ...apiNinjasQuestions, ...homebrewBatch];
   console.log(`Total questions retrieved: ${combined.length}`);
 
   // 2. Deduplicate within this batch

@@ -52,7 +52,9 @@ class GameEngineManager {
       currentQuestionIndex = 0;
     } else if (roundNumber != null && roundNumber > 0) {
       currentRound = roundNumber;
-      currentQuestionIndex = (roundNumber - 1) * 10;
+      currentQuestionIndex = 0;
+    } else {
+      currentQuestionIndex = 0;
     }
 
     selectedTimerSeconds = timerSeconds;

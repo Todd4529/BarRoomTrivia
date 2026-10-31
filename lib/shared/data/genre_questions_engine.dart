@@ -417,11 +417,45 @@ class GenreQuestionsEngine {
     hopOrigins.addAll(['Germany', 'USA', 'New Zealand', 'Australia', 'Czech Republic', 'UK', 'France', 'Slovenia', 'Japan']);
     final hopTypes = ['Dual-Purpose', 'Aroma', 'Bittering', 'Noble Hop', 'Late Addition'];
 
-    for (var h in hops) {
-      addQ('hb_h_aroma_${h[0]}', 'Which hop variety is celebrated in homebrewing for imparting aromas of ${h[1]}?', h[0], '', '', '', distractorPool: hopNames);
-      addQ('hb_h_orig_${h[0]}', 'In homebrewing craft beer, what country of origin is the famous "${h[0]}" hop originally from?', h[2], '', '', '', distractorPool: hopOrigins);
-      addQ('hb_h_type_${h[0]}', 'What is the primary brewing category designation for the "${h[0]}" hop variety?', h[3], '', '', '', distractorPool: hopTypes);
-      addQ('hb_h_pair_${h[0]}', 'When brewing a modern Pale Ale, adding "${h[0]}" during dry hopping imparts which primary flavor profile?', h[1], '', '', '', distractorPool: hopAromas);
+    final hopAromaPrompts = [
+      (List<String> h) => 'Which hop variety is celebrated by brewers for delivering notes of ${h[1].toLowerCase()}?',
+      (List<String> h) => 'Crushing fresh hop pellets reveals ${h[1].toLowerCase()}—which hop cultivar are you smelling?',
+      (List<String> h) => 'If a single-hop beer bursts with ${h[1].toLowerCase()}, which hop was featured?',
+      (List<String> h) => 'A brewmaster wants ${h[1].toLowerCase()} in the aroma; which hop variety fits the bill?',
+      (List<String> h) => 'Tasting notes of ${h[1].toLowerCase()} are the unmistakable signature of which hop?',
+      (List<String> h) => 'Which hop cultivar is prized in the brewhouse for its ${h[1].toLowerCase()} character?',
+    ];
+
+    final hopOriginPrompts = [
+      (List<String> h) => 'Where was the "${h[0]}" hop variety originally bred and grown?',
+      (List<String> h) => 'Which hop-producing nation introduced "${h[0]}" to the brewing world?',
+      (List<String> h) => 'A bag of "${h[0]}" pellets arrives at the brewery—what is this cultivar\'s country of origin?',
+      (List<String> h) => 'Trace the agricultural roots of "${h[0]}" hops: which country do they come from?',
+      (List<String> h) => 'In which country did hop breeders develop the "${h[0]}" cultivar?',
+    ];
+
+    final hopTypePrompts = [
+      (List<String> h) => 'How is the "${h[0]}" hop variety classified for brewhouse usage?',
+      (List<String> h) => 'On a hop supplier spec sheet, what functional role is assigned to "${h[0]}"?',
+      (List<String> h) => 'When building a hop schedule, under which category does "${h[0]}" fall?',
+      (List<String> h) => 'Is "${h[0]}" grouped by brewers as an aroma hop, a bittering hop, or a dual-purpose cultivar?',
+      (List<String> h) => 'What primary brewing designation describes "${h[0]}" hops?',
+    ];
+
+    final hopPairPrompts = [
+      (List<String> h) => 'Adding "${h[0]}" during a whirlpool or dry-hop charge brings which tasting notes to the glass?',
+      (List<String> h) => 'What sensory profile does "${h[0]}" contribute when used as a finishing hop?',
+      (List<String> h) => 'Pouring a pint hopped with "${h[0]}"—what flavors and aromas stand out on the palate?',
+      (List<String> h) => 'Why do recipe designers reach for "${h[0]}" hops in the cellar?',
+      (List<String> h) => 'How would a beer judge describe the hop character of a beer showcasing "${h[0]}"?',
+    ];
+
+    for (var i = 0; i < hops.length; i++) {
+      final h = hops[i];
+      addQ('hb_h_aroma_${h[0]}', hopAromaPrompts[i % hopAromaPrompts.length](h), h[0], '', '', '', distractorPool: hopNames);
+      addQ('hb_h_orig_${h[0]}', hopOriginPrompts[i % hopOriginPrompts.length](h), h[2], '', '', '', distractorPool: hopOrigins);
+      addQ('hb_h_type_${h[0]}', hopTypePrompts[i % hopTypePrompts.length](h), h[3], '', '', '', distractorPool: hopTypes);
+      addQ('hb_h_pair_${h[0]}', hopPairPrompts[i % hopPairPrompts.length](h), h[1], '', '', '', distractorPool: hopAromas);
     }
 
     final malts = [
@@ -451,10 +485,33 @@ class GenreQuestionsEngine {
     final maltDescs = malts.map((m) => m[1]).toList();
     final maltCats = ['Base Malt', 'Caramel / Crystal', 'Roasted Malt', 'Adjunct Grain', 'Specialty Malt', 'Roasted Grain'];
 
-    for (var m in malts) {
-      addQ('hb_m_desc_${m[0]}', 'In homebrew grain bills, which malted grain is specifically known for "${m[1]}"?', m[0], '', '', '', distractorPool: maltNames);
-      addQ('hb_m_cat_${m[0]}', 'What functional category does "${m[0]}" belong to in homebrew recipe formulation?', m[2], '', '', '', distractorPool: maltCats);
-      addQ('hb_m_use_${m[0]}', 'Why would an all-grain homebrewer include "${m[0]}" in their grain bill?', m[1], '', '', '', distractorPool: maltDescs);
+    final maltDescPrompts = [
+      (List<String> m) => 'Which brewing grain is best known for "${m[1].toLowerCase()}"?',
+      (List<String> m) => 'At the grain mill, a brewer selects a malt prized for "${m[1].toLowerCase()}"—which grain is it?',
+      (List<String> m) => 'If a recipe needs "${m[1].toLowerCase()}", which grain belongs in the mash tun?',
+      (List<String> m) => 'Which malted or unmalted grain delivers "${m[1].toLowerCase()}"?',
+      (List<String> m) => 'Name the grist ingredient recognized by brewers for "${m[1].toLowerCase()}":',
+    ];
+
+    final maltCatPrompts = [
+      (List<String> m) => 'How is "${m[0]}" categorized when formulating an all-grain grist?',
+      (List<String> m) => 'Under which grain-bill classification does "${m[0]}" belong?',
+      (List<String> m) => 'In brewing software, what grain type is assigned to "${m[0]}"?',
+      (List<String> m) => 'What functional malt category describes "${m[0]}"?',
+    ];
+
+    final maltUsePrompts = [
+      (List<String> m) => 'What does "${m[0]}" bring to the table when mashed in a homebrew recipe?',
+      (List<String> m) => 'Why would an all-grain brewer weigh out "${m[0]}" for their grist?',
+      (List<String> m) => 'How does "${m[0]}" shape the wort\'s color, body, or flavor?',
+      (List<String> m) => 'What is the signature contribution of "${m[0]}" in a beer recipe?',
+    ];
+
+    for (var i = 0; i < malts.length; i++) {
+      final m = malts[i];
+      addQ('hb_m_desc_${m[0]}', maltDescPrompts[i % maltDescPrompts.length](m), m[0], '', '', '', distractorPool: maltNames);
+      addQ('hb_m_cat_${m[0]}', maltCatPrompts[i % maltCatPrompts.length](m), m[2], '', '', '', distractorPool: maltCats);
+      addQ('hb_m_use_${m[0]}', maltUsePrompts[i % maltUsePrompts.length](m), m[1], '', '', '', distractorPool: maltDescs);
     }
 
     final yeasts = [
@@ -479,9 +536,24 @@ class GenreQuestionsEngine {
     final yeastCats = yeasts.map((y) => y[2]).toSet().toList();
     yeastCats.addAll(['Lager Yeast (Bottom-Fermenting)', 'Wheat Beer Yeast', 'Belgian Ale Yeast', 'Farmhouse Ale Yeast', 'Saison Yeast', 'Wild Yeast', 'Hybrid Lager Yeast']);
 
-    for (var y in yeasts) {
-      addQ('hb_y_prof_${y[0]}', 'Which brewing yeast strain is characterized by "${y[1]}"?', y[0], '', '', '', distractorPool: yeastNames);
-      addQ('hb_y_type_${y[0]}', 'What classification does the brewing yeast "${y[0]}" represent?', y[2], '', '', '', distractorPool: yeastCats);
+    final yeastProfPrompts = [
+      (List<String> y) => 'Which brewing yeast strain is famous for "${y[1].toLowerCase()}"?',
+      (List<String> y) => 'A brewer wants "${y[1].toLowerCase()}"—which yeast pitch should they choose?',
+      (List<String> y) => 'Identify the fermentation strain described as "${y[1].toLowerCase()}":',
+      (List<String> y) => 'Which yeast culture is prized in the fermenter for "${y[1].toLowerCase()}"?',
+    ];
+
+    final yeastTypePrompts = [
+      (List<String> y) => 'How do microbiologists and brewers classify "${y[0]}"?',
+      (List<String> y) => 'Under which yeast family does "${y[0]}" belong?',
+      (List<String> y) => 'What fermentation category best describes "${y[0]}"?',
+      (List<String> y) => 'When pitching "${y[0]}", what type of brewing yeast are you working with?',
+    ];
+
+    for (var i = 0; i < yeasts.length; i++) {
+      final y = yeasts[i];
+      addQ('hb_y_prof_${y[0]}', yeastProfPrompts[i % yeastProfPrompts.length](y), y[0], '', '', '', distractorPool: yeastNames);
+      addQ('hb_y_type_${y[0]}', yeastTypePrompts[i % yeastTypePrompts.length](y), y[2], '', '', '', distractorPool: yeastCats);
     }
 
     final bjcpStyles = [
@@ -512,10 +584,32 @@ class GenreQuestionsEngine {
     allIbus.addAll(['15 - 25 IBU', '35 - 55 IBU', '70 - 100 IBU', '10 - 20 IBU', '45 - 65 IBU', '5 - 15 IBU', '20 - 30 IBU']);
     final styleChars = bjcpStyles.map((s) => s[2]).toList();
 
-    for (var s in bjcpStyles) {
-      addQ('hb_s_ibu_${s[0]}', 'According to standard BJCP brewing style guidelines, what is the expected IBU bitterness range for a "${s[0]}"?', s[1], '', '', '', distractorPool: allIbus);
-      addQ('hb_s_char_${s[0]}', 'Which sensory characteristic accurately defines a homebrewed "${s[0]}"?', s[2], '', '', '', distractorPool: styleChars);
-      addQ('hb_s_ident_${s[0]}', 'When entering a homebrew competition, which beer style entry requires "${s[2]}"?', s[0], '', '', '', distractorPool: styleNames);
+    final styleIbuPrompts = [
+      (List<String> s) => 'According to BJCP style guidelines, what IBU bitterness range is on target for a "${s[0]}"?',
+      (List<String> s) => 'How many International Bitterness Units (IBUs) are expected in a classic "${s[0]}"?',
+      (List<String> s) => 'When formulating a "${s[0]}" for competition, what IBU window do judges look for?',
+      (List<String> s) => 'What is the standard bitterness range (in IBUs) for a textbook "${s[0]}"?',
+    ];
+
+    final styleCharPrompts = [
+      (List<String> s) => 'How does a well-brewed "${s[0]}" present in the glass?',
+      (List<String> s) => 'What sensory hallmarks define an authentic "${s[0]}"?',
+      (List<String> s) => 'When judging the "${s[0]}" category, what flavor and appearance profile is expected?',
+      (List<String> s) => 'Which tasting description captures a classic "${s[0]}"?',
+    ];
+
+    final styleIdentPrompts = [
+      (List<String> s) => 'Which beer style is defined by "${s[2].toLowerCase()}"?',
+      (List<String> s) => 'A judge\'s scoresheet notes "${s[2].toLowerCase()}"—which classic beer style is on the table?',
+      (List<String> s) => 'If you pour a homebrew with "${s[2].toLowerCase()}", which BJCP style have you brewed?',
+      (List<String> s) => 'Name the classic beer style characterized by "${s[2].toLowerCase()}":',
+    ];
+
+    for (var i = 0; i < bjcpStyles.length; i++) {
+      final s = bjcpStyles[i];
+      addQ('hb_s_ibu_${s[0]}', styleIbuPrompts[i % styleIbuPrompts.length](s), s[1], '', '', '', distractorPool: allIbus);
+      addQ('hb_s_char_${s[0]}', styleCharPrompts[i % styleCharPrompts.length](s), s[2], '', '', '', distractorPool: styleChars);
+      addQ('hb_s_ident_${s[0]}', styleIdentPrompts[i % styleIdentPrompts.length](s), s[0], '', '', '', distractorPool: styleNames);
     }
 
     final brewingStepsAndChemistry = [
@@ -548,12 +642,29 @@ class GenreQuestionsEngine {
 
     final stepDefs = brewingStepsAndChemistry.map((s) => s[1]).toList();
 
-    for (var step in brewingStepsAndChemistry) {
-      addQ('hb_step_def_${step[0]}', 'In all-grain homebrewing, what does "${step[0]}" refer to?', step[1], '', '', '', distractorPool: stepDefs);
-      addQ('hb_step_goal_${step[0]}', 'What is the primary technical objective of "${step[0]}" during a brew session?', step[1], '', '', '', distractorPool: stepDefs);
+    final stepPromptsA = [
+      (List<String> st) => 'On brew day or in the cellar, what is meant by "${st[0]}"?',
+      (List<String> st) => 'How would an experienced brewer explain "${st[0]}"?',
+      (List<String> st) => 'In a homebrewer\'s lexicon, what does "${st[0]}" describe?',
+      (List<String> st) => 'Which statement accurately defines "${st[0]}" in craft brewing?',
+      (List<String> st) => 'When a recipe sheet mentions "${st[0]}", what happens during that stage?',
+    ];
+
+    final stepPromptsB = [
+      (List<String> st) => 'Why is "${st[0]}" an important concept or step in homebrewing?',
+      (List<String> st) => 'What technical role or phenomenon is associated with "${st[0]}"?',
+      (List<String> st) => 'What happens in the brewhouse or fermenter when dealing with "${st[0]}"?',
+      (List<String> st) => 'Which description matches "${st[0]}" in all-grain brewing?',
+      (List<String> st) => 'How does "${st[0]}" affect wort preparation or finished beer quality?',
+    ];
+
+    for (var i = 0; i < brewingStepsAndChemistry.length; i++) {
+      final step = brewingStepsAndChemistry[i];
+      addQ('hb_step_def_${step[0]}', stepPromptsA[i % stepPromptsA.length](step), step[1], '', '', '', distractorPool: stepDefs);
+      addQ('hb_step_goal_${step[0]}', stepPromptsB[i % stepPromptsB.length](step), step[1], '', '', '', distractorPool: stepDefs);
     }
 
-    // 6. Authentic Style & Hop Combinations (30 hops x 8 classic styles = 240 questions)
+    // 6. Authentic Style & Hop Combinations (30 hops x 8 classic styles = 240 questions with varied phrasings)
     final pairingStyles = [
       'American IPA',
       'Hazy / New England IPA',
@@ -565,26 +676,70 @@ class GenreQuestionsEngine {
       'Kölsch',
     ];
 
+    final comboHopPrompts = [
+      (List<String> h, String s) => 'You\'re dry-hopping a 5-gallon batch of $s with "${h[0]}"—what aromatic lift does that charge give the finished beer?',
+      (List<String> h, String s) => 'If a brewer adds "${h[0]}" pellets to the fermenter for a $s, which sensory notes come to the forefront?',
+      (List<String> h, String s) => 'Why might a recipe for $s call for a late whirlpool or dry-hop addition of "${h[0]}"?',
+      (List<String> h, String s) => 'What happens to the bouquet of a homebrewed $s when conditioned on "${h[0]}" hops?',
+      (List<String> h, String s) => 'Tapping a fresh keg of $s finished with "${h[0]}" hops—what aroma greets the drinker?',
+      (List<String> h, String s) => 'Suppose you swap your finishing hop in a $s for "${h[0]}"; what character does "${h[0]}" contribute?',
+      (List<String> h, String s) => 'For a brewer looking to accent a $s with "${h[0]}" after primary fermentation, what flavors shine through?',
+      (List<String> h, String s) => 'In a competition $s recipe, what aromatic payoff comes from steeping "${h[0]}" hops cold in the cellar?',
+      (List<String> h, String s) => 'How does a post-boil charge of "${h[0]}" shape the nose of a freshly poured $s?',
+      (List<String> h, String s) => 'Which aromatic profile makes "${h[0]}" a standout finishing hop choice when brewing a $s?',
+    ];
+
+    final comboHopEffectPool = hops
+        .map((h) => 'Layers in ${h[1].toLowerCase()} without extracting harsh isomerized bitterness')
+        .toList();
+
+    var hopComboIdx = 0;
     for (var h in hops) {
       for (var s in pairingStyles) {
-        addQ('hb_combo_hop_${h[0]}_$s',
-            'When crafting an authentic $s, how does dry-hopping with "${h[0]}" hops impact the final aroma?',
-            'Infuses vibrant ${h[1]} without extracting bitter alpha acids',
-            'Doubles the alcohol content instantly',
-            'Causes the beer to turn completely jet black',
-            'Eliminates all carbonation from the finished beer');
+        final prompt = comboHopPrompts[hopComboIdx % comboHopPrompts.length](h, s);
+        final correctAns = 'Layers in ${h[1].toLowerCase()} without extracting harsh isomerized bitterness';
+        addQ(
+          'hb_combo_hop_${h[0]}_$s',
+          prompt,
+          correctAns,
+          '',
+          '',
+          '',
+          distractorPool: comboHopEffectPool,
+        );
+        hopComboIdx++;
       }
     }
 
-    // 7. Authentic Style & Malt Combinations (20 malts x 8 classic styles = 160 questions)
+    // 7. Authentic Style & Malt Combinations (20 malts x 8 classic styles = 160 questions with varied phrasings)
+    final comboMaltPrompts = [
+      (List<String> m, String s) => 'If you work "${m[0]}" into the grain bill for a $s, what does it bring to the finished beer?',
+      (List<String> m, String s) => 'A brewer tweaks their $s grist by adding "${m[0]}"—what flavor, body, or color impact should they expect?',
+      (List<String> m, String s) => 'Why would an all-grain recipe for $s include "${m[0]}" in the mash tun?',
+      (List<String> m, String s) => 'How does "${m[0]}" influence the wort when mashing a batch of $s?',
+      (List<String> m, String s) => 'When designing a $s from scratch, what role does "${m[0]}" play in the grist?',
+      (List<String> m, String s) => 'Evaluating a homebrewed $s brewed with "${m[0]}": what contribution comes from that grain?',
+      (List<String> m, String s) => 'Suppose your $s recipe calls for "${m[0]}"—what properties does it impart to the batch?',
+      (List<String> m, String s) => 'In the mash bill for a $s, what specific traits does "${m[0]}" supply?',
+    ];
+
+    final comboMaltEffectPool = malts.map((m) => 'Contributes ${m[1].toLowerCase()}').toList();
+
+    var maltComboIdx = 0;
     for (var m in malts) {
       for (var s in pairingStyles) {
-        addQ('hb_combo_malt_${m[0]}_$s',
-            'In an all-grain recipe formulation for $s, what sensory contribution is provided by adding "${m[0]}"?',
-            'Contributes ${m[1]}',
-            'Adds artificial lemon flavor',
-            'Prevents all yeast reproduction',
-            'Filters out water minerals entirely');
+        final prompt = comboMaltPrompts[maltComboIdx % comboMaltPrompts.length](m, s);
+        final correctAns = 'Contributes ${m[1].toLowerCase()}';
+        addQ(
+          'hb_combo_malt_${m[0]}_$s',
+          prompt,
+          correctAns,
+          '',
+          '',
+          '',
+          distractorPool: comboMaltEffectPool,
+        );
+        maltComboIdx++;
       }
     }
 

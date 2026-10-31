@@ -1715,25 +1715,6 @@ function initNavigation() {
     switchView(view);
   });
 
-  // Marketing Quick-Join Form
-  const marketingJoinForm = document.getElementById('marketing-join-form');
-  if (marketingJoinForm) {
-    marketingJoinForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const input = document.getElementById('marketing-room-input');
-      const code = (input?.value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
-      if (code) {
-        currentRoomCode = code;
-        const roomInput = document.getElementById('input-room-code');
-        if (roomInput) roomInput.value = code;
-        switchView('player');
-        const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
-        const newUrl = `${window.location.origin}${basePath}/?view=player&room=${code}`;
-        window.history.pushState({ view: 'player', room: code }, '', newUrl);
-      }
-    });
-  }
-
   popoutPlayerBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
@@ -2005,12 +1986,8 @@ function handleIncomingPreGameCountdown(rawPayload) {
 
   const rNum = Number(payload.round_number || payload.roundNumber);
   if (rNum && rNum > 0) {
-    if (rNum === 1) {
-      currentRound = 1;
-      currentQuestionIndex = 0;
-    } else {
-      currentRound = Math.max(currentRound, rNum);
-    }
+    currentRound = rNum;
+    currentQuestionIndex = (rNum - 1) * 10;
   }
 
   hideResultModal();
@@ -2171,8 +2148,7 @@ function handleIncomingQuestionStart(rawPayload) {
 
   const isSameQuestion = Boolean(currentQuestionData && (
     (currentQuestionData.id && questionData.id && String(currentQuestionData.id) === String(questionData.id)) ||
-    (currentQuestionData.text && questionData.text && currentQuestionData.text.trim() !== '' && currentQuestionData.text.trim() === questionData.text.trim()) ||
-    (!isDifferentIndex && currentQuestionData.text && questionData.text)
+    (currentQuestionData.text && questionData.text && currentQuestionData.text.trim() !== '' && currentQuestionData.text.trim() === questionData.text.trim())
   ));
 
   // CRITICAL: Check review / scored / answered state BEFORE modifying currentGameState or hiding modals!
@@ -2310,10 +2286,14 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'timer_expired') {
     handleIncomingTimerExpired(payload);
   } else if (normEvent === 'round_completed' || normEvent === 'round_winner') {
-    const rawCompleted = payload?.completed_round || payload?.round_number || payload?.roundNumber;
-    const rawNext = payload?.next_round || payload?.nextRound;
-    const nextR = Number(rawNext || (rawCompleted ? Number(rawCompleted) + 1 : currentRound));
-    currentRound = Math.max(currentRound, nextR);
+    if (isLocalHostEngineMaster && isAutomatedEngineRunning && hostEngineState === 'ROUND_SUMMARY') {
+      return;
+    }
+    const rawCompleted = Number(payload?.completed_round || payload?.round_number || payload?.roundNumber || 0);
+    const rawNext = Number(payload?.next_round || payload?.nextRound || 0);
+    const completedR = rawCompleted > 0 ? rawCompleted : (rawNext > 1 ? rawNext - 1 : currentRound);
+    const nextR = rawNext > 0 ? rawNext : (completedR + 1);
+    currentRound = nextR;
     const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
     const delaySecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 60);
     const startsAtEpoch = payload?.next_round_starts_at_epoch_ms || payload?.starts_at_epoch_ms;
@@ -2322,7 +2302,9 @@ function handleRealtimeIncomingEvent(event, data) {
       delaySeconds: delaySecs,
       starts_at_epoch_ms: startsAtEpoch,
       next_round_starts_at_epoch_ms: startsAtEpoch,
-      roundNumber: currentRound
+      roundNumber: completedR,
+      completedRound: completedR,
+      nextRound: nextR
     });
   } else if (normEvent === 'game_paused') {
     onGamePaused(payload);
@@ -2399,12 +2381,14 @@ function handleRealtimeIncomingEvent(event, data) {
         }
       } else if (hostEngineState === 'ROUND_SUMMARY') {
         const rem = Math.max(1, Math.ceil((hostTargetEpochMs - Date.now()) / 1000));
+        const completedR = Math.max(1, Math.floor((currentQuestionIndex - 1) / 10) + 1);
+        const nextR = completedR + 1;
         broadcastRealtimeEvent('round_completed', {
-          round_number: currentRound,
-          roundNumber: currentRound,
-          completed_round: currentRound,
-          next_round: currentRound + 1,
-          nextRound: currentRound + 1,
+          round_number: completedR,
+          roundNumber: completedR,
+          completed_round: completedR,
+          next_round: nextR,
+          nextRound: nextR,
           top3_winners: playersLeaderboard.slice(0, 3),
           top_3_winners: playersLeaderboard.slice(0, 3),
           top3Winners: playersLeaderboard.slice(0, 3),
@@ -5427,11 +5411,16 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       winnerPayload.next_round_starts_at_epoch_ms = hostTargetEpochMs;
     }
 
-    const nextRound = currentRound + 1;
+    const completedRound = Math.max(1, Math.floor((currentQuestionIndex - 1) / 10) + 1);
+    const nextRound = completedRound + 1;
+    winnerPayload.completedRound = completedRound;
+    winnerPayload.nextRound = nextRound;
+    winnerPayload.roundNumber = completedRound;
+
     broadcastRealtimeEvent('round_completed', {
-      round_number: currentRound,
-      roundNumber: currentRound,
-      completed_round: currentRound,
+      round_number: completedRound,
+      roundNumber: completedRound,
+      completed_round: completedRound,
       next_round: nextRound,
       nextRound: nextRound,
       top3_winners: top3,
@@ -5450,14 +5439,14 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       const summaryPayload = {
         room_code: currentRoomCode,
         status: 'round_summary',
-        current_round: currentRound,
-        round_number: currentRound,
+        current_round: nextRound,
+        round_number: completedRound,
         current_question_index: currentQuestionIndex,
         question_data: null,
         current_question_data: null,
         duration_seconds: interRoundSecs,
         timer_ends_at: new Date(hostTargetEpochMs).toISOString(),
-        starts_at: new Date(hostTargetEpochMs).toISOString(),
+        starts_at: hostTargetEpochMs,
         updated_at: new Date().toISOString(),
       };
       supabase.from('game_sessions').upsert(summaryPayload, { onConflict: 'room_code' }).catch(() => {});
@@ -6806,9 +6795,18 @@ function hideResultModal() {
 }
 
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
+let interRoundTargetEpochMs = 0;
+let activeInterRoundCompletedNum = 0;
+
 function onRoundWinner(payload) {
   hideResultModal();
   hideInterQuestionCountdown();
+
+  const rawCompleted = Number(payload?.completedRound || payload?.completed_round || payload?.roundNumber || payload?.round_number || 0);
+  const rawNext = Number(payload?.nextRound || payload?.next_round || 0);
+  const completedR = rawCompleted > 0 ? rawCompleted : (rawNext > 1 ? rawNext - 1 : Math.max(1, currentRound > 1 ? currentRound - 1 : 1));
+  const nextR = rawNext > 0 ? rawNext : (completedR + 1);
+  currentRound = nextR;
 
   // Update Host Mobile Stage Card
   const hostStageBadge = document.getElementById('host-stage-badge');
@@ -6819,11 +6817,9 @@ function onRoundWinner(payload) {
     hostStageBadge.textContent = '🏆 ROUND COMPLETED';
   }
   if (hostStageQCounter) {
-    hostStageQCounter.textContent = `Round ${currentRound} Complete! Next round loading...`;
+    hostStageQCounter.textContent = `Round ${completedR} Complete! Round ${nextR} loading...`;
   }
-  const rNum = Number(payload?.roundNumber || payload?.round_number || currentRound);
-  if (rNum > 0) currentRound = Math.max(currentRound, rNum);
-  updatePlayerHeaderCard(currentRound, null, 'Intermission');
+  updatePlayerHeaderCard(nextR, null, 'Intermission');
 
   if (btnSkip) btnSkip.classList.add('hidden');
 
@@ -6944,7 +6940,9 @@ function onRoundWinner(payload) {
   if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
 
+  const wasAlreadyInSummaryForRound = (currentGameState === 'ROUND_SUMMARY' && activeInterRoundCompletedNum === completedR);
   currentGameState = 'ROUND_SUMMARY';
+  activeInterRoundCompletedNum = completedR;
 
   let remWinnerSecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 120);
   let targetEpoch = payload?.starts_at_epoch_ms || payload?.next_round_starts_at_epoch_ms;
@@ -6956,25 +6954,32 @@ function onRoundWinner(payload) {
     const parsed = typeof payload.timer_ends_at === 'string' ? Date.parse(payload.timer_ends_at) : Number(payload.timer_ends_at);
     if (!isNaN(parsed)) targetEpoch = parsed;
   }
-  if (!targetEpoch && remWinnerSecs > 0) {
+  if (targetEpoch && targetEpoch > Date.now()) {
+    interRoundTargetEpochMs = targetEpoch;
+  } else if (wasAlreadyInSummaryForRound && interRoundTargetEpochMs > Date.now()) {
+    targetEpoch = interRoundTargetEpochMs;
+  } else if (remWinnerSecs > 0) {
     targetEpoch = Date.now() + remWinnerSecs * 1000;
+    interRoundTargetEpochMs = targetEpoch;
   }
-  if (targetEpoch) {
-    const diff = Math.ceil((targetEpoch - Date.now()) / 1000);
+  if (interRoundTargetEpochMs > Date.now()) {
+    const diff = Math.ceil((interRoundTargetEpochMs - Date.now()) / 1000);
     if (diff > 0) {
       remWinnerSecs = diff;
     }
   }
 
   // Dismiss Top 3 Winners overlay on TV after 20 seconds so ad signage is displayed uncovered for remainder of intermission
-  clearTimeout(tvWinnerOverlayTimeout);
-  const winnerDisplayMs = Math.min(20000, remWinnerSecs * 1000);
-  tvWinnerOverlayTimeout = setTimeout(() => {
-    if (tvWinnerOverlay) {
-      tvWinnerOverlay.classList.add('hidden');
-    }
-    syncTvSignageDisplay();
-  }, winnerDisplayMs);
+  if (!wasAlreadyInSummaryForRound) {
+    clearTimeout(tvWinnerOverlayTimeout);
+    const winnerDisplayMs = Math.min(20000, remWinnerSecs * 1000);
+    tvWinnerOverlayTimeout = setTimeout(() => {
+      if (tvWinnerOverlay) {
+        tvWinnerOverlay.classList.add('hidden');
+      }
+      syncTvSignageDisplay();
+    }, winnerDisplayMs);
+  }
 
   syncTvSignageDisplay();
 
@@ -7007,14 +7012,14 @@ function onRoundWinner(payload) {
   if (playerQuestionText) {
     playerQuestionText.innerHTML = `
       <div style="text-align:center; padding: 12px 0;">
-        <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">NEXT ROUND STARTING IN.....</div>
+        <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">ROUND ${nextR} STARTING IN.....</div>
         <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">${formatIntermissionBadgeText(remWinnerSecs)}</div>
-        <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${currentRound} Complete • Ready for Next Round!</div>
+        <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Get Ready for Round ${nextR}!</div>
       </div>
     `;
   }
   if (playerCategoryPill) {
-    playerCategoryPill.textContent = `ROUND ${currentRound} COMPLETE`;
+    playerCategoryPill.textContent = `ROUND ${completedR} COMPLETE`;
   }
   if (statusText) {
     statusText.textContent = 'INTERMISSION';
@@ -7034,7 +7039,7 @@ function onRoundWinner(payload) {
 
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
-    const currentSecs = targetEpoch ? Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000)) : Math.max(0, --remWinnerSecs);
+    const currentSecs = interRoundTargetEpochMs ? Math.max(0, Math.ceil((interRoundTargetEpochMs - Date.now()) / 1000)) : Math.max(0, --remWinnerSecs);
     const badgeText = formatIntermissionBadgeText(currentSecs);
     const roundTimerText = formatRoundTimer(currentSecs);
 
@@ -7283,11 +7288,11 @@ function initPlayerControls() {
           }
           const rNum = Number(session.current_round || session.round_number || 0);
           if (rNum > 0) {
-            if (session.status === 'pre_game_countdown' && rNum === 1) {
-              currentRound = 1;
-              currentQuestionIndex = 0;
-            } else {
-              currentRound = Math.max(currentRound, rNum);
+            if (session.status === 'pre_game_countdown') {
+              currentRound = rNum;
+              currentQuestionIndex = (rNum - 1) * 10;
+            } else if (session.status === 'question_active' || session.status === 'active_reading') {
+              currentRound = rNum;
             }
           }
           if (session.status === 'pre_game_countdown') {
@@ -7347,18 +7352,10 @@ function initPlayerControls() {
 
               const isSameQ = Boolean(currentQuestionData) && (
                 (qData.id && currentQuestionData.id && String(qData.id) === String(currentQuestionData.id)) ||
-                (qText && curText && qText === curText) ||
-                (sessionQIdx > 0 && sessionQIdx === curQIdx && sessionRound === currentRound)
+                (qText && curText && qText.trim() !== '' && qText.trim() === curText.trim())
               );
 
-              const isDifferentQ = !currentQuestionData ||
-                (!isSameQ && (
-                  isUiWaiting ||
-                  (sessionQIdx > 0 && sessionQIdx !== curQIdx) ||
-                  (sessionRound !== currentRound) ||
-                  (qData.id && currentQuestionData.id && qData.id !== currentQuestionData.id) ||
-                  (qText && curText && qText !== curText)
-                ));
+              const isDifferentQ = !currentQuestionData || !isSameQ || isUiWaiting;
 
               if (isDifferentQ) {
                 hideResultModal();
@@ -7381,8 +7378,9 @@ function initPlayerControls() {
               }
             }
           } else if (session.status === 'round_summary' || session.status === 'inter_round') {
-            currentGameState = 'ROUND_SUMMARY';
-            updatePlayerHeaderCard(currentRound, null, 'Intermission');
+            const sessionNextR = Number(session.current_round || 0);
+            const sessionCompletedR = Number(session.round_number || (sessionNextR > 1 ? sessionNextR - 1 : 1));
+            const nextR = sessionNextR > sessionCompletedR ? sessionNextR : (sessionCompletedR + 1);
             let endsAt = session.timer_ends_at || session.starts_at;
             let targetEpoch = null;
             if (typeof endsAt === 'string') {
@@ -7391,33 +7389,25 @@ function initPlayerControls() {
             } else if (endsAt) {
               targetEpoch = Number(endsAt);
             }
+            if (targetEpoch && session.updated_at) {
+              const sentMs = Date.parse(session.updated_at);
+              if (!isNaN(sentMs) && sentMs > 0) {
+                const skew = Date.now() - sentMs;
+                if (Math.abs(skew) >= 1500 && Math.abs(skew) < 300000) {
+                  targetEpoch += skew;
+                }
+              }
+            }
             const rem = targetEpoch ? Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000)) : (Number(session.duration_seconds) || 120);
-            const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
-            const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
-            const isWinnerShowing = (tvWinnerOverlay && !tvWinnerOverlay.classList.contains('hidden')) ||
-                                    (playerWinnerOverlay && !playerWinnerOverlay.classList.contains('hidden'));
-            if (!isWinnerShowing) {
+            if (currentGameState !== 'ROUND_SUMMARY' || !winnerCountdownInterval) {
               onRoundWinner({
-                top_scorers: playersLeaderboard.slice(0, 3),
+                top3Winners: playersLeaderboard.slice(0, 3),
                 delaySeconds: rem,
-                starts_at_epoch_ms: targetEpoch
+                starts_at_epoch_ms: targetEpoch,
+                completedRound: sessionCompletedR,
+                nextRound: nextR,
+                roundNumber: sessionCompletedR,
               });
-            } else {
-              const formatRoundTimer = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
-              const formatIntermissionBadge = (s) => {
-                if (s <= 0) return 'STARTING NOW';
-                const mins = Math.floor(s / 60);
-                const secs = s % 60;
-                if (mins >= 1 && secs === 0) return `${mins} MINUTE${mins > 1 ? 'S' : ''}`;
-                if (mins >= 1) return `${mins} MIN ${secs} SEC`;
-                return `${secs} SECONDS`;
-              };
-              const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
-              const playerWinnerTimer = document.getElementById('player-winner-next-round-timer') || document.getElementById('player-winner-next-timer');
-              const cardTimer = document.getElementById('player-card-round-timer');
-              if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadge(rem);
-              if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(rem);
-              if (cardTimer) cardTimer.textContent = formatIntermissionBadge(rem);
             }
           }
 
