@@ -1,5 +1,5 @@
 // Bar Room Trivia - Progressive Web App Service Worker
-const CACHE_NAME = 'bar-room-trivia-v1.2.0';
+const CACHE_NAME = 'bar-room-trivia-v1.3.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
