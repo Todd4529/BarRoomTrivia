@@ -52,7 +52,10 @@ if (urlRoomCode) {
 let currentPlayer = null;
 let currentQuestionIndex = 0;
 let currentRound = 1;
-let selectedQuestionDuration = parseInt(safeStorage.getItem('bar_trivia_question_duration') || '20', 10); // Default 20 seconds
+let selectedQuestionDuration = parseInt(safeStorage.getItem('bar_trivia_question_duration') || '20', 10);
+if (isNaN(selectedQuestionDuration) || selectedQuestionDuration < 5) {
+  selectedQuestionDuration = 20;
+} // Default 90 seconds
 let selectedInterRoundDuration = parseInt(safeStorage.getItem('bar_trivia_inter_round_duration') || '120', 10); // 30, 60, 120 (Default), 180, 240, 300, 600
 let selectedDifficulty = 'Standard'; // Kids, Beginner, Standard, Advanced
 let selectedGenreQueue = []; // Up to 10 genres in order
@@ -765,20 +768,8 @@ async function refreshHostPlayers() {
       let { data, error } = await supabase
         .from('players')
         .select('*')
-        .or(`room_code.eq.${normRoom},room_code.eq.TRIV`)
+        .eq('room_code', normRoom)
         .order('cumulative_score', { ascending: false });
-
-      if (error || !data || data.length === 0) {
-        const fallbackRes = await supabase
-          .from('players')
-          .select('*')
-          .eq('room_code', 'TRIV')
-          .order('cumulative_score', { ascending: false });
-        if (fallbackRes.data && fallbackRes.data.length > 0) {
-          data = fallbackRes.data;
-          error = null;
-        }
-      }
 
       if (!error && Array.isArray(data)) {
         const realPlayers = data.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
@@ -1320,7 +1311,7 @@ function initTvModeToggle() {
       const now = Date.now();
       const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
         ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
-        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (Number(selectedQuestionDuration) || 20));
+        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (hostGamePlayMode === 'Manual' ? 20 : (Number(selectedQuestionDuration) || 90)));
 
       onQuestionStart({
         questionData: currentQuestionData,
@@ -1617,7 +1608,7 @@ function switchView(viewName) {
       const now = Date.now();
       const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
         ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
-        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (Number(selectedQuestionDuration) || 20));
+        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (hostGamePlayMode === 'Manual' ? 20 : (Number(selectedQuestionDuration) || 90)));
 
       onQuestionStart({
         questionData: currentQuestionData,
@@ -1657,14 +1648,14 @@ function switchView(viewName) {
       const now = Date.now();
       const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
         ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
-        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (Number(selectedQuestionDuration) || 20));
+        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (hostGamePlayMode === 'Manual' ? 20 : (Number(selectedQuestionDuration) || 90)));
 
       onQuestionStart({
         questionData: currentQuestionData,
         roundNumber: currentRound,
         questionNumberInRound: (currentQuestionIndex % 10) + 1,
         durationSeconds: remainingSecs,
-        totalTimerDuration: selectedQuestionDuration || 20,
+        totalTimerDuration: hostGamePlayMode === 'Manual' ? 20 : (selectedQuestionDuration || 90),
         difficulty: selectedDifficulty
       });
     }
@@ -1847,11 +1838,6 @@ function initRealtimeSupabaseChannels() {
     liveRoomChannel = supabase.channel(`room_${norm}`);
     attachListener(liveRoomChannel);
 
-    if (norm !== 'TRIV') {
-      liveDefaultChannel = supabase.channel('room_TRIV');
-      attachListener(liveDefaultChannel);
-    }
-
     liveGlobalChannel = supabase.channel('room_GLOBAL');
     attachListener(liveGlobalChannel);
 
@@ -1890,11 +1876,8 @@ function broadcastRealtimeEvent(event, payload = {}) {
       const topic = getMqttTopic();
       const jsonStr = JSON.stringify(fullPayload);
       mqttClient.publish(topic, jsonStr);
-      if (topic !== 'barrooms_trivia/room_TRIV') {
-        mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
-      }
       const strippedTopic = `barrooms_trivia/room_${currentRoomCode.toUpperCase().replace(/-/g, '')}`;
-      if (strippedTopic !== topic && strippedTopic !== 'barrooms_trivia/room_TRIV') {
+      if (strippedTopic !== topic) {
         mqttClient.publish(strippedTopic, jsonStr);
       }
       mqttClient.publish('tv_pairing', jsonStr);
@@ -2122,7 +2105,7 @@ function handleIncomingQuestionStart(rawPayload) {
     correct: correct,
   };
 
-  const defaultDur = selectedQuestionDuration || 20;
+  const defaultDur = hostGamePlayMode === 'Manual' ? 20 : (selectedQuestionDuration || 90);
   const rawDur = Number(payload.time_limit_seconds || payload.total_duration || payload.totalTimerDuration || payload.duration_seconds || payload.durationSeconds);
   const durationSeconds = (!isNaN(rawDur) && rawDur >= 5) ? rawDur : defaultDur;
   const rFromPayload = Number(payload.round_number || payload.roundNumber);
@@ -2245,7 +2228,7 @@ function handleIncomingManualTimerStarted(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing manual_timer_started:', payload);
   const now = Date.now();
-  const dur = Math.max(5, Number(payload.duration_seconds || payload.time_limit_seconds || selectedQuestionDuration || 20));
+  const dur = Math.max(5, Number(payload.duration_seconds || payload.time_limit_seconds || 20));
   let endsAt = Number(payload.timer_ends_at_epoch_ms || payload.timerEndsAtMs || 0);
   if (!endsAt || endsAt <= now) {
     endsAt = now + (dur * 1000);
@@ -2284,6 +2267,24 @@ function handleRealtimeIncomingEvent(event, data) {
   const normEvent = (event || '').toLowerCase();
   const payload = normalizeIncomingClockSkew(data.payload || data);
 
+  const incomingRoom = (payload?.room_code || data?.room_code || '').toUpperCase().trim();
+  const currentRoom = (currentRoomCode || 'TRIV').toUpperCase().trim();
+  const normCurrent = currentRoom.replace(/-/g, '');
+  const normIncoming = incomingRoom.replace(/-/g, '');
+
+  if (incomingRoom && incomingRoom !== 'GLOBAL') {
+    const matches = incomingRoom === currentRoom || normIncoming === normCurrent;
+    if (!matches) {
+      if (currentRoom === 'TRIV') {
+        currentRoomCode = incomingRoom;
+        safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
+        initQrCodes();
+      } else {
+        return;
+      }
+    }
+  }
+
   if (normEvent === 'pre_game_countdown') {
     handleIncomingPreGameCountdown(payload);
   } else if (normEvent === 'question_start') {
@@ -2296,10 +2297,10 @@ function handleRealtimeIncomingEvent(event, data) {
     if (isLocalHostEngineMaster && isAutomatedEngineRunning && hostEngineState === 'ROUND_SUMMARY') {
       return;
     }
-    const rawCompleted = Number(payload?.completed_round || payload?.round_number || payload?.roundNumber || 0);
-    const rawNext = Number(payload?.next_round || payload?.nextRound || 0);
-    const completedR = rawCompleted > 0 ? rawCompleted : (rawNext > 1 ? rawNext - 1 : currentRound);
-    const nextR = rawNext > 0 ? rawNext : (completedR + 1);
+    const rawCompleted = payload?.completed_round || payload?.round_number || payload?.roundNumber;
+    const rawNext = payload?.next_round || payload?.nextRound;
+    const nextR = Number(rawNext || (rawCompleted ? Number(rawCompleted) + 1 : currentRound));
+    const completedR = rawCompleted ? Number(rawCompleted) : (nextR > 1 ? nextR - 1 : currentRound);
     currentRound = nextR;
     const list = payload?.top3Winners || payload?.top_3_winners || payload?.top3_winners || [];
     const delaySecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 60);
@@ -2332,7 +2333,7 @@ function handleRealtimeIncomingEvent(event, data) {
         });
       } else if ((hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING') && currentQuestionData) {
         const remainingMs = timerEndsAtGlobalMs - Date.now();
-        const defaultDur = selectedQuestionDuration || 20;
+        const defaultDur = hostGamePlayMode === 'Manual' ? 20 : (selectedQuestionDuration || 90);
         const isReading = hostEngineState === 'QUESTION_READING';
         if (isReading || remainingMs > 1000) {
           const rem = isReading ? defaultDur : Math.ceil(remainingMs / 1000);
@@ -2459,7 +2460,10 @@ function initRealtimeEngine() {
   const topic = getMqttTopic();
   const norm = currentRoomCode.toUpperCase();
   const stripped = norm.replace(/-/g, '');
-  const topicsToSub = [topic, 'barrooms_trivia/room_TRIV', 'tv_pairing'];
+  const topicsToSub = [topic, 'tv_pairing'];
+  if (norm === 'TRIV') {
+    topicsToSub.push('barrooms_trivia/room_TRIV');
+  }
   if (stripped !== norm) {
     topicsToSub.push(`barrooms_trivia/room_${stripped}`);
   }
@@ -2526,7 +2530,7 @@ function initRealtimeEngine() {
       const strippedRoom = normRoom.replace(/-/g, '');
       const isAllowed = (
         receivedTopic === topic ||
-        receivedTopic === 'barrooms_trivia/room_TRIV' ||
+        (normRoom === 'TRIV' && receivedTopic === 'barrooms_trivia/room_TRIV') ||
         receivedTopic === 'tv_pairing' ||
         receivedTopic === `barrooms_trivia/room_${normRoom}` ||
         receivedTopic === `barrooms_trivia/room_${strippedRoom}` ||
@@ -2669,7 +2673,7 @@ function onStateSyncResponse(payload) {
     currentQuestionData = payload.currentQuestionData;
     currentQuestionIndex = payload.currentQuestionIndex || 0;
     const now = Date.now();
-    const fallbackDur = Math.max(5, Number(payload.totalTimerDuration || selectedQuestionDuration || 20));
+    const fallbackDur = Math.max(5, Number(payload.totalTimerDuration || (hostGamePlayMode === 'Manual' ? 20 : (selectedQuestionDuration || 90))));
     let rawEnds = payload.timerEndsAtGlobalMs || 0;
     if (typeof rawEnds === 'string') {
       const p = Date.parse(rawEnds);
@@ -3434,15 +3438,6 @@ function initHostControls() {
         .eq('room_code', code)
         .order('updated_at', { ascending: false })
         .limit(1);
-
-      if ((!data || data.length === 0) && code !== 'TRIV') {
-        const fallback = await supabase.from('game_sessions')
-          .select('*')
-          .eq('room_code', 'TRIV')
-          .order('updated_at', { ascending: false })
-          .limit(1);
-        data = fallback.data;
-      }
 
       const session = (data && data.length > 0) ? data[0] : null;
       if (session) {
@@ -5167,8 +5162,8 @@ async function runNextAutomatedStep() {
     activeHostQuestion = question;
     currentQuestionData = question;
 
-    const durationSeconds = selectedQuestionDuration || 20;
     const isManual = hostGamePlayMode === 'Manual';
+    const durationSeconds = isManual ? 20 : (selectedQuestionDuration || 90);
 
     if (isManual) {
       timerEndsAtGlobalMs = 0;
@@ -5812,7 +5807,7 @@ function updateHostManualDock() {
 function startManualQuestionCountdown() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_READING') return;
   isLocalHostEngineMaster = true;
-  const durationSeconds = selectedQuestionDuration || 20;
+  const durationSeconds = 20; // In Manual mode, after host starts timer, timer automatically 20 seconds
   timerEndsAtGlobalMs = Date.now() + (durationSeconds * 1000);
   hostTargetEpochMs = timerEndsAtGlobalMs;
   hostEngineState = 'QUESTION_ACTIVE';
@@ -6264,7 +6259,7 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
-  const validSeconds = Math.max(1, Number(seconds) || Number(totalTimerDuration) || Number(selectedQuestionDuration) || 20);
+  const validSeconds = Math.max(1, Number(seconds) || Number(totalTimerDuration) || Number(selectedQuestionDuration) || (hostGamePlayMode === 'Manual' ? 20 : 90));
   totalTimerDuration = validSeconds;
   const now = Date.now();
   if (!timerEndsAtGlobalMs || timerEndsAtGlobalMs <= now || ((timerEndsAtGlobalMs - now) <= 4000 && validSeconds > 4)) {
@@ -7296,15 +7291,6 @@ function initPlayerControls() {
           .eq('room_code', code)
           .order('updated_at', { ascending: false })
           .limit(1);
-
-        if ((!data || data.length === 0) && code !== 'TRIV') {
-          const fallbackRes = await supabase.from('game_sessions')
-            .select('*')
-            .eq('room_code', 'TRIV')
-            .order('updated_at', { ascending: false })
-            .limit(1);
-          data = fallbackRes.data;
-        }
 
         const session = (data && data.length > 0) ? data[0] : null;
         if (session) {

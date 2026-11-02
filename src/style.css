@@ -3927,36 +3927,47 @@ body.auth-mode .main-container {
   z-index: 2;
 }
 
-/* Fullscreen TV Ad Signage Screen */
+/* Fullscreen TV Ad Signage Screen - Display entire screen width, no borders, no text, no QR codes */
 .tv-ad-signage-screen {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  z-index: 50;
+  z-index: 999;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
 }
 
 .tv-ad-slide-wrapper {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at center, #1a1a24 0%, #08080c 100%);
+  background: #000;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .tv-ad-slide-img {
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
-  width: auto;
-  height: auto;
   object-fit: contain;
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
   opacity: 1;
 }
@@ -3974,6 +3985,7 @@ body.auth-mode .main-container {
   height: 6px;
   background: rgba(255, 255, 255, 0.1);
   z-index: 60;
+  display: none !important;
 }
 
 .tv-ad-progress-fill {
@@ -3982,6 +3994,7 @@ body.auth-mode .main-container {
   background: linear-gradient(90deg, var(--accent-cyan), var(--accent-pink));
   box-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
   transition: width 0.1s linear;
+  display: none !important;
 }
 
 .tv-ad-slide-counter {
@@ -3999,23 +4012,15 @@ body.auth-mode .main-container {
   letter-spacing: 0.5px;
   z-index: 60;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  display: none !important;
 }
 
 .tv-ad-corner-qr {
-  position: absolute;
-  bottom: 24px;
-  right: 28px;
-  background: rgba(24, 24, 32, 0.85);
-  backdrop-filter: blur(12px);
-  border: 2px solid rgba(0, 229, 255, 0.4);
-  border-radius: 16px;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  z-index: 60;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 229, 255, 0.2);
-  animation: qrFloat 4s ease-in-out infinite alternate;
+  display: none !important;
+}
+
+#tv-ad-intermission-banner {
+  display: none !important;
 }
 
 @keyframes qrFloat {

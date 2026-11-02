@@ -105,13 +105,16 @@ class RealtimeService {
         final eventRoom = (data['room_code'] as String?)?.toUpperCase();
         final currentRoom = roomCode.toUpperCase();
         
-        // Accept events if room matches, or if either is TRIV / GLOBAL
-        if (eventRoom != null &&
-            eventRoom != currentRoom &&
-            eventRoom != 'TRIV' &&
-            eventRoom != 'GLOBAL' &&
-            currentRoom != 'TRIV') {
-          return;
+        // Strict Room Matching: Only accept events intended for this room
+        if (eventRoom != null && eventRoom.isNotEmpty) {
+          final normEvent = eventRoom.replaceAll('-', '');
+          final normCurrent = currentRoom.replaceAll('-', '');
+          final matches = eventRoom == currentRoom ||
+              normEvent == normCurrent ||
+              eventRoom == 'GLOBAL';
+          if (!matches) {
+            return;
+          }
         }
 
         final event = data['event'] as String?;
@@ -440,8 +443,9 @@ class RealtimeService {
     final mqtt = MqttService();
     final norm = roomCode.toUpperCase().trim();
     mqtt.publish('barrooms_trivia/room_$norm', payload);
-    if (norm != 'TRIV') {
-      mqtt.publish('barrooms_trivia/room_TRIV', payload);
+    final stripped = norm.replaceAll('-', '');
+    if (stripped != norm) {
+      mqtt.publish('barrooms_trivia/room_$stripped', payload);
     }
   }
 

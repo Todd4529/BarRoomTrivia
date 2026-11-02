@@ -98,9 +98,6 @@ class MqttService {
     if (stripped != norm) {
       subscribeTopic('barrooms_trivia/room_$stripped');
     }
-    if (norm != 'TRIV') {
-      subscribeTopic('barrooms_trivia/room_TRIV');
-    }
     subscribeTopic('tv_pairing');
   }
 

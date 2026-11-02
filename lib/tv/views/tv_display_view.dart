@@ -39,8 +39,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Question? _currentQuestion;
   String _activeGenre = 'General Trivia';
   List<Player> _leaderboard = [];
-  int _remainingSeconds = 60;
-  int _totalDuration = 60;
+  int _remainingSeconds = 90;
+  int _totalDuration = 90;
   int? _targetTimerEndsAtMs;
   int _questionIndex = 1;
   int _totalQuestionsInRound = 10;
@@ -100,15 +100,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       _isGameActive = true;
       _isPreGameCountdown = false;
     }
+    if (widget.roomCode.isNotEmpty) {
+      _activeGameRoomCode = widget.roomCode.toUpperCase().trim();
+    }
     _loadSettings();
     _initTvSession();
     _startAdSlideTimer();
   }
 
+  String? _activeGameRoomCode;
   String _savedRoomCode = '';
 
   String get _displayRoomCode {
-    if (widget.roomCode.isNotEmpty && widget.roomCode != 'TRIV') {
+    if (_activeGameRoomCode != null && _activeGameRoomCode!.isNotEmpty) {
+      return _activeGameRoomCode!;
+    }
+    if (widget.roomCode.isNotEmpty) {
       return widget.roomCode;
     }
     return _savedRoomCode.isNotEmpty ? _savedRoomCode : 'TRIV';
@@ -181,11 +188,21 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final res = await SupabaseConfig.client
             .from('game_sessions')
             .select()
-            .or('room_code.eq.$code,room_code.eq.TRIV')
+            .eq('room_code', code)
             .maybeSingle()
             .timeout(const Duration(seconds: 1));
 
         if (res != null && mounted) {
+          final sessionRoom = res['room_code']?.toString()?.trim()?.toUpperCase();
+          if (sessionRoom != null && sessionRoom.isNotEmpty && _activeGameRoomCode != sessionRoom) {
+            setState(() {
+              _activeGameRoomCode = sessionRoom;
+              _savedRoomCode = sessionRoom;
+            });
+            SharedPreferences.getInstance().then((prefs) {
+              prefs.setString('tv_room_code', sessionRoom);
+            }).catchError((_) {});
+          }
           final isAdMode = res['is_ad_mode_active'] == true;
           if (_isAdSignageModeActive != isAdMode) {
             setState(() {
@@ -373,6 +390,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _realtimeService.joinRoomChannel(
       roomCode: _displayRoomCode,
       onPreGameCountdownBroadcast: (payload) {
+        final incomingRoom = payload['room_code']?.toString()?.trim()?.toUpperCase();
+        if (incomingRoom != null && incomingRoom.isNotEmpty && _activeGameRoomCode != incomingRoom) {
+          _activeGameRoomCode = incomingRoom;
+          _savedRoomCode = incomingRoom;
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('tv_room_code', incomingRoom);
+          }).catchError((_) {});
+        }
         _adSlideTimer?.cancel();
         _interQuestionTimer?.cancel();
         _interRoundCountdownTimer?.cancel();
@@ -411,6 +436,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _startPreGameTimer();
       },
       onQuestionBroadcast: (payload) async {
+        final incomingRoom = payload['room_code']?.toString()?.trim()?.toUpperCase();
+        if (incomingRoom != null && incomingRoom.isNotEmpty && _activeGameRoomCode != incomingRoom) {
+          _activeGameRoomCode = incomingRoom;
+          _savedRoomCode = incomingRoom;
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('tv_room_code', incomingRoom);
+          }).catchError((_) {});
+        }
         final duration = (payload['duration_seconds'] as num?)?.toInt() ?? 20;
         final rawQIdx = (payload['question_number_in_round'] as num?)?.toInt() ??
             (payload['question_index'] as num?)?.toInt() ?? 1;
@@ -955,7 +988,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
 
     final question = TriviaRepository.getQuestionForGenres([_activeGenre], 0);
-    final duration = _totalDuration > 0 ? _totalDuration : 20;
+    final duration = _totalDuration > 0 ? _totalDuration : 90;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
     setState(() {
@@ -1319,7 +1352,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     } catch (_) {}
 
     // Display Top 3 Winners overlay for 20 seconds, then dismiss so ad signage displays uncovered
-    final winnerDisplaySec = interRoundSec > 20 ? 20 : interRoundSec;
+    final delaySec = interRoundSec;
+    final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;
     _roundWinnersOverlayTimer?.cancel();
     _roundWinnersOverlayTimer = Timer(Duration(seconds: winnerDisplaySec), () {
       if (mounted && _showRoundWinnersOverlay) {
@@ -1398,7 +1432,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       question = _sanitizeQuestionDistractors(rawQuestion) ?? rawQuestion;
     }
 
-    final duration = _totalDuration > 0 ? _totalDuration : 20;
+    final duration = _totalDuration > 0 ? _totalDuration : 90;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (duration * 1000);
 
     setState(() {
@@ -2091,6 +2125,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isSignageActive = (_isGamePaused && _isAdSignageModeActive) ||
+        (_isInterRoundPhase || _isAdSignageModeActive || (_customAdSlides.isNotEmpty && !_isGameActive && !_isPreGameCountdown && !_isResumeCountdownActive));
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -2109,72 +2146,77 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           body: SafeArea(
             child: Stack(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-              child: Column(
-                children: [
-                  // Top Centered Header Bar with Exit Application
-                  SizedBox(
-                    height: 42,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Opacity(
-                          opacity: (_currentQuestion != null && !_isInterQuestionPhase) ? 0.0 : 1.0,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
-                            tooltip: 'Exit Application',
-                            onPressed: _showExitApplicationDialog,
+            if (isSignageActive)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onDoubleTap: _showExitApplicationDialog,
+                  child: _buildFullscreenSignageDisplay(),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                child: Column(
+                  children: [
+                    // Top Centered Header Bar with Exit Application
+                    SizedBox(
+                      height: 42,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Opacity(
+                            opacity: (_currentQuestion != null && !_isInterQuestionPhase) ? 0.0 : 1.0,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
+                              tooltip: 'Exit Application',
+                              onPressed: _showExitApplicationDialog,
+                            ),
                           ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.asset(
-                                'assets/images/app_logo.png',
-                                width: 32,
-                                height: 32,
-                                fit: BoxFit.cover,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.asset(
+                                  'assets/images/app_logo.png',
+                                  width: 32,
+                                  height: 32,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'BAR ROOMS TRIVIA',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 2.0,
-                                color: Colors.white,
+                              const SizedBox(width: 10),
+                              const Text(
+                                'BAR ROOMS TRIVIA',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 2.0,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        // Placeholder to keep logo centered with spaceBetween
-                        const SizedBox(width: 24),
-                      ],
+                            ],
+                          ),
+                          // Placeholder to keep logo centered with spaceBetween
+                          const SizedBox(width: 24),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
 
-                  // Main TV Stage Grid: Live Round / Paused / Resuming OR Pre-Game Countdown OR Official 4-Page Advertisement Carousel
-                  Expanded(
-                    child: (_isGamePaused && _isAdSignageModeActive)
-                        ? _buildFullscreenSignageDisplay()
-                        : ((_isInterRoundPhase || _isAdSignageModeActive || (_customAdSlides.isNotEmpty && !_isGameActive && !_isPreGameCountdown && !_isResumeCountdownActive))
-                            ? _buildFullscreenSignageDisplay()
-                            : ((_isGameActive || _isGamePaused || _isResumeCountdownActive)
-                                ? _buildLiveStageGrid()
-                                : (_isPreGameCountdown
-                                    ? _buildPreGameCountdownScreen()
-                                    : _buildOfficial4PageAdCarousel()))),
-                  ),
-                ],
+                    // Main TV Stage Grid: Live Round / Paused / Resuming OR Pre-Game Countdown OR Official 4-Page Advertisement Carousel
+                    Expanded(
+                      child: ((_isGameActive || _isGamePaused || _isResumeCountdownActive)
+                          ? _buildLiveStageGrid()
+                          : (_isPreGameCountdown
+                              ? _buildPreGameCountdownScreen()
+                              : _buildOfficial4PageAdCarousel())),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
             if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
               Positioned.fill(
@@ -2482,21 +2524,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   /// Fullscreen Venue Ad / Sponsor Signage Display Screen
   Widget _buildFullscreenSignageDisplay() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.cardSurface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.6), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.neonCyan.withValues(alpha: 0.2),
-            blurRadius: 36,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
+    return SizedBox.expand(
+      child: ColoredBox(
+        color: Colors.black,
         child: Stack(
           children: [
             // Fullscreen Animated Slide Content
@@ -2514,43 +2544,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
-
-            if (_isInterRoundPhase)
-              Positioned(
-                top: 24,
-                right: 28,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkBackground.withOpacity(0.94),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.neonYellow, width: 2.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.neonYellow.withOpacity(0.45),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.timer_rounded, color: AppTheme.neonYellow, size: 24),
-                      const SizedBox(width: 8),
-                      Text(
-                        'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
-                        style: const TextStyle(
-                          color: AppTheme.neonYellow,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                          letterSpacing: 1.6,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -2779,7 +2772,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     '🤖',
                     'AUTOMATED GAME HOST',
                     AppTheme.neonPurple,
-                    'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners hands-free.',
+                    'Sit back and enjoy your party! Built-in automated host mode runs rounds, reads questions, and tallies winners automatically.',
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2849,7 +2842,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   border: Border.all(color: Colors.white24),
                 ),
                 child: const Text(
-                  'FREE FOR ALL DEVICES',
+                  'WORKS ON ALL DEVICES',
                   style: TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.w700,
@@ -2900,7 +2893,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: const [
                         Text('⭐ EVERYTHING YOU NEED TO HOST & PLAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
-                        Text('✓ 100% Free: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        Text('✓ Unlimited Play: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
                         Text('✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzers', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
                         Text('✓ Custom Signage & Ads: Rotate venue specials and party flyers on TV', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
                         Text('✓ Offline Fallback: Local questions ensure the trivia night never stops', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
@@ -3026,8 +3019,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   /// Renders a host-uploaded custom advertisement slide (Base64 image or network URL)
+  /// Displayed across the entire screen width with no borders, no text, and no QR codes.
   Widget _buildCustomAdSlide(Map<String, dynamic> slide) {
-    final playUrl = _getPlayUrl();
     final dataUrl = slide['dataUrl']?.toString() ??
         slide['data_url']?.toString() ??
         slide['url']?.toString() ??
@@ -3050,77 +3043,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       } catch (_) {}
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 16, 28, 56),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header Venue Tag
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
-                ),
-                child: Text(
-                  '📢 ${slideName.toUpperCase()} 📢',
-                  style: const TextStyle(
-                    color: AppTheme.neonCyan,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 1.5,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Text(
-                'FEATURED VENUE PROMOTION',
-                style: TextStyle(color: Colors.white60, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Main Slide Image Display
-          Expanded(
-            flex: 74,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
+    final Widget imageWidget = imageBytes != null
+        ? Image.memory(
+            imageBytes,
+            fit: BoxFit.contain,
+            width: double.infinity,
+            height: double.infinity,
+            alignment: Alignment.center,
+            errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
+          )
+        : (dataUrl.startsWith('http')
+            ? Image.network(
+                dataUrl,
+                fit: BoxFit.contain,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
-                ),
-                child: imageBytes != null
-                    ? Image.memory(
-                        imageBytes,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
-                      )
-                    : (dataUrl.startsWith('http')
-                        ? Image.network(
-                            dataUrl,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
-                          )
-                        : _buildSlideImageFallback(slideName)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
+                height: double.infinity,
+                alignment: Alignment.center,
+                errorBuilder: (_, __, ___) => _buildSlideImageFallback(slideName),
+              )
+            : _buildSlideImageFallback(slideName));
 
-          // Bottom Join Banner with QR code
-          Expanded(
-            flex: 26,
-            child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO PLAY BAR ROOMS TRIVIA FROM YOUR TABLE!'),
-          ),
-        ],
+    return SizedBox.expand(
+      child: ColoredBox(
+        color: Colors.black,
+        child: imageWidget,
       ),
     );
   }
@@ -3354,7 +3300,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Free to Play on Your Mobile Phone • No App Downloads Required',
+              'Play on Your Mobile Phone • No App Downloads Required',
               style: TextStyle(color: AppTheme.neonCyan, fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),

@@ -801,21 +801,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           }
         } catch (_) {}
 
-        var res = await SupabaseConfig.client
+        final res = await SupabaseConfig.client
             .from('game_sessions')
             .select()
             .ilike('room_code', roomCode.trim())
             .maybeSingle()
             .timeout(const Duration(seconds: 3));
-
-        if (res == null && roomCode.trim().toUpperCase() != 'TRIV') {
-          res = await SupabaseConfig.client
-              .from('game_sessions')
-              .select()
-              .eq('room_code', 'TRIV')
-              .maybeSingle()
-              .timeout(const Duration(seconds: 3));
-        }
 
         if (res != null && mounted) {
           final status = res['status'] as String?;
