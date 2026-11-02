@@ -131,7 +131,12 @@ class MqttService {
 
   void dispose() {
     _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _client?.onDisconnected = null;
+    _client?.autoReconnect = false;
     _client?.disconnect();
+    _client = null;
     _isConnected = false;
+    _isConnecting = false;
   }
 }

@@ -147,7 +147,8 @@ void main() {
       expect(find.text('📖 READING QUESTION'), findsOneWidget);
 
       engine.resetGame(roomCode: 'TRIV', resetMode: 'clear_all');
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 1));
     });
   });
 }

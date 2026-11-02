@@ -1032,6 +1032,7 @@ class RealtimeService {
     _localSubscription = null;
     _mqttSubscription?.cancel();
     _mqttSubscription = null;
+    MqttService().dispose();
     if (_channel != null) {
       try {
         SupabaseConfig.client.removeChannel(_channel!);
