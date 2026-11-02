@@ -2750,6 +2750,50 @@ body.result-modal-open .btn-answer.selected {
   border-bottom: none;
 }
 
+/* GAME PLAY MODE (AUTO vs MANUAL) CHIPS / CARDS */
+.mode-chips {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.mode-chip {
+  flex: 1;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  font-family: var(--font-heading);
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mode-chip:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.mode-chip.active {
+  background: linear-gradient(135deg, var(--accent-cyan), #00b0ff) !important;
+  color: #000 !important;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 4px 14px rgba(0, 229, 255, 0.35) !important;
+  font-weight: 900 !important;
+}
+
 .difficulty-chips {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

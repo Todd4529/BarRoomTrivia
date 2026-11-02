@@ -2849,26 +2849,24 @@ function initHostControls() {
   // GAME PLAY MODE (AUTO vs MANUAL)
   const modeChips = document.querySelectorAll('.mode-chip');
   function updateGameModeUI(mode) {
-    hostGamePlayMode = mode;
+    const targetMode = mode || 'Auto';
+    hostGamePlayMode = targetMode;
     modeChips.forEach(chip => {
-      const isSelected = chip.dataset.mode === mode;
+      const isSelected = chip.dataset.mode === targetMode;
       chip.classList.toggle('active', isSelected);
-      if (isSelected) {
-        chip.style.borderColor = 'var(--neon-cyan)';
-        chip.style.color = '#fff';
-      } else {
-        chip.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-        chip.style.color = 'var(--text-muted)';
-      }
+      chip.style.borderColor = '';
+      chip.style.color = '';
+      chip.style.background = '';
+      chip.style.boxShadow = '';
     });
     updateHostManualDock();
-    if (mode === 'Manual') {
+    if (targetMode === 'Manual') {
       openHostManualModal();
     }
     try {
       supabase.from('game_sessions').upsert({
         room_code: currentRoomCode,
-        game_play_mode: mode,
+        game_play_mode: targetMode,
         updated_at: new Date().toISOString()
       }, { onConflict: 'room_code' }).catch(() => {});
     } catch (_) {}
@@ -2880,6 +2878,9 @@ function initHostControls() {
       updateGameModeUI(chip.dataset.mode || 'Auto');
     });
   });
+
+  // Default to Auto mode on host controls initialization
+  updateGameModeUI(hostGamePlayMode || 'Auto');
 
   // DIFFICULTY LEVEL SELECTION (KIDS, BEGINNER, STANDARD, ADVANCED)
   diffChips.forEach(chip => {
