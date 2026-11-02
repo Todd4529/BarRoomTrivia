@@ -2235,21 +2235,27 @@ function handleIncomingQuestionStart(rawPayload) {
     }
   }
 
-  if (parsedTargetEpoch && parsedTargetEpoch > now) {
-    timerEndsAtGlobalMs = parsedTargetEpoch;
+  const isIdleTimer = payload.timer_state === 'idle' || payload.question_phase === 'reading';
+  let remainingSecs = durationSeconds;
+  if (isIdleTimer) {
+    timerEndsAtGlobalMs = 0;
   } else {
-    timerEndsAtGlobalMs = now + (durationSeconds * 1000);
-  }
-  let remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
-  if (remainingSecs <= 4 && durationSeconds > 4) {
-    if (!payload.is_resumed) {
-      remainingSecs = durationSeconds;
+    if (parsedTargetEpoch && parsedTargetEpoch > now) {
+      timerEndsAtGlobalMs = parsedTargetEpoch;
+    } else {
       timerEndsAtGlobalMs = now + (durationSeconds * 1000);
+    }
+    remainingSecs = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
+    if (remainingSecs <= 4 && durationSeconds > 4) {
+      if (!payload.is_resumed) {
+        remainingSecs = durationSeconds;
+        timerEndsAtGlobalMs = now + (durationSeconds * 1000);
+      }
     }
   }
 
   currentQuestionData = questionData;
-  currentGameState = 'QUESTION_ACTIVE';
+  currentGameState = isIdleTimer ? 'QUESTION_READING' : 'QUESTION_ACTIVE';
   playerChoiceSubmitted = null;
   isCurrentQuestionScored = false;
   lastScoredQuestionKey = null;
@@ -4853,6 +4859,13 @@ async function removeCustomAdSlide(customIndex) {
     currentAdSlideIndex = 0;
   }
   await idbAdStorage.saveSlides(customAdSlides);
+  try {
+    if (customAdSlides.length > 0) {
+      safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
+    } else {
+      safeStorage.removeItem('bar_trivia_custom_ad_slides');
+    }
+  } catch (_) {}
   renderHostAdGallery();
   broadcastAdSlidesUpdated();
   syncTvSignageDisplay();
@@ -4862,6 +4875,9 @@ async function clearAllAdSlides() {
   customAdSlides = [];
   currentAdSlideIndex = 0;
   await idbAdStorage.clearSlides();
+  try {
+    safeStorage.removeItem('bar_trivia_custom_ad_slides');
+  } catch (_) {}
   renderHostAdGallery();
   broadcastAdSlidesUpdated();
   syncTvSignageDisplay();
@@ -4948,12 +4964,20 @@ function onAdModeToggled(payload) {
 
 async function onAdSlidesUpdated(payload) {
   onAdModeToggled(payload);
-  if (payload && Array.isArray(payload.slides) && payload.slides.length > 0) {
+  if (payload && Array.isArray(payload.slides)) {
     customAdSlides = payload.slides;
-    await idbAdStorage.saveSlides(customAdSlides);
-    try {
-      safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
-    } catch (_) {}
+    if (customAdSlides.length > 0) {
+      await idbAdStorage.saveSlides(customAdSlides);
+      try {
+        safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
+      } catch (_) {}
+    } else {
+      currentAdSlideIndex = 0;
+      await idbAdStorage.clearSlides();
+      try {
+        safeStorage.removeItem('bar_trivia_custom_ad_slides');
+      } catch (_) {}
+    }
   } else {
     customAdSlides = await idbAdStorage.loadSlides();
     if (!customAdSlides || customAdSlides.length === 0) {
@@ -5059,7 +5083,13 @@ function initHostAdSettings() {
 
         // Jump directly to the newly uploaded custom ad so it displays immediately!
         const allSlides = getAllActiveAdSlides();
-        currentAdSlideIndex = allSlides.length > 1 ? 1 : 0;
+        const firstNewCustomIdx = Math.max(0, customAdSlides.length - newSlides.length);
+        const targetIdx = firstNewCustomIdx < officialAdSlides.length
+          ? (firstNewCustomIdx * 2 + 1)
+          : (officialAdSlides.length + firstNewCustomIdx);
+        currentAdSlideIndex = (allSlides.length > 1 && targetIdx < allSlides.length)
+          ? targetIdx
+          : (allSlides.length > 1 ? 1 : 0);
         stopTvAdSignageRotation();
         displayAdSlide(currentAdSlideIndex);
         startTvAdSignageRotation();
@@ -5781,6 +5811,9 @@ function updateHostManualModalUI() {
     } else if (hostEngineState === 'ROUND_SUMMARY') {
       phaseBadge.classList.add('phase-summary');
       phaseBadge.textContent = '🏆 ROUND COMPLETE';
+    } else if (hostEngineState === 'PRE_GAME') {
+      phaseBadge.classList.add('phase-reading');
+      phaseBadge.textContent = '🚀 STARTING SOON';
     } else {
       phaseBadge.classList.add('phase-reading');
       phaseBadge.textContent = '🏁 READY / LOBBY';
@@ -5834,7 +5867,7 @@ function updateHostManualModalUI() {
 
   // 1. START TIMER BUTTON
   if (btnStartTimer) {
-    if (!isAutomatedEngineRunning || currentGameState === 'PAUSED' || hostEngineState === 'QUESTION_REVIEW' || hostEngineState === 'ROUND_SUMMARY') {
+    if (!isAutomatedEngineRunning || currentGameState === 'PAUSED' || hostEngineState === 'PRE_GAME' || hostEngineState === 'QUESTION_REVIEW' || hostEngineState === 'ROUND_SUMMARY') {
       btnStartTimer.disabled = true;
       btnStartTimer.classList.remove('is-active', 'is-running');
       if (btnStartTimerText) btnStartTimerText.textContent = 'Start Timer';
@@ -5989,7 +6022,7 @@ function updateHostManualDock() {
   // Update Dock Reveal Button
   if (btnDockReveal) {
     const isReview = hostEngineState === 'QUESTION_REVIEW';
-    const canReveal = isAutomatedEngineRunning && currentGameState !== 'PAUSED' && !isReview;
+    const canReveal = isAutomatedEngineRunning && currentGameState !== 'PAUSED' && (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING');
     btnDockReveal.disabled = !canReveal;
     if (btnDockRevealText) {
       btnDockRevealText.textContent = isReview ? 'Revealed' : 'Reveal';
@@ -6088,6 +6121,7 @@ function skipManualQuestion() {
   clearTimeout(autoEngineTimeout);
   const questionInRound = (currentQuestionIndex % 10) + 1;
   if (questionInRound === 10) {
+    hostEngineState = 'QUESTION_REVIEW';
     handleHostAdvanceAfterReview(10, currentRound);
   } else {
     currentQuestionIndex++;

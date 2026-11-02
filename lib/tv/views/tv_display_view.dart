@@ -193,7 +193,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             .timeout(const Duration(seconds: 1));
 
         if (res != null && mounted) {
-          final sessionRoom = res['room_code']?.toString()?.trim()?.toUpperCase();
+          final sessionRoom = res['room_code']?.toString().trim().toUpperCase();
           if (sessionRoom != null && sessionRoom.isNotEmpty && _activeGameRoomCode != sessionRoom) {
             setState(() {
               _activeGameRoomCode = sessionRoom;
@@ -390,7 +390,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _realtimeService.joinRoomChannel(
       roomCode: _displayRoomCode,
       onPreGameCountdownBroadcast: (payload) {
-        final incomingRoom = payload['room_code']?.toString()?.trim()?.toUpperCase();
+        final incomingRoom = payload['room_code']?.toString().trim().toUpperCase();
         if (incomingRoom != null && incomingRoom.isNotEmpty && _activeGameRoomCode != incomingRoom) {
           _activeGameRoomCode = incomingRoom;
           _savedRoomCode = incomingRoom;
@@ -436,7 +436,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _startPreGameTimer();
       },
       onQuestionBroadcast: (payload) async {
-        final incomingRoom = payload['room_code']?.toString()?.trim()?.toUpperCase();
+        final incomingRoom = payload['room_code']?.toString().trim().toUpperCase();
         if (incomingRoom != null && incomingRoom.isNotEmpty && _activeGameRoomCode != incomingRoom) {
           _activeGameRoomCode = incomingRoom;
           _savedRoomCode = incomingRoom;

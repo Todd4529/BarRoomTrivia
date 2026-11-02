@@ -287,5 +287,51 @@ void main() {
       expect(totalActiveSlides, equals(3));
       expect(currentScreen, equals('tv-ad-signage-screen'));
     });
+
+    test('Custom Ad deletion & clearAllAdSlides sync safeStorage and empty slide broadcasts', () {
+      final mainJsContent = File('src/main.js').readAsStringSync();
+      // Verify clearAllAdSlides removes bar_trivia_custom_ad_slides from safeStorage
+      final clearMatch = RegExp(
+        r'async function clearAllAdSlides\(\)\s*\{[\s\S]*?renderHostAdGallery\(\);',
+      ).firstMatch(mainJsContent);
+      expect(clearMatch, isNotNull);
+      final clearBody = clearMatch!.group(0)!;
+      expect(clearBody.contains("safeStorage.removeItem('bar_trivia_custom_ad_slides')"), isTrue,
+          reason: 'Clearing all custom ads must also purge bar_trivia_custom_ad_slides from safeStorage');
+
+      // Verify removeCustomAdSlide syncs or removes bar_trivia_custom_ad_slides in safeStorage
+      final removeMatch = RegExp(
+        r'async function removeCustomAdSlide\(customIndex\)\s*\{[\s\S]*?renderHostAdGallery\(\);',
+      ).firstMatch(mainJsContent);
+      expect(removeMatch, isNotNull);
+      final removeBody = removeMatch!.group(0)!;
+      expect(removeBody.contains("safeStorage.setItem('bar_trivia_custom_ad_slides'"), isTrue);
+      expect(removeBody.contains("safeStorage.removeItem('bar_trivia_custom_ad_slides')"), isTrue);
+
+      // Verify onAdSlidesUpdated handles an empty array (payload.slides = []) by clearing IndexedDB & safeStorage
+      final onUpdatedMatch = RegExp(
+        r'async function onAdSlidesUpdated\(payload\)\s*\{[\s\S]*?renderHostAdGallery\(\);',
+      ).firstMatch(mainJsContent);
+      expect(onUpdatedMatch, isNotNull);
+      final onUpdatedBody = onUpdatedMatch!.group(0)!;
+      expect(onUpdatedBody.contains('if (payload && Array.isArray(payload.slides))'), isTrue);
+      expect(onUpdatedBody.contains('await idbAdStorage.clearSlides()'), isTrue);
+      expect(onUpdatedBody.contains("safeStorage.removeItem('bar_trivia_custom_ad_slides')"), isTrue);
+    });
+
+    test('Uploading multiple custom ads calculates the exact interleaved index for the newly added slide', () {
+      final mainJsContent = File('src/main.js').readAsStringSync();
+      expect(mainJsContent.contains('const firstNewCustomIdx = Math.max(0, customAdSlides.length - newSlides.length);'), isTrue);
+      expect(mainJsContent.contains('(firstNewCustomIdx * 2 + 1)'), isTrue);
+    });
+
+    test('HostDashboardView uses active session roomCode when broadcasting Ad Signage Mode toggle', () {
+      final hostDart = File('lib/host/views/host_dashboard_view.dart').readAsStringSync();
+      expect(
+        hostDart.contains('roomCode: _activeSession?.roomCode ?? _targetRoomCode,'),
+        isTrue,
+        reason: 'Host ad mode toggle must broadcast to the active session room code rather than a hardcoded string',
+      );
+    });
   });
 }

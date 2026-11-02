@@ -60,8 +60,11 @@ class _HostDashboardViewState extends State<HostDashboardView> {
 
   void _navigateToTvGameMode({String? roomCode}) {
     if (!mounted) return;
-    final room = roomCode ?? _activeSession?.roomCode ?? _targetRoomCode;
-    context.go('/tv?room=$room&auto_start=true');
+    if (_selectedGameMode == 'Manual') return;
+    try {
+      final room = roomCode ?? _activeSession?.roomCode ?? _targetRoomCode;
+      context.go('/tv?room=$room&auto_start=true');
+    } catch (_) {}
   }
 
   Future<void> _loadRoomCode() async {
@@ -277,7 +280,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   void _cancelPreGameCountdown() {
-    GameEngineManager.instance.pauseGame();
+    GameEngineManager.instance.pauseGame(
+      roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+    );
     _preGameTimer?.cancel();
     _questionCountdownTimer?.cancel();
     _resumeTimer?.cancel();
@@ -293,7 +298,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   void _pauseGameEngine() {
-    GameEngineManager.instance.pauseGame();
+    GameEngineManager.instance.pauseGame(
+      roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+    );
     _preGameTimer?.cancel();
     _questionCountdownTimer?.cancel();
     _resumeTimer?.cancel();
@@ -674,44 +681,48 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      isPreGame ? Icons.timer : (_isReviewPhase ? Icons.done_all : Icons.alarm),
-                      color: accentColor,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        statusTitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          color: accentColor,
-                          letterSpacing: 1.0,
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.15),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        timerSubtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withOpacity(0.6),
-                        ),
+                      child: Icon(
+                        isPreGame ? Icons.timer : (_isReviewPhase ? Icons.done_all : Icons.alarm),
+                        color: accentColor,
+                        size: 22,
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            statusTitle,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: accentColor,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            timerSubtitle,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white.withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               if (isPreGame)
                 GestureDetector(
@@ -929,40 +940,44 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonCyan.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 22),
                 ),
-                child: const Icon(Icons.tv_rounded, color: AppTheme.neonCyan, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'AD DISPLAY SIGNAGE MODE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AD DISPLAY SIGNAGE MODE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Show fullscreen ads on TV when game is idle',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Show fullscreen ads on TV when game is idle',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
           Switch(
             value: _isAdSignageModeActive,
@@ -975,7 +990,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 _isAdSignageModeActive = val;
               });
               RealtimeService().broadcastAdModeToggled(
-                roomCode: 'TRIV',
+                roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                 isAdModeActive: val,
               );
               if (val) {
@@ -1667,9 +1682,11 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                     children: [
                       Icon(Icons.check_circle_rounded, color: AppTheme.neonCyan, size: 16),
                       SizedBox(width: 6),
-                      Text(
-                        'Answer Revealed — Waiting for host to advance',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                      Flexible(
+                        child: Text(
+                          'Answer Revealed — Waiting for host to advance',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
@@ -1766,16 +1783,16 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 t.cancel();
                 return;
               }
-              if (GameEngineManager.instance.isQuestionTimerRunning) {
-                setModalState(() {});
-              }
+              setModalState(() {});
             });
             final engine = GameEngineManager.instance;
             final room = _activeSession?.roomCode ?? _targetRoomCode;
             final isPaused = engine.isGamePaused;
             final isRunning = engine.isEngineRunning;
             final activeQ = engine.activeQuestion;
-            final questionNum = ((engine.currentQuestionIndex) % 10) + 1;
+            final questionNum = engine.currentQuestionIndex > 0
+                ? ((engine.currentQuestionIndex - 1) % 10) + 1
+                : 1;
             final roundNum = engine.currentRound;
 
             String statusLabel;
@@ -1795,6 +1812,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             } else if (isRunning && activeQ != null) {
               statusLabel = '📖 READING QUESTION';
               statusColor = AppTheme.neonCyan;
+            } else if (engine.isPreGameCountdownActive) {
+              statusLabel = '🚀 STARTING SOON (${engine.preGameSecondsRemaining}s)';
+              statusColor = AppTheme.neonGreen;
             } else {
               statusLabel = '🏁 READY / LOBBY';
               statusColor = Colors.white70;
@@ -1967,18 +1987,22 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                                   ),
                                 ),
                                 if (activeQ != null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white10,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      activeQ.category,
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
+                                  Flexible(
+                                    child: Container(
+                                      margin: const EdgeInsets.only(left: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white10,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        activeQ.category,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -2259,9 +2283,17 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   const SizedBox(height: 12),
 
                   // ADVANCEMENT SECTION: WAITING FOR HOST / NEXT QUESTION
-                  if (!isRunning && activeQ == null)
+                  if (!isRunning && activeQ == null && !engine.isPreGameCountdownActive)
                     ElevatedButton.icon(
                       onPressed: () {
+                        engine.gamePlayMode = 'Manual';
+                        engine.startPreGame(
+                          roomCode: room,
+                          timerSeconds: 20,
+                          genres: _selectedGenreQueue,
+                          isNewGame: true,
+                          roundNumber: 1,
+                        );
                         _startPreGameTimer();
                         setModalState(() {});
                         setState(() {});
@@ -2293,9 +2325,11 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                             children: [
                               const Icon(Icons.emoji_events_rounded, color: AppTheme.neonPurple, size: 18),
                               const SizedBox(width: 8),
-                              Text(
-                                'Round ${engine.currentRound - 1} Complete! Waiting for host to launch next round.',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                              Flexible(
+                                child: Text(
+                                  'Round ${engine.currentRound - 1} Complete! Waiting for host to launch next round.',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                                ),
                               ),
                             ],
                           ),
@@ -2349,11 +2383,13 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                             children: [
                               const Icon(Icons.check_circle_rounded, color: AppTheme.neonCyan, size: 18),
                               const SizedBox(width: 8),
-                              Text(
-                                questionNum >= 10
-                                    ? 'Round $roundNum Complete! System waiting for host to advance.'
-                                    : 'Answer Revealed! System waiting for host to advance.',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                              Flexible(
+                                child: Text(
+                                  questionNum >= 10
+                                      ? 'Round $roundNum Complete! System waiting for host to advance.'
+                                      : 'Answer Revealed! System waiting for host to advance.',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                                ),
                               ),
                             ],
                           ),
@@ -2455,7 +2491,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  GameEngineManager.instance.resetGame(roomCode: 'TRIV', resetMode: 'keep_scores');
+                  final room = _activeSession?.roomCode ?? _targetRoomCode;
+                  GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'keep_scores');
                 },
                 icon: const Icon(Icons.replay_rounded, color: AppTheme.neonCyan, size: 20),
                 label: const Text(
@@ -2475,7 +2512,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  GameEngineManager.instance.resetGame(roomCode: 'TRIV', resetMode: 'zero_scores');
+                  final room = _activeSession?.roomCode ?? _targetRoomCode;
+                  GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'zero_scores');
                 },
                 icon: const Icon(Icons.exposure_zero_rounded, color: AppTheme.neonYellow, size: 20),
                 label: const Text(
@@ -2495,7 +2533,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
-                  GameEngineManager.instance.resetGame(roomCode: 'TRIV', resetMode: 'clear_all');
+                  final room = _activeSession?.roomCode ?? _targetRoomCode;
+                  GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'clear_all');
                   _cancelPreGameCountdown();
                   setState(() {
                     _isEngineRunning = false;

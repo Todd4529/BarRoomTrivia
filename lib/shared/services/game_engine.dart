@@ -502,6 +502,9 @@ class GameEngineManager {
     isPreGameCountdownActive = false;
     isGamePaused = false;
     isResumeCountdownActive = false;
+    isReviewPhase = false;
+    isQuestionTimerRunning = false;
+    isRoundCompletedWaitingForNext = false;
     currentQuestionIndex = 0;
     currentRound = 1;
     activeQuestion = null;
