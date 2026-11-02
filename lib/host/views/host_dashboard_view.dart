@@ -33,7 +33,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   Timer? _resumeTimer;
   String _selectedDifficulty = 'Standard';
   String _selectedGameMode = 'Auto'; // 'Auto' (default) or 'Manual'
-  int _selectedTimerSeconds = 60;
+  int _selectedTimerSeconds = 90;
   int _currentQuestionIndex = 0;
   final List<String> _selectedGenreQueue = [];
 
@@ -44,7 +44,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   int _preGameSecondsRemaining = 30;
   Timer? _preGameTimer;
   int _questionSecondsRemaining = 0;
-  int _totalQuestionDuration = 60;
+  int _totalQuestionDuration = 90;
   bool _isReviewPhase = false;
   Timer? _questionCountdownTimer;
 
@@ -80,7 +80,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     final initialIndex = _availableTimerDurations.indexOf(_selectedTimerSeconds);
     _timerPageController = PageController(
       viewportFraction: 0.28,
-      initialPage: initialIndex >= 0 ? initialIndex : 5,
+      initialPage: initialIndex >= 0 ? initialIndex : 6,
     );
 
     _loadRoomCode().then((_) {
@@ -109,7 +109,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             _isReviewPhase = false;
             _isEngineRunning = true;
             if (timerState == 'idle' || timerEndsAtEpochMs == null || timerEndsAtEpochMs <= 0) {
-              _questionSecondsRemaining = _selectedTimerSeconds;
+              _questionSecondsRemaining = (_selectedGameMode == 'Manual' ? 20 : _selectedTimerSeconds);
               _questionCountdownTimer?.cancel();
             }
           });
@@ -122,11 +122,12 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       },
       onManualTimerStartedBroadcast: (payload) {
         final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
+        final duration = (payload['duration_seconds'] as num?)?.toInt() ?? 20;
         if (timerEndsAtEpochMs != null && mounted) {
           setState(() {
             _isReviewPhase = false;
           });
-          _startQuestionCountdown(timerEndsAtEpochMs);
+          _startQuestionCountdown(timerEndsAtEpochMs, duration);
         }
       },
       onTimerExpiredBroadcast: (_) {
@@ -175,9 +176,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     super.dispose();
   }
 
-  void _startQuestionCountdown(int timerEndsAtEpochMs) {
+  void _startQuestionCountdown(int timerEndsAtEpochMs, [int? duration]) {
     _questionCountdownTimer?.cancel();
-    _totalQuestionDuration = _selectedTimerSeconds;
+    _totalQuestionDuration = duration ?? (_selectedGameMode == 'Manual' ? 20 : _selectedTimerSeconds);
     _isReviewPhase = false;
 
     _questionCountdownTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {

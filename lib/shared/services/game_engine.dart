@@ -19,7 +19,7 @@ class GameEngineManager {
   bool isResumeCountdownActive = false;
   int resumeSecondsRemaining = 10;
 
-  int selectedTimerSeconds = 60;
+  int selectedTimerSeconds = 90;
   int currentQuestionIndex = 0;
   int currentRound = 1;
   int interRoundDurationSeconds = 120;
@@ -28,7 +28,7 @@ class GameEngineManager {
 
   Question? activeQuestion;
   int activeQuestionTimerEndsAtEpochMs = 0;
-  int remainingQuestionSeconds = 60;
+  int remainingQuestionSeconds = 90;
   bool isQuestionTimerRunning = false;
   bool isReviewPhase = false;
   bool isRoundCompletedWaitingForNext = false;
@@ -104,7 +104,7 @@ class GameEngineManager {
 
     final question = TriviaRepository.getQuestionForGenres(selectedGenres, currentQuestionIndex);
     activeQuestion = question;
-    remainingQuestionSeconds = selectedTimerSeconds;
+    remainingQuestionSeconds = gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds;
 
     final cumulativeIndex = ((currentRound - 1) * 10) + currentQuestionIndex + 1;
 
@@ -117,7 +117,7 @@ class GameEngineManager {
         roomCode: roomCode,
         questionIndex: cumulativeIndex,
         question: question,
-        durationSeconds: selectedTimerSeconds,
+        durationSeconds: 20,
         timerEndsAtEpochMs: 0,
         roundNumber: currentRound,
         totalQuestions: 10,
@@ -163,21 +163,22 @@ class GameEngineManager {
     });
   }
 
-  /// Manually starts countdown in Manual Mode
+  /// Manually starts countdown in Manual Mode (automatically 20 seconds)
   void startManualTimer({required String roomCode}) {
     if (!isEngineRunning || activeQuestion == null || isQuestionTimerRunning) return;
 
     final question = activeQuestion!;
     isQuestionTimerRunning = true;
     isReviewPhase = false;
-    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (selectedTimerSeconds * 1000);
+    const manualTimerSeconds = 20;
+    final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (manualTimerSeconds * 1000);
     activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
-    remainingQuestionSeconds = selectedTimerSeconds;
+    remainingQuestionSeconds = manualTimerSeconds;
 
     _realtimeService.broadcastManualTimerStarted(
       roomCode: roomCode,
       timerEndsAtEpochMs: timerEndsAtEpochMs,
-      durationSeconds: selectedTimerSeconds,
+      durationSeconds: manualTimerSeconds,
       questionIndex: currentQuestionIndex,
       roundNumber: currentRound,
     );
@@ -189,7 +190,7 @@ class GameEngineManager {
     );
 
     _questionTimer?.cancel();
-    _questionTimer = Timer(Duration(seconds: selectedTimerSeconds), () {
+    _questionTimer = Timer(const Duration(seconds: manualTimerSeconds), () {
       _handleQuestionTimerExpiration(roomCode: roomCode, question: question);
     });
   }
