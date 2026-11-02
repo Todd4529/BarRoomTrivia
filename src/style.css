@@ -4608,12 +4608,20 @@ body.auth-mode .main-container {
   margin-top: 4px;
 }
 
-/* 3-Button Dedicated Deck */
-.manual-three-buttons-row {
+/* 4-Button Dedicated Deck & Action Deck Row */
+.manual-three-buttons-row,
+.manual-action-deck-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   width: 100%;
+}
+
+@media (max-width: 520px) {
+  .manual-three-buttons-row,
+  .manual-action-deck-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .btn-manual-control {
@@ -4745,6 +4753,98 @@ body.auth-mode .main-container {
   background: rgba(0, 229, 255, 0.15);
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
+}
+
+/* 4. Next Question Button in Action Deck */
+.btn-manual-control.btn-manual-next-q {
+  background: rgba(0, 229, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.35);
+  color: #fff;
+}
+
+.btn-manual-control.btn-manual-next-q:not(:disabled):hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 4px 16px rgba(0, 229, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+.btn-manual-control.btn-manual-next-q.is-active,
+.btn-manual-control.btn-manual-next-q.is-ready {
+  background: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 4px 18px rgba(0, 229, 255, 0.5);
+  animation: glow-pulse 2s infinite ease-in-out;
+}
+
+.btn-manual-control.btn-manual-next-q.is-active .manual-control-title,
+.btn-manual-control.btn-manual-next-q.is-active .manual-control-hint,
+.btn-manual-control.btn-manual-next-q.is-ready .manual-control-title,
+.btn-manual-control.btn-manual-next-q.is-ready .manual-control-hint {
+  color: #000;
+}
+
+/* Question prompt tip banner just above question */
+.manual-tip-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 214, 0, 0.08);
+  border: 1px dashed rgba(255, 214, 0, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.manual-tip-banner .manual-footer-tip {
+  font-size: 12px;
+  color: #ffd600;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* Dedicated Bottom Button: Start Game */
+.manual-bottom-btn-container {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.btn-manual-start-game {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  border: none;
+  background: linear-gradient(135deg, var(--neon-green), #00c853);
+  color: #000;
+  box-shadow: 0 4px 16px rgba(0, 230, 118, 0.4);
+}
+
+.btn-manual-start-game:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(0, 230, 118, 0.6);
+  filter: brightness(1.1);
+}
+
+.btn-manual-start-game:disabled,
+.btn-manual-start-game.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* Advancement Container & Waiting Banner */

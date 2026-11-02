@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../config/supabase_config.dart';
 import '../data/trivia_repository.dart';
 import '../data/trivia_genres.dart';
 import '../models/question.dart';
@@ -32,6 +33,13 @@ class GameEngineManager {
   bool isQuestionTimerRunning = false;
   bool isReviewPhase = false;
   bool isRoundCompletedWaitingForNext = false;
+
+  int get displayRemainingSeconds {
+    if (!isQuestionTimerRunning) return remainingQuestionSeconds;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rem = ((activeQuestionTimerEndsAtEpochMs - now) / 1000).ceil();
+    return rem > 0 ? rem : 0;
+  }
 
   Timer? _preGameTimer;
   Timer? _questionTimer;
@@ -76,6 +84,19 @@ class GameEngineManager {
       genre: selectedGenres.isNotEmpty ? selectedGenres.first : null,
     );
 
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'pre_game_countdown',
+        'starts_at': startsAtEpochMs,
+        'current_question_index': 0,
+        'current_round': currentRound,
+        'round_number': currentRound,
+        'genre': selectedGenres.isNotEmpty ? selectedGenres.first : 'General Trivia',
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+
     _preGameTimer?.cancel();
     _preGameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (preGameSecondsRemaining > 1) {
@@ -113,6 +134,27 @@ class GameEngineManager {
       isQuestionTimerRunning = false;
       activeQuestionTimerEndsAtEpochMs = 0;
 
+      try {
+        SupabaseConfig.client.from('game_sessions').upsert({
+          'room_code': roomCode.toUpperCase().trim(),
+          'status': 'active_reading',
+          'current_question_index': cumulativeIndex,
+          'current_round': currentRound,
+          'round_number': currentRound,
+          'duration_seconds': 20,
+          'timer_ends_at': null,
+          'game_play_mode': 'Manual',
+          'category': question.category,
+          'genre': question.category,
+          'question_data': {
+            ...question.toJson(),
+            'round_number': currentRound,
+            'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
+          },
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } catch (_) {}
+
       _realtimeService.broadcastQuestion(
         roomCode: roomCode,
         questionIndex: cumulativeIndex,
@@ -135,6 +177,27 @@ class GameEngineManager {
     isQuestionTimerRunning = true;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (selectedTimerSeconds * 1000);
     activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'question_active',
+        'current_question_index': cumulativeIndex,
+        'current_round': currentRound,
+        'round_number': currentRound,
+        'duration_seconds': selectedTimerSeconds,
+        'timer_ends_at': timerEndsAtEpochMs,
+        'game_play_mode': 'Auto',
+        'category': question.category,
+        'genre': question.category,
+        'question_data': {
+          ...question.toJson(),
+          'round_number': currentRound,
+          'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
+        },
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
 
     _realtimeService.broadcastQuestion(
       roomCode: roomCode,
@@ -250,6 +313,17 @@ class GameEngineManager {
     final nextRoundStartsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (interRoundSecs * 1000);
     final nextRound = currentRound + 1;
 
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'round_summary',
+        'current_round': nextRound,
+        'round_number': currentRound,
+        'starts_at': nextRoundStartsAtEpochMs,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+
     _realtimeService.broadcastRoundCompleted(
       roomCode: roomCode,
       top3Winners: top3,
@@ -331,6 +405,17 @@ class GameEngineManager {
     isEngineRunning = false;
     isGamePaused = true;
     isResumeCountdownActive = false;
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'paused',
+        'remaining_question_seconds': remainingQuestionSeconds,
+        'current_round': currentRound,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+
     _realtimeService.broadcastGamePaused(
       roomCode: roomCode,
       remainingQuestionSeconds: remainingQuestionSeconds,
@@ -346,6 +431,16 @@ class GameEngineManager {
     resumeSecondsRemaining = 10;
 
     final startsAtEpochMs = DateTime.now().millisecondsSinceEpoch + 10 * 1000;
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'question_active',
+        'current_round': currentRound,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+    } catch (_) {}
+
     _realtimeService.broadcastGameResuming(
       roomCode: roomCode,
       startsAtEpochMs: startsAtEpochMs,

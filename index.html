@@ -1549,6 +1549,9 @@
                 <span class="manual-q-label">PROMPT & ANSWER KEY:</span>
                 <span id="manual-modal-timer-countdown" class="manual-timer-display hidden">⏱️ <strong id="manual-timer-num">20</strong>s</span>
               </div>
+              <div class="manual-tip-banner">
+                <span class="manual-footer-tip">💡 Read question aloud to venue before starting countdown timer.</span>
+              </div>
               <p id="manual-modal-question-text" class="manual-q-text">Ready to launch trivia question.</p>
               
               <div id="manual-modal-options-list" class="manual-options-grid">
@@ -1559,7 +1562,7 @@
             <!-- Dedicated Action Controls -->
             <div class="manual-modal-controls">
               <!-- 3-BUTTON MANUAL ACTION DECK: START TIMER, PAUSE, REVEAL ANSWER -->
-              <div class="manual-three-buttons-row">
+              <div class="manual-three-buttons-row manual-action-deck-row">
                 <!-- 1. START TIMER -->
                 <button type="button" id="btn-manual-modal-start-timer" class="btn-manual-control btn-manual-start" title="Start Question Countdown Timer">
                   <span class="manual-control-icon">⏱️</span>
@@ -1586,27 +1589,23 @@
                     <span class="manual-control-hint" id="btn-manual-modal-reveal-hint">Show correct</span>
                   </div>
                 </button>
-              </div>
 
-              <!-- ADVANCEMENT / WAITING SECTION -->
-              <div id="manual-modal-advance-container" class="manual-advance-container">
-                <div id="manual-modal-wait-banner" class="manual-wait-banner hidden">
-                  <span class="wait-icon">💡</span>
-                  <div class="wait-text-wrap">
-                    <strong id="manual-modal-wait-title">Answer Revealed!</strong>
-                    <span id="manual-modal-wait-sub">System is waiting for host to advance to next question.</span>
+                <!-- 4. NEXT QUESTION -->
+                <button type="button" id="btn-manual-modal-next-q" class="btn-manual-control btn-manual-next-q" title="Advance to Next Question">
+                  <span class="manual-control-icon" id="btn-manual-modal-next-q-icon">⏭️</span>
+                  <div class="manual-control-labels">
+                    <span class="manual-control-title" id="btn-manual-modal-next-q-text">Next Question</span>
+                    <span class="manual-control-hint" id="btn-manual-modal-next-q-hint">Advance</span>
                   </div>
-                </div>
-                <button type="button" id="btn-manual-modal-next-q" class="btn-manual-next-q" title="Advance to Next Question">
-                  <span class="next-icon">⏭️</span>
-                  <span class="next-title" id="btn-manual-modal-next-q-text">Next Question ➔</span>
                 </button>
               </div>
-            </div>
 
-            <!-- Host Tips Footer -->
-            <div class="manual-modal-footer">
-              <span class="manual-footer-tip">💡 Read question aloud to venue before starting countdown timer.</span>
+              <!-- Dedicated Start Game Bottom Button -->
+              <div class="manual-bottom-btn-container">
+                <button type="button" id="btn-manual-modal-start-game" class="btn-manual-start-game" title="Start Game">
+                  Start Game
+                </button>
+              </div>
             </div>
 
           </div>

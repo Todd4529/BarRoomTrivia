@@ -1496,12 +1496,14 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 child: ElevatedButton.icon(
                   onPressed: (!GameEngineManager.instance.isQuestionTimerRunning &&
                           !_isReviewPhase &&
+                          !GameEngineManager.instance.isReviewPhase &&
                           !GameEngineManager.instance.isRoundCompletedWaitingForNext &&
                           !isPaused)
                       ? () {
                           GameEngineManager.instance.startManualTimer(
                             roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                           );
+                          _isReviewPhase = false;
                           setState(() {});
                         }
                       : null,
@@ -1513,7 +1515,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   ),
                   label: Text(
                     GameEngineManager.instance.isQuestionTimerRunning
-                        ? '${GameEngineManager.instance.remainingQuestionSeconds}s'
+                        ? '${GameEngineManager.instance.displayRemainingSeconds}s'
                         : 'Start Timer',
                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                     maxLines: 1,
@@ -1581,12 +1583,14 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: (!_isReviewPhase &&
+                          !GameEngineManager.instance.isReviewPhase &&
                           !GameEngineManager.instance.isRoundCompletedWaitingForNext &&
                           !isPaused)
                       ? () {
                           GameEngineManager.instance.expireTimerManual(
                             roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                           );
+                          _isReviewPhase = true;
                           setState(() {});
                         }
                       : null,
@@ -1677,6 +1681,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                         GameEngineManager.instance.nextQuestionManual(
                           roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                         );
+                        _isReviewPhase = false;
                         setState(() {});
                       },
                       icon: const Icon(Icons.arrow_forward_rounded, color: Colors.black87, size: 22),
@@ -1703,6 +1708,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   GameEngineManager.instance.nextQuestionManual(
                     roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                   );
+                  _isReviewPhase = false;
                   setState(() {});
                 },
                 icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 18),
@@ -1747,6 +1753,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   void _showManualHostControlDialog(BuildContext context) {
+    Timer? dialogTicker;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1754,6 +1761,15 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            dialogTicker ??= Timer.periodic(const Duration(milliseconds: 500), (t) {
+              if (!modalContext.mounted) {
+                t.cancel();
+                return;
+              }
+              if (GameEngineManager.instance.isQuestionTimerRunning) {
+                setModalState(() {});
+              }
+            });
             final engine = GameEngineManager.instance;
             final room = _activeSession?.roomCode ?? _targetRoomCode;
             final isPaused = engine.isGamePaused;
@@ -1774,7 +1790,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               statusLabel = '💡 ANSWER REVEALED';
               statusColor = AppTheme.neonCyan;
             } else if (engine.isQuestionTimerRunning) {
-              statusLabel = '⏱️ TIMER ACTIVE (${engine.remainingQuestionSeconds}s)';
+              statusLabel = '⏱️ TIMER ACTIVE (${engine.displayRemainingSeconds}s)';
               statusColor = AppTheme.neonGreen;
             } else if (isRunning && activeQ != null) {
               statusLabel = '📖 READING QUESTION';
@@ -1968,7 +1984,24 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonYellow.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.neonYellow.withOpacity(0.3)),
+                              ),
+                              child: const Text(
+                                '💡 Read question aloud to venue before starting countdown timer.',
+                                style: TextStyle(
+                                  color: AppTheme.neonYellow,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
                             Text(
                               activeQ?.questionText ?? 'Ready to start trivia round. Press Start Game or Next Question.',
                               style: const TextStyle(
@@ -2064,6 +2097,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                                   !isPaused)
                               ? () {
                                   engine.startManualTimer(roomCode: room);
+                                  _isReviewPhase = false;
                                   setModalState(() {});
                                   setState(() {});
                                 }
@@ -2076,7 +2110,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                           ),
                           label: Text(
                             engine.isQuestionTimerRunning
-                                ? '${engine.remainingQuestionSeconds}s'
+                                ? '${engine.displayRemainingSeconds}s'
                                 : 'Start Timer',
                             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
                             maxLines: 1,
@@ -2172,6 +2206,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                                   !isPaused)
                               ? () {
                                   engine.expireTimerManual(roomCode: room);
+                                  _isReviewPhase = true;
                                   setModalState(() {});
                                   setState(() {});
                                 }
@@ -2233,7 +2268,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                       },
                       icon: const Icon(Icons.play_arrow_rounded, color: Colors.black87, size: 24),
                       label: const Text(
-                        'START GAME (MANUAL MODE)',
+                        'Start Game',
                         style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -2271,6 +2306,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                               onPressed: () {
                                 engine.startNextRoundManual(roomCode: room);
                                 _startPreGameTimer();
+                                _isReviewPhase = false;
                                 setModalState(() {});
                                 setState(() {});
                               },
@@ -2315,7 +2351,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                               const SizedBox(width: 8),
                               Text(
                                 questionNum >= 10
-                                    ? 'Round 10 Complete! System waiting for host to advance.'
+                                    ? 'Round $roundNum Complete! System waiting for host to advance.'
                                     : 'Answer Revealed! System waiting for host to advance.',
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
                               ),
@@ -2327,6 +2363,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                             child: ElevatedButton.icon(
                               onPressed: () {
                                 engine.nextQuestionManual(roomCode: room);
+                                _isReviewPhase = false;
                                 setModalState(() {});
                                 setState(() {});
                               },
@@ -2360,6 +2397,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                       child: OutlinedButton.icon(
                         onPressed: () {
                           engine.nextQuestionManual(roomCode: room);
+                          _isReviewPhase = false;
                           setModalState(() {});
                           setState(() {});
                         },

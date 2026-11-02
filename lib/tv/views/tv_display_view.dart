@@ -167,7 +167,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
     final dur = _adSlideDurationSeconds > 0 ? _adSlideDurationSeconds : 60;
     _adSlideTimer = Timer.periodic(Duration(seconds: dur), (t) {
-      final canRotate = ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown) || _isInterRoundPhase || _isAdSignageModeActive || _customAdSlides.isNotEmpty;
+      final canRotate = ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown && !_isResumeCountdownActive) || _isInterRoundPhase;
       if (canRotate && !_isPreGameCountdown && mounted) {
         setState(() {
           final count = _totalAdSlides;
@@ -2126,7 +2126,11 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   @override
   Widget build(BuildContext context) {
     final bool isSignageActive = (_isGamePaused && _isAdSignageModeActive) ||
-        (_isInterRoundPhase || _isAdSignageModeActive || (_customAdSlides.isNotEmpty && !_isGameActive && !_isPreGameCountdown && !_isResumeCountdownActive));
+        _isInterRoundPhase ||
+        ((_isAdSignageModeActive || _customAdSlides.isNotEmpty) &&
+            !_isGameActive &&
+            !_isPreGameCountdown &&
+            !_isResumeCountdownActive);
 
     return PopScope(
       canPop: false,
@@ -2627,25 +2631,45 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'HOW TO PLAY ON YOUR MOBILE PHONE',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.6),
-                  blurRadius: 18,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'BAR ROOMS TRIVIA',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                  shadows: [
+                    Shadow(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           const Text(
+            'HOW TO PLAY ON YOUR MOBILE PHONE',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 2),
+          const Text(
             'JOIN THE GAME SHOW IN UNDER 30 SECONDS RIGHT FROM YOUR TABLE!',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -2742,25 +2766,45 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(
-                  color: AppTheme.neonGreen.withValues(alpha: 0.6),
-                  blurRadius: 18,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'BAR ROOMS TRIVIA',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                  shadows: [
+                    Shadow(
+                      color: AppTheme.neonGreen.withValues(alpha: 0.6),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           const Text(
+            'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
+          ),
+          const SizedBox(height: 2),
+          const Text(
             'BRING THE EXCITEMENT OF PUB TRIVIA HOME! Turn any TV and mobile phones into an interactive game show.',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -2854,25 +2898,40 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            'BAR ROOMS TRIVIA',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 2,
-              shadows: [
-                Shadow(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.6),
-                  blurRadius: 18,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'BAR ROOMS TRIVIA',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                  shadows: [
+                    Shadow(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           const Text(
             'DOWNLOAD THE OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV APPSTORE',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.neonYellow),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -3288,7 +3347,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'BAR ROOMS TRIVIA',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const Text(
               'WELCOME TO OUR PUB!',
               style: TextStyle(
@@ -3334,7 +3418,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'BAR ROOMS TRIVIA',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const Text(
               'REAL-TIME TRIVIA BUILT FOR BARS',
               style: TextStyle(
@@ -3380,7 +3489,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'BAR ROOMS TRIVIA',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const Text(
               'JOIN THE GAME IN SECONDS',
               style: TextStyle(
@@ -3434,7 +3568,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'BAR ROOMS TRIVIA',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             const Text(
               'CLIMB THE LIVE LEADERBOARD',
               style: TextStyle(

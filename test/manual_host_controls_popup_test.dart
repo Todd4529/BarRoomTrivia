@@ -15,8 +15,12 @@ void main() {
           reason: 'index.html must define the reveal answer button in the manual pop-up');
       expect(html.contains('id="btn-manual-modal-next-q"'), isTrue,
           reason: 'index.html must define the next question button in the manual pop-up');
+      expect(html.contains('id="btn-manual-modal-start-game"'), isTrue,
+          reason: 'index.html must define the Start Game button on the bottom of the manual pop-up');
       expect(html.contains('id="btn-open-manual-modal"'), isTrue,
           reason: 'index.html must provide an open console button in the bottom dock');
+      expect(html.indexOf('Read question aloud to venue') < html.indexOf('id="manual-modal-question-text"'), isTrue,
+          reason: 'Read question tip must be placed just above the question text');
     });
 
     test('2. src/style.css defines styling for manual modal and dedicated buttons', () {
@@ -26,6 +30,8 @@ void main() {
       expect(css.contains('.btn-manual-pause'), isTrue);
       expect(css.contains('.btn-manual-reveal'), isTrue);
       expect(css.contains('.btn-manual-next-q'), isTrue);
+      expect(css.contains('.btn-manual-start-game'), isTrue);
+      expect(css.contains('.manual-tip-banner'), isTrue);
       expect(css.contains('.manual-option-correct'), isTrue);
     });
 

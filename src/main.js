@@ -1597,7 +1597,7 @@ function switchView(viewName) {
     const btnPromo = document.getElementById('btn-tv-toggle-promo');
     const btnLive = document.getElementById('btn-tv-toggle-live');
 
-    if (currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) {
+    if ((currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) || currentGameState === 'COUNTDOWN' || currentGameState === 'PRE_GAME' || currentGameState === 'QUESTION_READING') {
       if (tvAdScreen) tvAdScreen.classList.add('hidden');
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
@@ -1605,18 +1605,20 @@ function switchView(viewName) {
       if (btnPromo) btnPromo.classList.remove('active');
       stopTvAdSignageRotation();
 
-      const now = Date.now();
-      const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
-        ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
-        : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (hostGamePlayMode === 'Manual' ? 20 : (Number(selectedQuestionDuration) || 90)));
+      if (currentQuestionData) {
+        const now = Date.now();
+        const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
+          ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
+          : (remainingTimerSeconds > 2 ? remainingTimerSeconds : (hostGamePlayMode === 'Manual' ? 20 : (Number(selectedQuestionDuration) || 90)));
 
-      onQuestionStart({
-        questionData: currentQuestionData,
-        roundNumber: currentRound,
-        questionNumberInRound: (currentQuestionIndex % 10) + 1,
-        durationSeconds: remainingSecs,
-        difficulty: selectedDifficulty
-      });
+        onQuestionStart({
+          questionData: currentQuestionData,
+          roundNumber: currentRound,
+          questionNumberInRound: (currentQuestionIndex % 10) + 1,
+          durationSeconds: remainingSecs,
+          difficulty: selectedDifficulty
+        });
+      }
     } else {
       // Idle / Lobby state:
       const allSlides = getAllActiveAdSlides();
@@ -2018,6 +2020,54 @@ function handleIncomingPreGameCountdown(rawPayload) {
         ? `🎮 ROUND ${currentRound} STARTING IN ${rem} SECONDS! Get ready...`
         : `🎮 ROUND ${currentRound} IS LAUNCHING NOW!`;
     }
+
+    // Update TV Display to immediately replace promo/ad screen with live pre-game countdown
+    const tvPromoScreen = document.getElementById('tv-promo-screen');
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    const tvLiveGrid = document.getElementById('tv-live-grid');
+    const btnPromo = document.getElementById('btn-tv-toggle-promo');
+    const btnLive = document.getElementById('btn-tv-toggle-live');
+
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (btnLive) btnLive.classList.add('active');
+    if (btnPromo) btnPromo.classList.remove('active');
+
+    const preGenre = payload.genre || payload.current_genre || payload.category || 'Auto Select';
+    const tvCategory = document.getElementById('tv-category');
+    if (tvCategory) {
+      tvCategory.textContent = preGenre.toUpperCase();
+    }
+
+    const tvRoundTracker = document.getElementById('tv-round-tracker');
+    if (tvRoundTracker) {
+      tvRoundTracker.textContent = `ROUND ${currentRound} • STARTING SOON`;
+    }
+
+    const tvQText = document.getElementById('tv-question-text');
+    if (tvQText) {
+      tvQText.textContent = rem > 0
+        ? `🚀 GET READY! ROUND ${currentRound} IS STARTING IN ${rem} SECONDS...`
+        : `🚀 GET READY! QUESTION 1 IS STARTING...`;
+    }
+
+    const tvTimerContainer = document.getElementById('tv-timer-container');
+    if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
+
+    const tvTimerVal = document.getElementById('tv-timer-val');
+    if (tvTimerVal) tvTimerVal.textContent = rem;
+
+    const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
+    if (tvTimerSublabel) {
+      tvTimerSublabel.textContent = 'STARTING';
+      tvTimerSublabel.classList.remove('hidden');
+    }
+
+    const tvOptionsGrid = document.getElementById('tv-options-grid');
+    if (tvOptionsGrid) tvOptionsGrid.classList.add('hidden');
+
     if (rem <= 0) {
       clearInterval(preGameCountdownInterval);
     }
@@ -2980,7 +3030,7 @@ function initHostControls() {
   });
 
   function pauseGameEngine() {
-    if (!isAutomatedEngineRunning && currentGameState !== 'IN PROGRESS' && currentGameState !== 'QUESTION_ACTIVE' && currentGameState !== 'QUESTION_REVIEW' && currentGameState !== 'ROUND_SUMMARY' && currentGameState !== 'PRE_GAME') return;
+    if (!isAutomatedEngineRunning && currentGameState !== 'IN PROGRESS' && currentGameState !== 'QUESTION_ACTIVE' && currentGameState !== 'QUESTION_REVIEW' && currentGameState !== 'ROUND_SUMMARY' && currentGameState !== 'PRE_GAME' && currentGameState !== 'QUESTION_READING') return;
 
     pausedHostEngineState = hostEngineState || 'QUESTION_ACTIVE';
     pausedQuestionData = currentQuestionData;
@@ -3108,6 +3158,51 @@ function initHostControls() {
     clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
       if (!isAutomatedEngineRunning) return;
+
+      if (hostGamePlayMode === 'Manual' && pausedHostEngineState === 'QUESTION_READING') {
+        const question = pausedQuestionData || currentQuestionData;
+        const questionInRound = (currentQuestionIndex % 10) + 1;
+        timerEndsAtGlobalMs = 0;
+        hostTargetEpochMs = 0;
+        remainingTimerSeconds = 20;
+        hostEngineState = 'QUESTION_READING';
+        currentGameState = 'QUESTION_READING';
+        startHostHeartbeatLoop();
+
+        const activeGenre = question?.category || activeRoundGenre || 'General Trivia';
+        const payload = {
+          questionIndex: currentQuestionIndex,
+          roundNumber: currentRound,
+          questionNumberInRound: questionInRound,
+          questionData: question,
+          difficulty: selectedDifficulty,
+          durationSeconds: 20,
+          timerEndsAtMs: null,
+          timer_ends_at_epoch_ms: null,
+          question_index: questionInRound,
+          cumulative_question_index: currentQuestionIndex + 1,
+          question_number_in_round: questionInRound,
+          total_questions: 10,
+          total_questions_in_round: 10,
+          current_round: currentRound,
+          round_number: currentRound,
+          genre: activeGenre,
+          category: activeGenre,
+          question_text: question?.text || '',
+          options: question?.options || {},
+          correct_option: question?.correct || '',
+          game_play_mode: 'Manual',
+          question_phase: 'reading',
+          timer_state: 'idle',
+        };
+
+        broadcastRealtimeEvent('question_start', payload);
+        onQuestionStart(payload);
+        updateHostManualDock();
+        updateHostManualModalUI();
+        syncTvSignageDisplay();
+        return;
+      }
 
       if (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedHostEngineState === 'QUESTION_READING' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData)) || (pausedQuestionData || currentQuestionData)) {
         const question = pausedQuestionData || currentQuestionData;
@@ -3322,6 +3417,7 @@ function initHostControls() {
   const btnManualModalPause = document.getElementById('btn-manual-modal-pause');
   const btnManualModalReveal = document.getElementById('btn-manual-modal-reveal');
   const btnManualModalNextQ = document.getElementById('btn-manual-modal-next-q');
+  const btnManualModalStartGame = document.getElementById('btn-manual-modal-start-game');
   const btnDockStartTimer = document.getElementById('btn-dock-start-timer');
   const btnDockReveal = document.getElementById('btn-dock-reveal');
   const btnDockNextQ = document.getElementById('btn-dock-next-q');
@@ -3354,6 +3450,12 @@ function initHostControls() {
   btnManualModalNextQ?.addEventListener('click', (e) => {
     e.preventDefault();
     handleManualHostNextQuestionAction();
+    updateHostManualModalUI();
+  });
+  btnManualModalStartGame?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const btnStart = document.getElementById('btn-start-auto');
+    if (btnStart) btnStart.click();
     updateHostManualModalUI();
   });
   btnDockStartTimer?.addEventListener('click', (e) => {
@@ -3416,6 +3518,9 @@ function initHostControls() {
     } catch (_) {}
 
     onGameReset({ roomCode: currentRoomCode });
+    hostEngineState = 'IDLE';
+    updateHostManualDock();
+    updateHostManualModalUI();
     syncTvSignageDisplay();
   });
 
@@ -3624,7 +3729,7 @@ function onLogoUpdated({ logoUrl }) {
     if (tvLogoContainer) tvLogoContainer.classList.add('hidden');
     if (tvBrandIcon) tvBrandIcon.classList.remove('hidden');
     if (promoLogoPlaceholder) {
-      promoLogoPlaceholder.innerHTML = `<span class="big-icon">🍺</span>`;
+      promoLogoPlaceholder.innerHTML = `<img src="./assets/images/app_logo.png" alt="Bar Rooms Trivia Logo" style="max-height: 70px; max-width: 140px; object-fit: contain; border-radius: 12px; box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);" onerror="this.onerror=null;this.src='./app_logo.png';">`;
     }
   }
 }
@@ -3905,6 +4010,42 @@ async function renderImageFileToSlide(file) {
 // 5. Official Bar Rooms Trivia Permanent System Ad Generator
 const OFFICIAL_SYSTEM_AD_ID = 'system_bar_rooms_trivia_official_ad';
 let cachedOfficialAdSlides = null;
+let preloadedAppLogoImage = null;
+
+function getAppLogoImageForCanvas() {
+  if (preloadedAppLogoImage && preloadedAppLogoImage.complete && preloadedAppLogoImage.naturalWidth > 0) {
+    return preloadedAppLogoImage;
+  }
+  const domLogo = document.getElementById('app-logo-icon') || document.querySelector('.header-logo-img');
+  if (domLogo && domLogo.complete && domLogo.naturalWidth > 0) {
+    preloadedAppLogoImage = domLogo;
+    return preloadedAppLogoImage;
+  }
+  if (!preloadedAppLogoImage) {
+    preloadedAppLogoImage = new Image();
+    preloadedAppLogoImage.crossOrigin = 'anonymous';
+    preloadedAppLogoImage.onload = () => {
+      // Invalidate cached official ad slides so they re-generate with the logo
+      cachedOfficialAdSlides = null;
+      const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+      if (tvAdScreen && !tvAdScreen.classList.contains('hidden')) {
+        displayAdSlide(currentAdSlideIndex);
+      }
+    };
+    preloadedAppLogoImage.onerror = () => {
+      if (!preloadedAppLogoImage.src.endsWith('/app_logo.png')) {
+        preloadedAppLogoImage.src = './app_logo.png';
+      }
+    };
+    preloadedAppLogoImage.src = './assets/images/app_logo.png';
+  }
+  return (preloadedAppLogoImage.complete && preloadedAppLogoImage.naturalWidth > 0) ? preloadedAppLogoImage : null;
+}
+
+// Trigger logo preload immediately for ad canvas generation
+try {
+  getAppLogoImageForCanvas();
+} catch (_) {}
 
 function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
   const canvas = document.createElement('canvas');
@@ -3988,30 +4129,100 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
   // Outer Neon Accent Border
   roundRect(24, 24, 1872, 1032, 28, null, 'rgba(0, 229, 255, 0.35)', 2);
 
+  // Helper: Draw Unified Built-In Official Ad Top Header (Pill + App Logo + "BAR ROOMS TRIVIA" + Subtitle + Description)
+  function drawOfficialAdTopHeader(pillText, pillColor, pillBorder, glowColor, subtitleText, descText) {
+    // 1. Category Pill Badge at Top
+    ctx.save();
+    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
+    const pillMetrics = ctx.measureText(pillText);
+    const pillW = Math.max(560, pillMetrics.width + 48);
+    const pillX = 960 - (pillW / 2);
+    roundRect(pillX, 42, pillW, 34, 17, 'rgba(255, 255, 255, 0.05)', pillBorder, 1.5);
+    ctx.fillStyle = pillColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pillText, 960, 59);
+    ctx.restore();
+
+    // 2. Official Logo + "BAR ROOMS TRIVIA" Title
+    ctx.save();
+    const titleText = 'BAR ROOMS TRIVIA';
+    ctx.font = "900 52px 'Outfit', 'Inter', sans-serif";
+    const textMetrics = ctx.measureText(titleText);
+    const logoSize = 64;
+    const gap = 18;
+    const totalBrandWidth = logoSize + gap + textMetrics.width;
+    const brandStartX = 960 - (totalBrandWidth / 2);
+    const brandY = 88;
+
+    // Draw Logo Container Box
+    roundRect(brandStartX, brandY, logoSize, logoSize, 14, 'rgba(255, 255, 255, 0.08)', glowColor, 1.5);
+
+    const logoImg = getAppLogoImageForCanvas();
+    if (logoImg) {
+      ctx.save();
+      ctx.beginPath();
+      const r = 14, x = brandStartX, y = brandY, w = logoSize, h = logoSize;
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(logoImg, brandStartX, brandY, logoSize, logoSize);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.font = '36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🍻', brandStartX + (logoSize / 2), brandY + (logoSize / 2));
+      ctx.restore();
+    }
+
+    // Draw "BAR ROOMS TRIVIA" Title
+    ctx.font = "900 52px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 24;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(titleText, brandStartX + logoSize + gap, brandY + 49);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // 3. Subheading / Topic
+    ctx.save();
+    ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
+    ctx.fillStyle = '#ffd600';
+    ctx.textAlign = 'center';
+    ctx.fillText(subtitleText, 960, 182);
+
+    // 4. Instructions / Description
+    ctx.font = "500 16px 'Inter', sans-serif";
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'center';
+    ctx.fillText(descText, 960, 214);
+    ctx.restore();
+  }
+
   if (slideNumber === 1) {
     // ==========================================
     // SLIDE 1: HOW TO PLAY & JOIN ON YOUR PHONE
     // ==========================================
-    roundRect(660, 48, 600, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
-    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#00e5ff';
-    ctx.textAlign = 'center';
-    ctx.fillText('⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡', 960, 72);
-
-    ctx.font = "900 56px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
-    ctx.shadowBlur = 24;
-    ctx.fillText('BAR ROOMS TRIVIA', 960, 140);
-    ctx.shadowBlur = 0;
-
-    ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffd600';
-    ctx.fillText('HOW TO PLAY ON YOUR MOBILE PHONE', 960, 182);
-
-    ctx.font = "500 16px 'Inter', sans-serif";
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Scan the TV QR code with your phone camera to join the game in 30 seconds!', 960, 214);
+    drawOfficialAdTopHeader(
+      '⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡',
+      '#00e5ff',
+      'rgba(0, 229, 255, 0.6)',
+      'rgba(0, 229, 255, 0.7)',
+      'HOW TO PLAY ON YOUR MOBILE PHONE',
+      'Scan the TV QR code with your phone camera to join the game in 30 seconds!'
+    );
 
     const steps = [
       {
@@ -4100,26 +4311,14 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     // ==========================================
     // SLIDE 2: HOST YOUR OWN PUB TRIVIA NIGHT
     // ==========================================
-    roundRect(660, 48, 600, 36, 18, 'rgba(0, 230, 118, 0.15)', 'rgba(0, 230, 118, 0.6)', 1.5);
-    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#00e676';
-    ctx.textAlign = 'center';
-    ctx.fillText('🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡', 960, 72);
-
-    ctx.font = "900 50px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 230, 118, 0.7)';
-    ctx.shadowBlur = 24;
-    ctx.fillText('HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!', 960, 138);
-    ctx.shadowBlur = 0;
-
-    ctx.font = "800 22px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffd600';
-    ctx.fillText('BRING THE EXCITEMENT OF PUB TRIVIA HOME!', 960, 180);
-
-    ctx.font = "500 16px 'Inter', sans-serif";
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Turn any TV and mobile phones into an interactive game show for parties, game nights & events.', 960, 214);
+    drawOfficialAdTopHeader(
+      '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡',
+      '#00e676',
+      'rgba(0, 230, 118, 0.6)',
+      'rgba(0, 230, 118, 0.7)',
+      'BRING THE EXCITEMENT OF PUB TRIVIA HOME! HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
+      'Turn any TV and mobile phones into an interactive game show for parties, game nights & events.'
+    );
 
     const hostFeats = [
       {
@@ -4208,26 +4407,14 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     // ==========================================
     // SLIDE 3: GOOGLE PLAY & AMAZON FIRE TV APP
     // ==========================================
-    roundRect(660, 48, 600, 36, 18, 'rgba(0, 229, 255, 0.15)', 'rgba(0, 229, 255, 0.6)', 1.5);
-    ctx.font = "900 14px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#00e5ff';
-    ctx.textAlign = 'center';
-    ctx.fillText('📲 AVAILABLE ON GOOGLE PLAY & AMAZON FIRE TV 📲', 960, 72);
-
-    ctx.font = "900 56px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0, 229, 255, 0.7)';
-    ctx.shadowBlur = 24;
-    ctx.fillText('BAR ROOMS TRIVIA', 960, 140);
-    ctx.shadowBlur = 0;
-
-    ctx.font = "800 24px 'Outfit', 'Inter', sans-serif";
-    ctx.fillStyle = '#ffd600';
-    ctx.fillText('DOWNLOAD FROM GOOGLE PLAY & AMAZON FIRE TV', 960, 182);
-
-    ctx.font = "500 16px 'Inter', sans-serif";
-    ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Install the official app on Google Play and Amazon Fire TV Appstore for full-screen performance.', 960, 214);
+    drawOfficialAdTopHeader(
+      '📲 AVAILABLE ON GOOGLE PLAY & AMAZON FIRE TV 📲',
+      '#00e5ff',
+      'rgba(0, 229, 255, 0.6)',
+      'rgba(0, 229, 255, 0.7)',
+      'DOWNLOAD FROM GOOGLE PLAY & AMAZON FIRE TV',
+      'Install the official app on Google Play and Amazon Fire TV Appstore for full-screen performance.'
+    );
 
     const cardY = 250;
     const cardH = 550;
@@ -4475,6 +4662,21 @@ function syncTvSignageDisplay() {
     stopTvAdSignageRotation();
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) tvAdBanner.classList.add('hidden');
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (btnLive) btnLive.classList.add('active');
+    if (btnPromo) btnPromo.classList.remove('active');
+    return;
+  }
+  if (currentGameState === 'COUNTDOWN' || currentGameState === 'QUESTION_READING') {
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) tvAdBanner.classList.add('hidden');
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (btnLive) btnLive.classList.add('active');
+    if (btnPromo) btnPromo.classList.remove('active');
     return;
   }
 
@@ -4504,7 +4706,7 @@ function syncTvSignageDisplay() {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
     const isLiveActive = btnLive?.classList.contains('active');
-    if (currentGameState === 'PAUSED' || currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME' || isLiveActive) {
+    if (currentGameState === 'PAUSED' || currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME' || currentGameState === 'COUNTDOWN' || currentGameState === 'QUESTION_READING' || isLiveActive) {
       if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (btnLive) btnLive.classList.add('active');
@@ -5269,13 +5471,13 @@ async function runNextAutomatedStep() {
 }
 
 function handleHostQuestionTimeout(question, currentRound, questionInRound) {
-  if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
+  if (!isAutomatedEngineRunning || (hostEngineState !== 'QUESTION_ACTIVE' && hostEngineState !== 'QUESTION_READING')) return;
 
   const reviewDurationMs = 15000; // Synchronized 15-second review: result reveal + dedicated countdown
   const hostReviewDurationMs = (questionInRound === 10) ? 20000 : reviewDurationMs; // 20 seconds for question 10
   hostTargetEpochMs = Date.now() + hostReviewDurationMs;
 
-  const correctOpt = (question.correct || '').toUpperCase().trim();
+  const correctOpt = (question.correct || question.correct_option || '').toUpperCase().trim();
 
   // Host reliably grades all answers submitted for this question so leaderboard always updates
   let anyScoreChanged = false;
@@ -5543,6 +5745,8 @@ function updateHostManualModalUI() {
   const waitSub = document.getElementById('manual-modal-wait-sub');
   const btnNextQ = document.getElementById('btn-manual-modal-next-q');
   const btnNextQText = document.getElementById('btn-manual-modal-next-q-text');
+  const btnNextQHint = document.getElementById('btn-manual-modal-next-q-hint');
+  const btnStartGameModal = document.getElementById('btn-manual-modal-start-game');
 
   const questionNumberInRound = ((currentQuestionIndex || 0) % 10) + 1;
   const activeRound = currentRound || 1;
@@ -5551,7 +5755,7 @@ function updateHostManualModalUI() {
   if (qInd) qInd.textContent = `Q${questionNumberInRound} / 10`;
 
   const questionInRound = (currentQuestionIndex % 10) + 1;
-  let question = currentRoundQuestions?.[questionInRound - 1] || currentQuestionData;
+  let question = activeHostQuestion || currentRoundQuestions?.[questionInRound - 1] || currentQuestionData;
   if (!question || !question.options) {
     question = currentQuestionData;
   }
@@ -5596,7 +5800,7 @@ function updateHostManualModalUI() {
   if (qText) {
     const qPrompt = question?.text || question?.question_text || question?.question;
     if (qPrompt) {
-      qText.textContent = qPrompt;
+      qText.textContent = decodeHtmlEntities(qPrompt);
     } else if (isAutomatedEngineRunning) {
       qText.textContent = 'Preparing next trivia question...';
     } else {
@@ -5608,12 +5812,13 @@ function updateHostManualModalUI() {
     optionsList.innerHTML = '';
     if (question && question.options) {
       const optionKeys = ['A', 'B', 'C', 'D'];
+      const correctOpt = (question.correct || question.correct_option || '').toString().toUpperCase().trim();
       optionKeys.forEach(key => {
         const optText = question.options[key];
         if (optText !== undefined) {
           const item = document.createElement('div');
           item.className = 'manual-option-item';
-          const isCorrect = (key === question.correct);
+          const isCorrect = (key.toUpperCase() === correctOpt);
           if (isCorrect) {
             item.classList.add('manual-option-correct');
           }
@@ -5687,38 +5892,47 @@ function updateHostManualModalUI() {
     }
   }
 
-  // ADVANCEMENT / WAITING SECTION
+  // 4. NEXT QUESTION ACTION BUTTON IN ACTION DECK
   if (btnNextQ) {
-    if (!isAutomatedEngineRunning) {
-      if (waitBanner) waitBanner.classList.add('hidden');
+    if (hostEngineState === 'QUESTION_REVIEW') {
       btnNextQ.disabled = false;
-      btnNextQ.className = 'btn-manual-next-q btn-advance-ready';
-      if (btnNextQText) btnNextQText.textContent = 'Start Game (Manual Mode) 🚀';
+      btnNextQ.classList.add('is-active', 'is-ready');
+      if (btnNextQText) btnNextQText.textContent = (questionInRound === 10) ? 'Finish Round' : 'Next Question';
+      if (btnNextQHint) btnNextQHint.textContent = (questionInRound === 10) ? `Round ${activeRound}` : 'Advance';
     } else if (hostEngineState === 'ROUND_SUMMARY') {
-      if (waitBanner) {
-        waitBanner.classList.remove('hidden');
-        if (waitTitle) waitTitle.textContent = `Round ${activeRound} Complete!`;
-        if (waitSub) waitSub.textContent = 'System is waiting for host to launch next round.';
-      }
       btnNextQ.disabled = false;
-      btnNextQ.className = 'btn-manual-next-q btn-advance-ready is-round';
-      if (btnNextQText) btnNextQText.textContent = `Start Round ${Math.floor(currentQuestionIndex / 10) + 1} 🚀`;
-    } else if (hostEngineState === 'QUESTION_REVIEW') {
-      if (waitBanner) {
-        waitBanner.classList.remove('hidden');
-        if (waitTitle) waitTitle.textContent = (questionInRound === 10) ? 'Round 10 Complete!' : 'Answer Revealed!';
-        if (waitSub) waitSub.textContent = 'System is waiting for host to advance.';
-      }
+      btnNextQ.classList.add('is-active', 'is-ready');
+      if (btnNextQText) btnNextQText.textContent = 'Next Round';
+      if (btnNextQHint) btnNextQHint.textContent = `Round ${Math.floor(currentQuestionIndex / 10) + 1}`;
+    } else if (isAutomatedEngineRunning && currentGameState !== 'PAUSED' && (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING')) {
       btnNextQ.disabled = false;
-      btnNextQ.className = 'btn-manual-next-q btn-advance-ready';
-      if (btnNextQText) {
-        btnNextQText.textContent = (questionInRound === 10) ? 'Finish Round 10 ➔' : `Next Question ➔ (Q${questionInRound + 1})`;
+      btnNextQ.classList.remove('is-active', 'is-ready');
+      if (btnNextQText) btnNextQText.textContent = 'Skip';
+      if (btnNextQHint) btnNextQHint.textContent = 'Advance';
+    } else {
+      btnNextQ.disabled = true;
+      btnNextQ.classList.remove('is-active', 'is-ready');
+      if (btnNextQText) btnNextQText.textContent = 'Next Question';
+      if (btnNextQHint) btnNextQHint.textContent = 'Inactive';
+    }
+  }
+
+  // 5. DEDICATED BOTTOM START GAME BUTTON
+  if (btnStartGameModal) {
+    if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
+      btnStartGameModal.disabled = false;
+      btnStartGameModal.textContent = 'Start Game (Manual Mode) 🚀';
+      btnStartGameModal.classList.remove('is-disabled');
+      if (btnStartGameModal.parentElement) {
+        btnStartGameModal.parentElement.style.display = 'block';
       }
     } else {
-      if (waitBanner) waitBanner.classList.add('hidden');
-      btnNextQ.className = 'btn-manual-next-q btn-advance-secondary';
-      btnNextQ.disabled = (!isAutomatedEngineRunning || currentGameState === 'PAUSED');
-      if (btnNextQText) btnNextQText.textContent = 'Skip Question ⏭️';
+      btnStartGameModal.disabled = true;
+      btnStartGameModal.textContent = 'Game In Progress';
+      btnStartGameModal.classList.add('is-disabled');
+      if (btnStartGameModal.parentElement) {
+        btnStartGameModal.parentElement.style.display = 'none';
+      }
     }
   }
 }
@@ -5729,7 +5943,7 @@ function handleManualHostNextQuestionAction() {
   } else if (hostEngineState === 'ROUND_SUMMARY') {
     handleHostAdvanceAfterRoundSummary();
   } else if (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING') {
-    advanceManualNextQuestion();
+    skipManualQuestion();
   } else if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
     const btnStart = document.getElementById('btn-start-auto');
     if (btnStart) btnStart.click();
@@ -5769,7 +5983,7 @@ function updateHostManualDock() {
     if (btnDockTimerText) {
       btnDockTimerText.textContent = (hostEngineState === 'QUESTION_ACTIVE') ? `${remainingTimerSeconds || 20}s` : 'Start Timer';
     }
-    btnDockTimer.style.opacity = canStart ? '1.0' : '0.5';
+    btnDockTimer.style.opacity = canStart ? '1.0' : ((hostEngineState === 'QUESTION_ACTIVE') ? '1.0' : '0.5');
   }
 
   // Update Dock Reveal Button
@@ -5786,11 +6000,18 @@ function updateHostManualDock() {
   // Update Dock Next Question Button
   if (btnDockNext) {
     const isWaiting = hostEngineState === 'QUESTION_REVIEW' || hostEngineState === 'ROUND_SUMMARY';
-    btnDockNext.disabled = !isAutomatedEngineRunning && currentGameState !== 'PAUSED';
+    const isLobby = !isAutomatedEngineRunning && currentGameState !== 'PAUSED';
+    btnDockNext.disabled = (currentGameState === 'PAUSED');
     if (btnDockNextText) {
-      btnDockNextText.textContent = isWaiting ? 'Next ➔' : 'Skip ⏭️';
+      if (isLobby) {
+        btnDockNextText.textContent = 'Start 🚀';
+      } else if (isWaiting) {
+        btnDockNextText.textContent = 'Next ➔';
+      } else {
+        btnDockNextText.textContent = 'Skip ⏭️';
+      }
     }
-    if (isWaiting) {
+    if (isWaiting || isLobby) {
       btnDockNext.style.background = 'var(--neon-cyan)';
       btnDockNext.style.color = '#000';
       btnDockNext.style.boxShadow = '0 0 14px rgba(0, 229, 255, 0.4)';
@@ -5848,7 +6069,7 @@ function startManualQuestionCountdown() {
 }
 
 function expireManualQuestionEarly() {
-  if (!isAutomatedEngineRunning || hostEngineState !== 'QUESTION_ACTIVE') return;
+  if (!isAutomatedEngineRunning || (hostEngineState !== 'QUESTION_ACTIVE' && hostEngineState !== 'QUESTION_READING')) return;
   isLocalHostEngineMaster = true;
   clearInterval(countdownInterval);
   clearTimeout(autoEngineTimeout);
@@ -5858,6 +6079,20 @@ function expireManualQuestionEarly() {
     question = currentQuestionData || { correct: 'A', options: { A: '' } };
   }
   handleHostQuestionTimeout(question, currentRound, questionInRound);
+}
+
+function skipManualQuestion() {
+  if (!isAutomatedEngineRunning || (hostEngineState !== 'QUESTION_ACTIVE' && hostEngineState !== 'QUESTION_READING')) return;
+  isLocalHostEngineMaster = true;
+  clearInterval(countdownInterval);
+  clearTimeout(autoEngineTimeout);
+  const questionInRound = (currentQuestionIndex % 10) + 1;
+  if (questionInRound === 10) {
+    handleHostAdvanceAfterReview(10, currentRound);
+  } else {
+    currentQuestionIndex++;
+    runNextAutomatedStep();
+  }
 }
 
 function advanceManualNextQuestion() {
@@ -5913,7 +6148,7 @@ async function handleHostAdvanceAfterRoundSummary() {
     supabase.from('game_sessions').upsert({
       room_code: currentRoomCode,
       status: 'pre_game_countdown',
-      current_question_index: currentQuestionIndex + 1,
+      current_question_index: currentQuestionIndex,
       current_round: nextRound,
       starts_at: startsAtMs,
       updated_at: new Date().toISOString(),
@@ -6330,6 +6565,17 @@ function updateTimerUI() {
   if (hostTimerSecs) hostTimerSecs.textContent = `${currentSecs}s`;
   const manualTimerNum = document.getElementById('manual-timer-num');
   if (manualTimerNum) manualTimerNum.textContent = currentSecs;
+
+  if (hostGamePlayMode === 'Manual' && hostEngineState === 'QUESTION_ACTIVE') {
+    const btnDockStartTimerText = document.getElementById('btn-dock-start-timer-text');
+    if (btnDockStartTimerText) btnDockStartTimerText.textContent = `${currentSecs}s`;
+    const btnManualModalStartTimerText = document.getElementById('btn-manual-modal-start-timer-text');
+    if (btnManualModalStartTimerText) btnManualModalStartTimerText.textContent = `Running (${currentSecs}s)`;
+    const phaseBadge = document.getElementById('manual-modal-phase-badge');
+    if (phaseBadge && currentGameState !== 'PAUSED') {
+      phaseBadge.textContent = `⏱️ TIMER ACTIVE (${currentSecs}s)`;
+    }
+  }
   if (hostTimerFill) {
     const maxDur = totalTimerDuration > 0 ? totalTimerDuration : 20;
     const pct = Math.max(0, Math.min(100, (currentSecs / maxDur) * 100));
