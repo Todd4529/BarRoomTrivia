@@ -3314,15 +3314,24 @@ function initHostControls() {
   const btnCloseManualModal = document.getElementById('btn-close-manual-modal');
   const manualModalBackdrop = document.getElementById('host-manual-modal-backdrop');
   const btnOpenManualModal = document.getElementById('btn-open-manual-modal');
+  const btnManualModalStartTimer = document.getElementById('btn-manual-modal-start-timer');
   const btnManualModalPause = document.getElementById('btn-manual-modal-pause');
+  const btnManualModalReveal = document.getElementById('btn-manual-modal-reveal');
   const btnManualModalNextQ = document.getElementById('btn-manual-modal-next-q');
-  const btnManualModalPhaseAction = document.getElementById('btn-manual-modal-phase-action');
+  const btnDockStartTimer = document.getElementById('btn-dock-start-timer');
+  const btnDockReveal = document.getElementById('btn-dock-reveal');
+  const btnDockNextQ = document.getElementById('btn-dock-next-q');
 
   btnCloseManualModal?.addEventListener('click', closeHostManualModal);
   manualModalBackdrop?.addEventListener('click', closeHostManualModal);
   btnOpenManualModal?.addEventListener('click', (e) => {
     e.preventDefault();
     openHostManualModal();
+  });
+  btnManualModalStartTimer?.addEventListener('click', (e) => {
+    e.preventDefault();
+    startManualQuestionCountdown();
+    updateHostManualModalUI();
   });
   btnManualModalPause?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -3333,14 +3342,29 @@ function initHostControls() {
     }
     updateHostManualModalUI();
   });
+  btnManualModalReveal?.addEventListener('click', (e) => {
+    e.preventDefault();
+    expireManualQuestionEarly();
+    updateHostManualModalUI();
+  });
   btnManualModalNextQ?.addEventListener('click', (e) => {
     e.preventDefault();
     handleManualHostNextQuestionAction();
     updateHostManualModalUI();
   });
-  btnManualModalPhaseAction?.addEventListener('click', (e) => {
+  btnDockStartTimer?.addEventListener('click', (e) => {
     e.preventDefault();
-    handleManualHostPhaseStep();
+    startManualQuestionCountdown();
+    updateHostManualModalUI();
+  });
+  btnDockReveal?.addEventListener('click', (e) => {
+    e.preventDefault();
+    expireManualQuestionEarly();
+    updateHostManualModalUI();
+  });
+  btnDockNextQ?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleManualHostNextQuestionAction();
     updateHostManualModalUI();
   });
 
@@ -5502,12 +5526,28 @@ function updateHostManualModalUI() {
   const timerNum = document.getElementById('manual-timer-num');
   const qText = document.getElementById('manual-modal-question-text');
   const optionsList = document.getElementById('manual-modal-options-list');
+
+  // 3 DEDICATED HOST BUTTONS: START TIMER, PAUSE, REVEAL ANSWER
+  const btnStartTimer = document.getElementById('btn-manual-modal-start-timer');
+  const btnStartTimerText = document.getElementById('btn-manual-modal-start-timer-text');
+  const btnStartTimerHint = document.getElementById('btn-manual-modal-start-timer-hint');
+
   const btnPause = document.getElementById('btn-manual-modal-pause');
   const btnPauseIcon = document.getElementById('btn-manual-modal-pause-icon');
   const btnPauseText = document.getElementById('btn-manual-modal-pause-text');
   const btnPauseSub = document.getElementById('btn-manual-modal-pause-sub');
+
+  const btnReveal = document.getElementById('btn-manual-modal-reveal');
+  const btnRevealIcon = document.getElementById('btn-manual-modal-reveal-icon');
+  const btnRevealText = document.getElementById('btn-manual-modal-reveal-text');
+  const btnRevealHint = document.getElementById('btn-manual-modal-reveal-hint');
+
+  // ADVANCEMENT / WAITING SECTION
+  const waitBanner = document.getElementById('manual-modal-wait-banner');
+  const waitTitle = document.getElementById('manual-modal-wait-title');
+  const waitSub = document.getElementById('manual-modal-wait-sub');
   const btnNextQ = document.getElementById('btn-manual-modal-next-q');
-  const btnPhaseAction = document.getElementById('btn-manual-modal-phase-action');
+  const btnNextQText = document.getElementById('btn-manual-modal-next-q-text');
 
   const questionNumberInRound = ((currentQuestionIndex || 0) % 10) + 1;
   const activeRound = currentRound || 1;
@@ -5592,74 +5632,98 @@ function updateHostManualModalUI() {
     }
   }
 
-  // PAUSE / RESUME BUTTON
+  // 1. START TIMER BUTTON
+  if (btnStartTimer) {
+    if (!isAutomatedEngineRunning || currentGameState === 'PAUSED' || hostEngineState === 'QUESTION_REVIEW' || hostEngineState === 'ROUND_SUMMARY') {
+      btnStartTimer.disabled = true;
+      btnStartTimer.classList.remove('is-active', 'is-running');
+      if (btnStartTimerText) btnStartTimerText.textContent = 'Start Timer';
+      if (btnStartTimerHint) btnStartTimerHint.textContent = isAutomatedEngineRunning ? 'Disabled' : 'Game lobby';
+    } else if (hostEngineState === 'QUESTION_ACTIVE') {
+      btnStartTimer.disabled = true;
+      btnStartTimer.classList.add('is-running');
+      if (btnStartTimerText) btnStartTimerText.textContent = `Running (${remainingTimerSeconds || 20}s)`;
+      if (btnStartTimerHint) btnStartTimerHint.textContent = 'Timer in progress';
+    } else {
+      btnStartTimer.disabled = false;
+      btnStartTimer.classList.remove('is-running');
+      btnStartTimer.classList.add('is-active');
+      if (btnStartTimerText) btnStartTimerText.textContent = 'Start Timer';
+      if (btnStartTimerHint) btnStartTimerHint.textContent = 'Start countdown';
+    }
+  }
+
+  // 2. PAUSE / RESUME BUTTON
   if (btnPause) {
     if (currentGameState === 'PAUSED') {
       btnPause.classList.add('is-resuming');
       if (btnPauseIcon) btnPauseIcon.textContent = '▶️';
-      if (btnPauseText) btnPauseText.textContent = 'RESUME GAME';
-      if (btnPauseSub) btnPauseSub.textContent = `Countdown (${pausedRemainingQuestionSeconds || 10}s)`;
+      if (btnPauseText) btnPauseText.textContent = 'Resume';
+      if (btnPauseSub) btnPauseSub.textContent = `Resume live game (${pausedRemainingQuestionSeconds || 10}s)`;
     } else {
       btnPause.classList.remove('is-resuming');
       if (btnPauseIcon) btnPauseIcon.textContent = '⏸️';
-      if (btnPauseText) btnPauseText.textContent = 'PAUSE GAME';
-      if (btnPauseSub) btnPauseSub.textContent = 'Hold live timer';
+      if (btnPauseText) btnPauseText.textContent = 'Pause';
+      if (btnPauseSub) btnPauseSub.textContent = 'Hold timer';
+    }
+    btnPause.disabled = !isAutomatedEngineRunning && currentGameState !== 'PAUSED';
+  }
+
+  // 3. REVEAL ANSWER BUTTON
+  if (btnReveal) {
+    if (hostEngineState === 'QUESTION_REVIEW') {
+      btnReveal.disabled = true;
+      btnReveal.classList.add('is-revealed');
+      if (btnRevealIcon) btnRevealIcon.textContent = '✅';
+      if (btnRevealText) btnRevealText.textContent = 'Revealed';
+      if (btnRevealHint) btnRevealHint.textContent = 'Live on screens';
+    } else if (isAutomatedEngineRunning && currentGameState !== 'PAUSED' && (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING')) {
+      btnReveal.disabled = false;
+      btnReveal.classList.remove('is-revealed');
+      if (btnRevealIcon) btnRevealIcon.textContent = '💡';
+      if (btnRevealText) btnRevealText.textContent = 'Reveal Answer';
+      if (btnRevealHint) btnRevealHint.textContent = (hostEngineState === 'QUESTION_ACTIVE') ? 'End timer early' : 'Show correct';
+    } else {
+      btnReveal.disabled = true;
+      btnReveal.classList.remove('is-revealed');
+      if (btnRevealIcon) btnRevealIcon.textContent = '💡';
+      if (btnRevealText) btnRevealText.textContent = 'Reveal Answer';
+      if (btnRevealHint) btnRevealHint.textContent = 'Inactive';
     }
   }
 
-  // NEXT QUESTION BUTTON
+  // ADVANCEMENT / WAITING SECTION
   if (btnNextQ) {
-    btnNextQ.disabled = (!isAutomatedEngineRunning && currentGameState !== 'PAUSED');
-  }
-
-  // PRIMARY PHASE ACTION BUTTON
-  if (btnPhaseAction) {
-    btnPhaseAction.className = 'btn-manual-phase-action';
-    if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
-      btnPhaseAction.innerHTML = '▶️ START GAME (MANUAL MODE)';
-      btnPhaseAction.onclick = () => {
-        const btnStart = document.getElementById('btn-start-auto');
-        if (btnStart) btnStart.click();
-      };
-    } else if (currentGameState === 'PAUSED') {
-      btnPhaseAction.classList.add('btn-phase-next');
-      btnPhaseAction.innerHTML = '▶️ RESUME GAME';
-      btnPhaseAction.onclick = () => {
-        if (typeof window.resumeGameEngine === 'function') {
-          window.resumeGameEngine();
-        } else {
-          const btnPauseAuto = document.getElementById('btn-pause-auto');
-          if (btnPauseAuto) btnPauseAuto.click();
-        }
-      };
-    } else if (hostEngineState === 'QUESTION_READING') {
-      btnPhaseAction.innerHTML = '⏱️ START QUESTION TIMER';
-      btnPhaseAction.onclick = () => {
-        startManualQuestionCountdown();
-      };
-    } else if (hostEngineState === 'QUESTION_ACTIVE') {
-      btnPhaseAction.classList.add('btn-phase-reveal');
-      btnPhaseAction.innerHTML = '⚡ END TIMER (REVEAL ANSWER)';
-      btnPhaseAction.onclick = () => {
-        expireManualQuestionEarly();
-      };
-    } else if (hostEngineState === 'QUESTION_REVIEW') {
-      btnPhaseAction.classList.add('btn-phase-next');
-      btnPhaseAction.innerHTML = '⏭️ NEXT QUESTION';
-      btnPhaseAction.onclick = () => {
-        advanceManualNextQuestion();
-      };
+    if (!isAutomatedEngineRunning) {
+      if (waitBanner) waitBanner.classList.add('hidden');
+      btnNextQ.disabled = false;
+      btnNextQ.className = 'btn-manual-next-q btn-advance-ready';
+      if (btnNextQText) btnNextQText.textContent = 'Start Game (Manual Mode) 🚀';
     } else if (hostEngineState === 'ROUND_SUMMARY') {
-      btnPhaseAction.classList.add('btn-phase-round');
-      btnPhaseAction.innerHTML = `🚀 START ROUND ${Math.floor(currentQuestionIndex / 10) + 1}`;
-      btnPhaseAction.onclick = () => {
-        handleHostAdvanceAfterRoundSummary();
-      };
+      if (waitBanner) {
+        waitBanner.classList.remove('hidden');
+        if (waitTitle) waitTitle.textContent = `Round ${activeRound} Complete!`;
+        if (waitSub) waitSub.textContent = 'System is waiting for host to launch next round.';
+      }
+      btnNextQ.disabled = false;
+      btnNextQ.className = 'btn-manual-next-q btn-advance-ready is-round';
+      if (btnNextQText) btnNextQText.textContent = `Start Round ${Math.floor(currentQuestionIndex / 10) + 1} 🚀`;
+    } else if (hostEngineState === 'QUESTION_REVIEW') {
+      if (waitBanner) {
+        waitBanner.classList.remove('hidden');
+        if (waitTitle) waitTitle.textContent = (questionInRound === 10) ? 'Round 10 Complete!' : 'Answer Revealed!';
+        if (waitSub) waitSub.textContent = 'System is waiting for host to advance.';
+      }
+      btnNextQ.disabled = false;
+      btnNextQ.className = 'btn-manual-next-q btn-advance-ready';
+      if (btnNextQText) {
+        btnNextQText.textContent = (questionInRound === 10) ? 'Finish Round 10 ➔' : `Next Question ➔ (Q${questionInRound + 1})`;
+      }
     } else {
-      btnPhaseAction.innerHTML = '⏱️ START QUESTION TIMER';
-      btnPhaseAction.onclick = () => {
-        startManualQuestionCountdown();
-      };
+      if (waitBanner) waitBanner.classList.add('hidden');
+      btnNextQ.className = 'btn-manual-next-q btn-advance-secondary';
+      btnNextQ.disabled = (!isAutomatedEngineRunning || currentGameState === 'PAUSED');
+      if (btnNextQText) btnNextQText.textContent = 'Skip Question ⏭️';
     }
   }
 }
@@ -5670,42 +5734,24 @@ function handleManualHostNextQuestionAction() {
   } else if (hostEngineState === 'ROUND_SUMMARY') {
     handleHostAdvanceAfterRoundSummary();
   } else if (hostEngineState === 'QUESTION_ACTIVE' || hostEngineState === 'QUESTION_READING') {
-    expireManualQuestionEarly();
+    advanceManualNextQuestion();
   } else if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
     const btnStart = document.getElementById('btn-start-auto');
     if (btnStart) btnStart.click();
   }
 }
 
-function handleManualHostPhaseStep() {
-  if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
-    const btnStart = document.getElementById('btn-start-auto');
-    if (btnStart) btnStart.click();
-  } else if (currentGameState === 'PAUSED') {
-    if (typeof window.resumeGameEngine === 'function') {
-      window.resumeGameEngine();
-    } else {
-      const btnPauseAuto = document.getElementById('btn-pause-auto');
-      if (btnPauseAuto) btnPauseAuto.click();
-    }
-  } else if (hostEngineState === 'QUESTION_READING') {
-    startManualQuestionCountdown();
-  } else if (hostEngineState === 'QUESTION_ACTIVE') {
-    expireManualQuestionEarly();
-  } else if (hostEngineState === 'QUESTION_REVIEW') {
-    advanceManualNextQuestion();
-  } else if (hostEngineState === 'ROUND_SUMMARY') {
-    handleHostAdvanceAfterRoundSummary();
-  } else {
-    startManualQuestionCountdown();
-  }
-}
-
 function updateHostManualDock() {
   const manualBanner = document.getElementById('host-manual-dock-banner');
-  const btnManual = document.getElementById('btn-manual-primary');
+  const btnDockTimer = document.getElementById('btn-dock-start-timer');
+  const btnDockTimerText = document.getElementById('btn-dock-start-timer-text');
+  const btnDockReveal = document.getElementById('btn-dock-reveal');
+  const btnDockRevealText = document.getElementById('btn-dock-reveal-text');
+  const btnDockNext = document.getElementById('btn-dock-next-q');
+  const btnDockNextText = document.getElementById('btn-dock-next-text');
   const btnOpenModal = document.getElementById('btn-open-manual-modal');
-  if (!manualBanner || !btnManual) return;
+
+  if (!manualBanner) return;
 
   if (hostGamePlayMode !== 'Manual') {
     manualBanner.classList.add('hidden');
@@ -5721,69 +5767,43 @@ function updateHostManualDock() {
     };
   }
 
-  if (currentGameState === 'PAUSED') {
-    btnManual.style.background = 'var(--neon-green)';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '▶️ RESUME GAME';
-    btnManual.onclick = () => {
-      if (typeof window.resumeGameEngine === 'function') {
-        window.resumeGameEngine();
-      } else {
-        const btnPause = document.getElementById('btn-pause-auto');
-        if (btnPause) btnPause.click();
-      }
-    };
-    updateHostManualModalUI();
-    return;
+  // Update Dock Timer Button
+  if (btnDockTimer) {
+    const canStart = isAutomatedEngineRunning && hostEngineState === 'QUESTION_READING' && currentGameState !== 'PAUSED';
+    btnDockTimer.disabled = !canStart;
+    if (btnDockTimerText) {
+      btnDockTimerText.textContent = (hostEngineState === 'QUESTION_ACTIVE') ? `${remainingTimerSeconds || 20}s` : 'Start Timer';
+    }
+    btnDockTimer.style.opacity = canStart ? '1.0' : '0.5';
   }
 
-  if (!isAutomatedEngineRunning) {
-    btnManual.style.background = 'var(--neon-green)';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '▶️ START GAME (MANUAL)';
-    btnManual.onclick = () => {
-      const btnStart = document.getElementById('btn-start-auto');
-      if (btnStart) btnStart.click();
-    };
-    updateHostManualModalUI();
-    return;
+  // Update Dock Reveal Button
+  if (btnDockReveal) {
+    const isReview = hostEngineState === 'QUESTION_REVIEW';
+    const canReveal = isAutomatedEngineRunning && currentGameState !== 'PAUSED' && !isReview;
+    btnDockReveal.disabled = !canReveal;
+    if (btnDockRevealText) {
+      btnDockRevealText.textContent = isReview ? 'Revealed' : 'Reveal';
+    }
+    btnDockReveal.style.opacity = canReveal ? '1.0' : (isReview ? '0.85' : '0.5');
   }
 
-  if (hostEngineState === 'QUESTION_READING') {
-    btnManual.style.background = 'var(--neon-green)';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '⏱️ START QUESTION TIMER';
-    btnManual.onclick = () => {
-      startManualQuestionCountdown();
-    };
-  } else if (hostEngineState === 'QUESTION_ACTIVE') {
-    btnManual.style.background = '#ffd600';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '⏭️ END TIMER EARLY (REVEAL ANSWER)';
-    btnManual.onclick = () => {
-      expireManualQuestionEarly();
-    };
-  } else if (hostEngineState === 'QUESTION_REVIEW') {
-    btnManual.style.background = 'var(--neon-cyan)';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '⏭️ NEXT QUESTION';
-    btnManual.onclick = () => {
-      advanceManualNextQuestion();
-    };
-  } else if (hostEngineState === 'ROUND_SUMMARY') {
-    btnManual.style.background = 'var(--neon-purple)';
-    btnManual.style.color = '#fff';
-    btnManual.innerHTML = `🚀 START ROUND ${Math.floor(currentQuestionIndex / 10) + 1}`;
-    btnManual.onclick = () => {
-      handleHostAdvanceAfterRoundSummary();
-    };
-  } else {
-    btnManual.style.background = 'var(--neon-green)';
-    btnManual.style.color = '#000';
-    btnManual.innerHTML = '⏱️ START QUESTION TIMER';
-    btnManual.onclick = () => {
-      startManualQuestionCountdown();
-    };
+  // Update Dock Next Question Button
+  if (btnDockNext) {
+    const isWaiting = hostEngineState === 'QUESTION_REVIEW' || hostEngineState === 'ROUND_SUMMARY';
+    btnDockNext.disabled = !isAutomatedEngineRunning && currentGameState !== 'PAUSED';
+    if (btnDockNextText) {
+      btnDockNextText.textContent = isWaiting ? 'Next ➔' : 'Skip ⏭️';
+    }
+    if (isWaiting) {
+      btnDockNext.style.background = 'var(--neon-cyan)';
+      btnDockNext.style.color = '#000';
+      btnDockNext.style.boxShadow = '0 0 14px rgba(0, 229, 255, 0.4)';
+    } else {
+      btnDockNext.style.background = 'rgba(255, 255, 255, 0.08)';
+      btnDockNext.style.color = '#fff';
+      btnDockNext.style.boxShadow = 'none';
+    }
   }
 
   updateHostManualModalUI();
@@ -5938,10 +5958,18 @@ function checkHostEngineTick() {
       }
       handleHostQuestionTimeout(question, currentRound, questionInRound);
     } else if (hostEngineState === 'QUESTION_REVIEW') {
+      if (hostGamePlayMode === 'Manual') {
+        // In Manual mode, strictly wait for the host to manually advance to the next question
+        return;
+      }
       currentRound = Math.max(currentRound, Math.floor(currentQuestionIndex / 10) + 1);
       const questionInRound = (currentQuestionIndex % 10) + 1;
       handleHostAdvanceAfterReview(questionInRound, currentRound);
     } else if (hostEngineState === 'ROUND_SUMMARY') {
+      if (hostGamePlayMode === 'Manual') {
+        // In Manual mode, strictly wait for the host to advance to the next round
+        return;
+      }
       handleHostAdvanceAfterRoundSummary();
     }
   }
@@ -6501,41 +6529,58 @@ function onTimerExpired(payload) {
     tvTimerContainer.classList.remove('hidden');
     if (timerLabel) timerLabel.textContent = '';
     if (tvTimerSublabel) {
-      tvTimerSublabel.textContent = isLastQ ? 'Round Results' : 'Next question';
+      const isManual = (hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
+      tvTimerSublabel.textContent = isManual ? 'Wait Host' : (isLastQ ? 'Round Results' : 'Next question');
       tvTimerSublabel.classList.remove('hidden');
     }
   }
 
+  const isManualModeActive = (hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
   const totalReviewDuration = isLastQ ? 20.0 : 15.0;
 
   if (tvNextQBanner) {
-    tvNextQBanner.innerHTML = isLastQ
-      ? `⏱️ ROUND RESULTS IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`
-      : `⏳ NEXT QUESTION IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`;
+    if (isManualModeActive) {
+      tvNextQBanner.innerHTML = isLastQ
+        ? `🏆 ROUND COMPLETE — WAITING FOR HOST TO ADVANCE`
+        : `💡 ANSWER REVEALED — WAITING FOR HOST TO ADVANCE`;
+    } else {
+      tvNextQBanner.innerHTML = isLastQ
+        ? `⏱️ ROUND RESULTS IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`
+        : `⏳ NEXT QUESTION IN <strong id="tv-next-q-timer-val">${reviewSeconds}</strong> SECONDS`;
+    }
     tvNextQBanner.classList.remove('hidden');
   }
 
-  const updateTvCountdown = () => {
-    const remNextQSecs = Math.max(0, Math.ceil((nextEpoch - Date.now()) / 1000));
-    const activeTvVal = document.getElementById('tv-next-q-timer-val');
-    if (activeTvVal) activeTvVal.textContent = remNextQSecs;
-    if (tvTimerVal) tvTimerVal.textContent = remNextQSecs;
+  if (isManualModeActive) {
+    clearInterval(tvNextQCountdownInterval);
+    if (tvTimerVal) tvTimerVal.textContent = '✓';
     if (timerProgress) {
-      const ratio = remNextQSecs / totalReviewDuration;
-      const offset = 264 - (ratio * 264);
-      timerProgress.style.strokeDashoffset = offset;
+      timerProgress.style.strokeDashoffset = '0';
       timerProgress.style.stroke = '#00e5ff';
     }
-    if (remNextQSecs <= 0) {
-      clearInterval(tvNextQCountdownInterval);
-      if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
-    }
-    return remNextQSecs;
-  };
+  } else {
+    const updateTvCountdown = () => {
+      const remNextQSecs = Math.max(0, Math.ceil((nextEpoch - Date.now()) / 1000));
+      const activeTvVal = document.getElementById('tv-next-q-timer-val');
+      if (activeTvVal) activeTvVal.textContent = remNextQSecs;
+      if (tvTimerVal) tvTimerVal.textContent = remNextQSecs;
+      if (timerProgress) {
+        const ratio = remNextQSecs / totalReviewDuration;
+        const offset = 264 - (ratio * 264);
+        timerProgress.style.strokeDashoffset = offset;
+        timerProgress.style.stroke = '#00e5ff';
+      }
+      if (remNextQSecs <= 0) {
+        clearInterval(tvNextQCountdownInterval);
+        if (tvNextQBanner) tvNextQBanner.classList.add('hidden');
+      }
+      return remNextQSecs;
+    };
 
-  updateTvCountdown();
-  clearInterval(tvNextQCountdownInterval);
-  tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
+    updateTvCountdown();
+    clearInterval(tvNextQCountdownInterval);
+    tvNextQCountdownInterval = setInterval(updateTvCountdown, 500);
+  }
 
   // ACCURATE SCORING: Evaluate answer ONLY once when timer expires
   const isCorrect = Boolean(playerChoiceSubmitted && correctOpt && playerChoiceSubmitted.toUpperCase() === correctOpt);

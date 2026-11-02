@@ -1108,7 +1108,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     final isRoundEndingQuestion = _questionIndex > 0 && (_questionIndex % _totalQuestionsInRound == 0);
     final reviewSeconds = isRoundEndingQuestion ? 20 : 15;
 
-    final mode = payload?['game_play_mode'] as String? ?? 'Auto';
+    final mode = (payload?['game_play_mode'] as String?) ?? _gamePlayMode;
     final fallbackNext = isRoundEndingQuestion
         ? (DateTime.now().millisecondsSinceEpoch + 20000)
         : (DateTime.now().millisecondsSinceEpoch + 15000);

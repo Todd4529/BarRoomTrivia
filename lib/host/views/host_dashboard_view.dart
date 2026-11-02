@@ -1485,9 +1485,147 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             ),
           ),
         ],
-        if (_isEngineRunning && _selectedGameMode == 'Manual' && !isPaused) ...[
+        if (_isEngineRunning && _selectedGameMode == 'Manual') ...[
           const SizedBox(height: 12),
-          // If Round is completed and waiting for next round:
+          // 3 DEDICATED HOST CONTROL BUTTONS: START TIMER, PAUSE, REVEAL ANSWER
+          Row(
+            children: [
+              // BUTTON 1: START TIMER
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: (!GameEngineManager.instance.isQuestionTimerRunning &&
+                          !_isReviewPhase &&
+                          !GameEngineManager.instance.isRoundCompletedWaitingForNext &&
+                          !isPaused)
+                      ? () {
+                          GameEngineManager.instance.startManualTimer(
+                            roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                          );
+                          setState(() {});
+                        }
+                      : null,
+                  icon: Icon(
+                    GameEngineManager.instance.isQuestionTimerRunning
+                        ? Icons.hourglass_top_rounded
+                        : Icons.play_circle_fill_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    GameEngineManager.instance.isQuestionTimerRunning
+                        ? '${GameEngineManager.instance.remainingQuestionSeconds}s'
+                        : 'Start Timer',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonGreen,
+                    foregroundColor: Colors.black87,
+                    disabledBackgroundColor: Colors.white.withOpacity(0.06),
+                    disabledForegroundColor: Colors.white30,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: (!GameEngineManager.instance.isQuestionTimerRunning &&
+                                !_isReviewPhase &&
+                                !GameEngineManager.instance.isRoundCompletedWaitingForNext &&
+                                !isPaused)
+                            ? AppTheme.neonGreen
+                            : Colors.white12,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // BUTTON 2: PAUSE / RESUME
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    if (isPaused) {
+                      _resumeGameEngine();
+                    } else {
+                      _pauseGameEngine();
+                    }
+                    setState(() {});
+                  },
+                  icon: Icon(
+                    isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    isPaused ? 'Resume' : 'Pause',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow.withOpacity(0.18),
+                    foregroundColor: isPaused ? Colors.black87 : AppTheme.neonYellow,
+                    side: BorderSide(
+                      color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
+                      width: 1.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // BUTTON 3: REVEAL ANSWER
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: (!_isReviewPhase &&
+                          !GameEngineManager.instance.isRoundCompletedWaitingForNext &&
+                          !isPaused)
+                      ? () {
+                          GameEngineManager.instance.expireTimerManual(
+                            roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                          );
+                          setState(() {});
+                        }
+                      : null,
+                  icon: Icon(
+                    _isReviewPhase ? Icons.check_circle_rounded : Icons.visibility_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _isReviewPhase ? 'Revealed' : 'Reveal Answer',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isReviewPhase
+                        ? AppTheme.neonCyan.withOpacity(0.15)
+                        : const Color(0xFFFFB300),
+                    foregroundColor: _isReviewPhase ? AppTheme.neonCyan : Colors.black87,
+                    disabledBackgroundColor: _isReviewPhase
+                        ? AppTheme.neonCyan.withOpacity(0.12)
+                        : Colors.white.withOpacity(0.06),
+                    disabledForegroundColor: _isReviewPhase ? AppTheme.neonCyan : Colors.white30,
+                    side: BorderSide(
+                      color: _isReviewPhase
+                          ? AppTheme.neonCyan.withOpacity(0.5)
+                          : (!_isReviewPhase && !isPaused)
+                              ? const Color(0xFFFFB300)
+                              : Colors.white12,
+                      width: 1.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // ADVANCEMENT / WAITING SECTION
           if (GameEngineManager.instance.isRoundCompletedWaitingForNext) ...[
             ElevatedButton.icon(
               onPressed: () {
@@ -1495,118 +1633,87 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   roomCode: _activeSession?.roomCode ?? _targetRoomCode,
                 );
                 _startPreGameTimer();
+                setState(() {});
               },
-              icon: const Icon(
-                Icons.rocket_launch_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
+              icon: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 22),
               label: Text(
-                'START ROUND ${GameEngineManager.instance.currentRound}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  letterSpacing: 0.8,
-                ),
+                'START ROUND ${GameEngineManager.instance.currentRound} ➔',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonPurple,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
-              ),
-            ),
-          ] else if (!GameEngineManager.instance.isQuestionTimerRunning && !_isReviewPhase) ...[
-            // Host Reading Phase -> START TIMER button
-            ElevatedButton.icon(
-              onPressed: () {
-                GameEngineManager.instance.startManualTimer(
-                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
-                );
-              },
-              icon: const Icon(
-                Icons.play_circle_fill_rounded,
-                color: Colors.black87,
-                size: 26,
-              ),
-              label: const Text(
-                'START QUESTION TIMER',
-                style: TextStyle(
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonGreen,
-                foregroundColor: Colors.black87,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
-              ),
-            ),
-          ] else if (GameEngineManager.instance.isQuestionTimerRunning && !_isReviewPhase) ...[
-            // Active Countdown Phase -> Allow host to SKIP / EXPIRE TIMER
-            ElevatedButton.icon(
-              onPressed: () {
-                GameEngineManager.instance.expireTimerManual(
-                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
-                );
-              },
-              icon: const Icon(
-                Icons.fast_forward_rounded,
-                color: AppTheme.neonYellow,
-                size: 24,
-              ),
-              label: const Text(
-                'END TIMER EARLY (REVEAL ANSWER)',
-                style: TextStyle(
-                  color: AppTheme.neonYellow,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.cardSurfaceElevated,
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: AppTheme.neonYellow, width: 1.5),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 2,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ] else if (_isReviewPhase) ...[
-            // Review phase -> NEXT QUESTION button
-            ElevatedButton.icon(
-              onPressed: () {
-                GameEngineManager.instance.nextQuestionManual(
-                  roomCode: _activeSession?.roomCode ?? _targetRoomCode,
-                );
-              },
-              icon: const Icon(
-                Icons.skip_next_rounded,
-                color: Colors.white,
-                size: 24,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.neonCyan.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.neonCyan, width: 1.5),
               ),
-              label: const Text(
-                'NEXT QUESTION',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  letterSpacing: 0.8,
+              child: Column(
+                children: [
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: AppTheme.neonCyan, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Answer Revealed — Waiting for host to advance',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        GameEngineManager.instance.nextQuestionManual(
+                          roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                        );
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.arrow_forward_rounded, color: Colors.black87, size: 22),
+                      label: const Text(
+                        'NEXT QUESTION ➔',
+                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 14),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonCyan,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  GameEngineManager.instance.nextQuestionManual(
+                    roomCode: _activeSession?.roomCode ?? _targetRoomCode,
+                  );
+                  setState(() {});
+                },
+                icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 18),
+                label: const Text(
+                  'Skip to Next Question',
+                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700, fontSize: 12),
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonCyan,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white24),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ),
           ],
@@ -1942,185 +2049,181 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   ),
                   const SizedBox(height: 14),
 
-                  // DEDICATED CONTROLS (Pause & Next Question clearly side-by-side)
+                  // 3 DEDICATED HOST CONTROL BUTTONS: START TIMER, PAUSE, REVEAL ANSWER
                   Row(
                     children: [
-                      // CLEAR PAUSE / RESUME BUTTON
+                      // BUTTON 1: START TIMER
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            if (isPaused) {
-                              _resumeGameEngine();
-                            } else {
-                              _pauseGameEngine();
-                            }
-                            setModalState(() {});
-                            setState(() {});
-                          },
+                          onPressed: (isRunning &&
+                                  activeQ != null &&
+                                  !engine.isQuestionTimerRunning &&
+                                  !engine.isReviewPhase &&
+                                  !engine.isRoundCompletedWaitingForNext &&
+                                  !isPaused)
+                              ? () {
+                                  engine.startManualTimer(roomCode: room);
+                                  setModalState(() {});
+                                  setState(() {});
+                                }
+                              : null,
                           icon: Icon(
-                            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                            color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
-                            size: 24,
+                            engine.isQuestionTimerRunning
+                                ? Icons.hourglass_top_rounded
+                                : Icons.play_circle_fill_rounded,
+                            size: 20,
                           ),
                           label: Text(
-                            isPaused ? 'RESUME GAME' : 'PAUSE GAME',
-                            style: TextStyle(
-                              color: isPaused ? AppTheme.neonGreen : Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
-                            ),
+                            engine.isQuestionTimerRunning
+                                ? '${engine.remainingQuestionSeconds}s'
+                                : 'Start Timer',
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isPaused
-                                ? AppTheme.neonGreen.withOpacity(0.15)
-                                : AppTheme.neonYellow.withOpacity(0.15),
-                            side: BorderSide(
-                              color: isPaused ? AppTheme.neonGreen : AppTheme.neonYellow,
-                              width: 2.0,
+                            backgroundColor: AppTheme.neonGreen,
+                            foregroundColor: Colors.black87,
+                            disabledBackgroundColor: Colors.white.withOpacity(0.06),
+                            disabledForegroundColor: Colors.white30,
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              side: BorderSide(
+                                color: (isRunning &&
+                                        activeQ != null &&
+                                        !engine.isQuestionTimerRunning &&
+                                        !engine.isReviewPhase &&
+                                        !engine.isRoundCompletedWaitingForNext &&
+                                        !isPaused)
+                                    ? AppTheme.neonGreen
+                                    : Colors.white12,
+                                width: 1.5,
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: (isRunning &&
+                                    activeQ != null &&
+                                    !engine.isQuestionTimerRunning &&
+                                    !engine.isReviewPhase &&
+                                    !engine.isRoundCompletedWaitingForNext &&
+                                    !isPaused)
+                                ? 4
+                                : 0,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
 
-                      // CLEAR NEXT QUESTION BUTTON
+                      // BUTTON 2: PAUSE / RESUME
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            if (engine.isReviewPhase) {
-                              engine.nextQuestionManual(roomCode: room);
-                            } else if (engine.isRoundCompletedWaitingForNext) {
-                              engine.startNextRoundManual(roomCode: room);
-                              _startPreGameTimer();
-                            } else if (engine.isQuestionTimerRunning || (isRunning && activeQ != null)) {
-                              engine.expireTimerManual(roomCode: room);
-                            }
-                            setModalState(() {});
-                            setState(() {});
-                          },
-                          icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 24),
-                          label: const Text(
-                            'NEXT QUESTION',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
-                            ),
+                          onPressed: (isRunning || _isPreGameCountdownActive)
+                              ? () {
+                                  if (isPaused) {
+                                    _resumeGameEngine();
+                                  } else {
+                                    _pauseGameEngine();
+                                  }
+                                  setModalState(() {});
+                                  setState(() {});
+                                }
+                              : null,
+                          icon: Icon(
+                            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                            size: 20,
+                          ),
+                          label: Text(
+                            isPaused ? 'Resume' : 'Pause',
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.neonCyan.withOpacity(0.18),
-                            side: const BorderSide(color: AppTheme.neonCyan, width: 2.0),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: isPaused
+                                ? AppTheme.neonGreen
+                                : AppTheme.neonYellow.withOpacity(0.18),
+                            foregroundColor: isPaused ? Colors.black87 : AppTheme.neonYellow,
+                            disabledBackgroundColor: Colors.white.withOpacity(0.06),
+                            disabledForegroundColor: Colors.white30,
+                            side: BorderSide(
+                              color: isPaused
+                                  ? AppTheme.neonGreen
+                                  : ((isRunning || _isPreGameCountdownActive)
+                                      ? AppTheme.neonYellow
+                                      : Colors.white12),
+                              width: 1.5,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: isPaused ? 4 : 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // BUTTON 3: REVEAL ANSWER
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: (isRunning &&
+                                  activeQ != null &&
+                                  !engine.isReviewPhase &&
+                                  !engine.isRoundCompletedWaitingForNext &&
+                                  !isPaused)
+                              ? () {
+                                  engine.expireTimerManual(roomCode: room);
+                                  setModalState(() {});
+                                  setState(() {});
+                                }
+                              : null,
+                          icon: Icon(
+                            engine.isReviewPhase ? Icons.check_circle_rounded : Icons.visibility_rounded,
+                            size: 20,
+                          ),
+                          label: Text(
+                            engine.isReviewPhase ? 'Revealed' : 'Reveal Answer',
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: engine.isReviewPhase
+                                ? AppTheme.neonCyan.withOpacity(0.15)
+                                : const Color(0xFFFFB300),
+                            foregroundColor: engine.isReviewPhase ? AppTheme.neonCyan : Colors.black87,
+                            disabledBackgroundColor: engine.isReviewPhase
+                                ? AppTheme.neonCyan.withOpacity(0.12)
+                                : Colors.white.withOpacity(0.06),
+                            disabledForegroundColor: engine.isReviewPhase ? AppTheme.neonCyan : Colors.white30,
+                            side: BorderSide(
+                              color: engine.isReviewPhase
+                                  ? AppTheme.neonCyan.withOpacity(0.5)
+                                  : (isRunning &&
+                                          activeQ != null &&
+                                          !engine.isReviewPhase &&
+                                          !engine.isRoundCompletedWaitingForNext &&
+                                          !isPaused)
+                                      ? const Color(0xFFFFB300)
+                                      : Colors.white12,
+                              width: 1.5,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: (isRunning &&
+                                    activeQ != null &&
+                                    !engine.isReviewPhase &&
+                                    !engine.isRoundCompletedWaitingForNext &&
+                                    !isPaused)
+                                ? 4
+                                : 0,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
 
-                  // PRIMARY PHASE ACTION BUTTON
-                  if (isPaused)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        _resumeGameEngine();
-                        setModalState(() {});
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.black87, size: 24),
-                      label: const Text(
-                        'RESUME GAME',
-                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonGreen,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  else if (engine.isRoundCompletedWaitingForNext)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        engine.startNextRoundManual(roomCode: room);
-                        _startPreGameTimer();
-                        setModalState(() {});
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 24),
-                      label: Text(
-                        'START ROUND ${engine.currentRound}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  else if (engine.isQuestionTimerRunning)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        engine.expireTimerManual(roomCode: room);
-                        setModalState(() {});
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.fast_forward_rounded, color: Colors.black87, size: 24),
-                      label: const Text(
-                        'END TIMER EARLY (REVEAL ANSWER)',
-                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonYellow,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  else if (engine.isReviewPhase)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        engine.nextQuestionManual(roomCode: room);
-                        setModalState(() {});
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 24),
-                      label: const Text(
-                        'NEXT QUESTION',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonCyan,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  else if (isRunning)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        engine.startManualTimer(roomCode: room);
-                        setModalState(() {});
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.play_circle_fill_rounded, color: Colors.black87, size: 24),
-                      label: const Text(
-                        'START QUESTION TIMER',
-                        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 15),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonGreen,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  else
+                  // ADVANCEMENT SECTION: WAITING FOR HOST / NEXT QUESTION
+                  if (!isRunning && activeQ == null)
                     ElevatedButton.icon(
                       onPressed: () {
                         _startPreGameTimer();
@@ -2137,6 +2240,138 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                         foregroundColor: Colors.black87,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  else if (engine.isRoundCompletedWaitingForNext)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonPurple.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.neonPurple, width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.emoji_events_rounded, color: AppTheme.neonPurple, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Round ${engine.currentRound - 1} Complete! Waiting for host to launch next round.',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                engine.startNextRoundManual(roomCode: room);
+                                _startPreGameTimer();
+                                setModalState(() {});
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.rocket_launch_rounded, color: Colors.white, size: 22),
+                              label: Text(
+                                'START ROUND ${engine.currentRound} ➔',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.neonPurple,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (engine.isReviewPhase)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonCyan.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.neonCyan.withOpacity(0.25),
+                            blurRadius: 14,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: AppTheme.neonCyan, size: 18),
+                              const SizedBox(width: 8),
+                              Text(
+                                questionNum >= 10
+                                    ? 'Round 10 Complete! System waiting for host to advance.'
+                                    : 'Answer Revealed! System waiting for host to advance.',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                engine.nextQuestionManual(roomCode: room);
+                                setModalState(() {});
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.arrow_forward_rounded, color: Colors.black87, size: 24),
+                              label: Text(
+                                questionNum >= 10
+                                    ? 'FINISH ROUND $roundNum ➔'
+                                    : 'ADVANCE TO NEXT QUESTION ➔ (Q${questionNum + 1})',
+                                style: const TextStyle(
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.neonCyan,
+                                foregroundColor: Colors.black87,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          engine.nextQuestionManual(roomCode: room);
+                          setModalState(() {});
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 20),
+                        label: const Text(
+                          'Skip to Next Question',
+                          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white24, width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ),
                 ],

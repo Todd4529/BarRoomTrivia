@@ -1463,13 +1463,22 @@
         <div class="host-sticky-bottom-dock">
           <!-- Contextual Manual Control Action Bar (Visible in Manual Mode) -->
           <div id="host-manual-dock-banner" class="hidden" style="margin-bottom: 8px; width: 100%;">
-            <div style="display: flex; gap: 8px; width: 100%;">
-              <button type="button" id="btn-open-manual-modal" class="btn btn-secondary" style="flex: 1; padding: 12px 8px; font-size: 13px; font-weight: 800; border-radius: 12px; border: 1.5px solid var(--neon-cyan); color: #fff; background: rgba(0, 229, 255, 0.12); display: flex; align-items: center; justify-content: center; gap: 6px;">
-                <span>🎙️</span>
+            <div class="manual-dock-grid">
+              <button type="button" id="btn-open-manual-modal" class="btn-dock-manual btn-dock-console" title="Open Full Host MC Console">
+                <span class="btn-icon">🎙️</span>
                 <span>MC CONSOLE</span>
               </button>
-              <button type="button" id="btn-manual-primary" class="btn btn-primary" style="flex: 1.6; padding: 12px 10px; font-size: 14px; font-weight: 900; letter-spacing: 0.5px; border-radius: 12px; background: var(--neon-green); color: #000; box-shadow: 0 0 16px rgba(0, 230, 118, 0.35);">
-                ⏱️ START TIMER
+              <button type="button" id="btn-dock-start-timer" class="btn-dock-manual btn-dock-timer" title="Start Question Countdown">
+                <span class="btn-icon">⏱️</span>
+                <span id="btn-dock-start-timer-text">Start Timer</span>
+              </button>
+              <button type="button" id="btn-dock-reveal" class="btn-dock-manual btn-dock-reveal" title="Reveal Correct Answer">
+                <span class="btn-icon">💡</span>
+                <span id="btn-dock-reveal-text">Reveal</span>
+              </button>
+              <button type="button" id="btn-dock-next-q" class="btn-dock-manual btn-dock-next" title="Next Question">
+                <span class="btn-icon">⏭️</span>
+                <span id="btn-dock-next-text">Next</span>
               </button>
             </div>
           </div>
@@ -1549,29 +1558,50 @@
 
             <!-- Dedicated Action Controls -->
             <div class="manual-modal-controls">
-              <!-- Clear PAUSE and NEXT QUESTION Buttons -->
-              <div class="manual-quick-actions-row">
-                <button type="button" id="btn-manual-modal-pause" class="btn-manual-pause" title="Pause or Resume Live Game">
-                  <span class="manual-btn-icon" id="btn-manual-modal-pause-icon">⏸️</span>
-                  <div class="manual-btn-labels">
-                    <span class="manual-btn-main" id="btn-manual-modal-pause-text">PAUSE GAME</span>
-                    <span class="manual-btn-sub" id="btn-manual-modal-pause-sub">Hold live timer</span>
+              <!-- 3-BUTTON MANUAL ACTION DECK: START TIMER, PAUSE, REVEAL ANSWER -->
+              <div class="manual-three-buttons-row">
+                <!-- 1. START TIMER -->
+                <button type="button" id="btn-manual-modal-start-timer" class="btn-manual-control btn-manual-start" title="Start Question Countdown Timer">
+                  <span class="manual-control-icon">⏱️</span>
+                  <div class="manual-control-labels">
+                    <span class="manual-control-title" id="btn-manual-modal-start-timer-text">Start Timer</span>
+                    <span class="manual-control-hint" id="btn-manual-modal-start-timer-hint">Start countdown</span>
                   </div>
                 </button>
 
-                <button type="button" id="btn-manual-modal-next-q" class="btn-manual-next-q" title="Advance to Next Question">
-                  <span class="manual-btn-icon">⏭️</span>
-                  <div class="manual-btn-labels">
-                    <span class="manual-btn-main">NEXT QUESTION</span>
-                    <span class="manual-btn-sub">Advance step</span>
+                <!-- 2. PAUSE / RESUME -->
+                <button type="button" id="btn-manual-modal-pause" class="btn-manual-control btn-manual-pause" title="Pause or Resume Live Game">
+                  <span class="manual-control-icon" id="btn-manual-modal-pause-icon">⏸️</span>
+                  <div class="manual-control-labels">
+                    <span class="manual-control-title" id="btn-manual-modal-pause-text">Pause</span>
+                    <span class="manual-control-hint" id="btn-manual-modal-pause-sub">Hold timer</span>
+                  </div>
+                </button>
+
+                <!-- 3. REVEAL ANSWER -->
+                <button type="button" id="btn-manual-modal-reveal" class="btn-manual-control btn-manual-reveal" title="Reveal Correct Answer Immediately">
+                  <span class="manual-control-icon" id="btn-manual-modal-reveal-icon">💡</span>
+                  <div class="manual-control-labels">
+                    <span class="manual-control-title" id="btn-manual-modal-reveal-text">Reveal Answer</span>
+                    <span class="manual-control-hint" id="btn-manual-modal-reveal-hint">Show correct</span>
                   </div>
                 </button>
               </div>
 
-              <!-- Primary Phase Action Button (Start Timer / Reveal Answer / Next Round) -->
-              <button type="button" id="btn-manual-modal-phase-action" class="btn-manual-phase-action" title="Execute Phase Step">
-                ⏱️ START QUESTION TIMER
-              </button>
+              <!-- ADVANCEMENT / WAITING SECTION -->
+              <div id="manual-modal-advance-container" class="manual-advance-container">
+                <div id="manual-modal-wait-banner" class="manual-wait-banner hidden">
+                  <span class="wait-icon">💡</span>
+                  <div class="wait-text-wrap">
+                    <strong id="manual-modal-wait-title">Answer Revealed!</strong>
+                    <span id="manual-modal-wait-sub">System is waiting for host to advance to next question.</span>
+                  </div>
+                </div>
+                <button type="button" id="btn-manual-modal-next-q" class="btn-manual-next-q" title="Advance to Next Question">
+                  <span class="next-icon">⏭️</span>
+                  <span class="next-title" id="btn-manual-modal-next-q-text">Next Question ➔</span>
+                </button>
+              </div>
             </div>
 
             <!-- Host Tips Footer -->
