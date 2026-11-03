@@ -928,12 +928,15 @@ class RealtimeService {
   Future<void> broadcastAdModeToggled({
     required String roomCode,
     required bool isAdModeActive,
+    int? adSlideDurationSeconds,
   }) async {
     final norm = roomCode.toUpperCase().trim();
     final payload = {
       'event': 'ad_mode_toggled',
       'isAdModeActive': isAdModeActive,
       'is_ad_mode_active': isAdModeActive,
+      if (adSlideDurationSeconds != null) 'adSlideDurationSeconds': adSlideDurationSeconds,
+      if (adSlideDurationSeconds != null) 'ad_slide_duration_seconds': adSlideDurationSeconds,
       'room_code': norm,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
@@ -954,6 +957,7 @@ class RealtimeService {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
         'is_ad_mode_active': isAdModeActive,
+        if (adSlideDurationSeconds != null) 'ad_slide_duration_seconds': adSlideDurationSeconds,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}

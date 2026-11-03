@@ -224,6 +224,24 @@ void main() {
       expect(jsContent.contains('renderHostAdGallery();'), isTrue);
       expect(jsContent.contains('syncTvSignageDisplay();'), isTrue);
     });
+
+    test('Host ad display duration changes immediately update adSlideDurationSeconds and restart rotation on TV', () {
+      // 1. broadcastAdModeChange and broadcastAdSlidesUpdated persist ad_slide_duration_seconds to database
+      expect(jsContent.contains('ad_slide_duration_seconds: adSlideDurationSeconds'), isTrue);
+
+      // 2. onAdModeToggled detects duration changes and immediately restarts TV ad signage rotation
+      expect(jsContent.contains('if (durChanged) {'), isTrue);
+      expect(jsContent.contains('startTvAdSignageRotation();'), isTrue);
+
+      // 3. syncTvSignageDisplay accepts forceRestartRotation parameter to allow immediate reset of active timeouts
+      expect(jsContent.contains('function syncTvSignageDisplay(forceRestartRotation = false)'), isTrue);
+      expect(jsContent.contains('if (!adRotationTimeout || forceRestartRotation)'), isTrue);
+
+      // 4. Flutter TVDisplayView checks ad_slide_duration_seconds and restarts timer immediately
+      final tvContent = File('lib/tv/views/tv_display_view.dart').readAsStringSync();
+      expect(tvContent.contains("res.containsKey('ad_slide_duration_seconds')"), isTrue);
+      expect(tvContent.contains('_startAdSlideTimer();'), isTrue);
+    });
   });
 
   group('End-to-End Game Lifecycle with Ad Signage Restoration Simulation', () {

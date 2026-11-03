@@ -224,6 +224,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             });
             _startAdSlideTimer();
           }
+          if (res.containsKey('ad_slide_duration_seconds') || res.containsKey('adSlideDurationSeconds')) {
+            final rawDur = res['ad_slide_duration_seconds'] ?? res['adSlideDurationSeconds'];
+            final dur = int.tryParse(rawDur.toString());
+            if (dur != null && dur > 0 && dur != _adSlideDurationSeconds) {
+              setState(() {
+                _adSlideDurationSeconds = dur;
+              });
+              _startAdSlideTimer();
+            }
+          }
           if (res['ad_slides'] is List) {
             final rawSlides = res['ad_slides'] as List;
             final parsedSlides = <Map<String, dynamic>>[];
@@ -942,20 +952,24 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       onAdSlidesUpdatedBroadcast: (payload) {
         if (!mounted) return;
         final rawSlides = payload['slides'];
+        bool durChanged = false;
+        if (payload['adSlideDurationSeconds'] != null || payload['ad_slide_duration_seconds'] != null) {
+          final dur = int.tryParse((payload['adSlideDurationSeconds'] ?? payload['ad_slide_duration_seconds']).toString());
+          if (dur != null && dur > 0 && dur != _adSlideDurationSeconds) {
+            _adSlideDurationSeconds = dur;
+            durChanged = true;
+          }
+        }
         if (rawSlides is List) {
           final parsed = <Map<String, dynamic>>[];
           for (final s in rawSlides) {
             if (s is Map) parsed.add(Map<String, dynamic>.from(s));
           }
-          if (payload['adSlideDurationSeconds'] != null || payload['ad_slide_duration_seconds'] != null) {
-            final dur = int.tryParse((payload['adSlideDurationSeconds'] ?? payload['ad_slide_duration_seconds']).toString());
-            if (dur != null && dur > 0) _adSlideDurationSeconds = dur;
-          }
           final bool newAdActive = payload['isAdModeActive'] == true || payload['is_ad_mode_active'] == true;
           final bool slidesChanged = !_areSlidesEqual(_customAdSlides, parsed);
           final bool modeChanged = _isAdSignageModeActive != newAdActive;
 
-          if (slidesChanged || modeChanged) {
+          if (slidesChanged || modeChanged || durChanged) {
             setState(() {
               if (slidesChanged) {
                 _customAdSlides = parsed;
@@ -969,6 +983,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             });
             _startAdSlideTimer();
           }
+        } else if (durChanged) {
+          _startAdSlideTimer();
         }
       },
       onSoundEffectsToggledBroadcast: (payload) {
@@ -3329,7 +3345,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Text(
                   desc,
                   style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.2),
-                  maxLines: 3,
+                  maxLines: 5,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

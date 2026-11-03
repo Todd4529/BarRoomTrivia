@@ -2815,13 +2815,27 @@ function onStateSyncResponse(payload) {
     updateHostManualDock();
   }
 
-  if (payload.adSlideDurationSeconds !== undefined) {
-    adSlideDurationSeconds = parseInt(payload.adSlideDurationSeconds, 10);
-    safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
-    const durChips = document.querySelectorAll('.ad-dur-chip');
-    durChips.forEach(chip => {
-      chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
-    });
+  if (payload.adSlideDurationSeconds !== undefined || payload.ad_slide_duration_seconds !== undefined) {
+    const rawDur = payload.adSlideDurationSeconds ?? payload.ad_slide_duration_seconds;
+    const newDur = parseInt(rawDur, 10);
+    if (!isNaN(newDur) && newDur > 0) {
+      const durChanged = (adSlideDurationSeconds !== newDur);
+      adSlideDurationSeconds = newDur;
+      safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+      const durChips = document.querySelectorAll('.ad-dur-chip');
+      durChips.forEach(chip => {
+        chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
+      });
+      if (durChanged) {
+        const allSlides = getAllActiveAdSlides();
+        const isIntermission = currentGameState === 'ROUND_SUMMARY' || (typeof hostEngineState !== 'undefined' && hostEngineState === 'ROUND_SUMMARY');
+        const tvScreen = document.getElementById('tv-ad-signage-screen');
+        const isShowingAds = (isAdModeActive || isIntermission || (tvScreen && !tvScreen.classList.contains('hidden')));
+        if (isShowingAds && allSlides && allSlides.length > 0) {
+          startTvAdSignageRotation();
+        }
+      }
+    }
   }
 
   syncTvSignageDisplay();
@@ -3786,6 +3800,25 @@ function initHostControls() {
           }
         }
 
+        if (session.ad_slide_duration_seconds !== undefined && session.ad_slide_duration_seconds !== null) {
+          const remoteDur = parseInt(session.ad_slide_duration_seconds, 10);
+          if (!isNaN(remoteDur) && remoteDur > 0 && remoteDur !== adSlideDurationSeconds) {
+            adSlideDurationSeconds = remoteDur;
+            safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+            const durChips = document.querySelectorAll('.ad-dur-chip');
+            durChips.forEach(chip => {
+              chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
+            });
+            const allSlides = getAllActiveAdSlides();
+            const isIntermission = currentGameState === 'ROUND_SUMMARY' || (typeof hostEngineState !== 'undefined' && hostEngineState === 'ROUND_SUMMARY');
+            const tvScreen = document.getElementById('tv-ad-signage-screen');
+            const isShowingAds = (isAdModeActive || isIntermission || (tvScreen && !tvScreen.classList.contains('hidden')));
+            if (isShowingAds && allSlides && allSlides.length > 0) {
+              startTvAdSignageRotation();
+            }
+          }
+        }
+
         if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
           const remoteSlides = session.ad_slides;
           const isDifferent = !customAdSlides || customAdSlides.length !== remoteSlides.length ||
@@ -4575,7 +4608,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
       },
       {
         icon: '🏠',
-        title: 'PERFECT FOR TRIVIA PARTIES',
+        title: 'PERFECT FOR PARTIES', // PERFECT FOR TRIVIA PARTIES
         color: '#ffd600',
         headline: 'BIG SCREEN VISUAL STAGE',
         desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events.',
@@ -4884,7 +4917,7 @@ function getAllActiveAdSlides() {
 }
 
 // 6. TV Ad Signage Synchronization & Carousel Rotation
-function syncTvSignageDisplay() {
+function syncTvSignageDisplay(forceRestartRotation = false) {
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvPromoScreen = document.getElementById('tv-promo-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
@@ -4925,7 +4958,7 @@ function syncTvSignageDisplay() {
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
     if (btnPromo) btnPromo.classList.add('active');
     if (btnLive) btnLive.classList.remove('active');
-    if (!adRotationTimeout) {
+    if (!adRotationTimeout || forceRestartRotation) {
       startTvAdSignageRotation();
     }
 
@@ -5157,6 +5190,7 @@ function broadcastAdModeChange() {
       room_code: (currentRoomCode || 'TRIV').toUpperCase(),
       is_ad_mode_active: isAdModeActive,
       ad_slides: customAdSlides,
+      ad_slide_duration_seconds: adSlideDurationSeconds,
       updated_at: new Date().toISOString()
     }, { onConflict: 'room_code' }).catch(() => {});
   } catch (_) {}
@@ -5191,6 +5225,7 @@ function broadcastAdSlidesUpdated() {
         room_code: (currentRoomCode || 'TRIV').toUpperCase(),
         is_ad_mode_active: isAdModeActive,
         ad_slides: customAdSlides,
+        ad_slide_duration_seconds: adSlideDurationSeconds,
         updated_at: new Date().toISOString()
       }, { onConflict: 'room_code' }).then(() => {}).catch(() => {});
     }
@@ -5199,19 +5234,36 @@ function broadcastAdSlidesUpdated() {
 
 function onAdModeToggled(payload) {
   if (!payload) return;
+  let durChanged = false;
   if (payload.isAdModeActive !== undefined) {
     isAdModeActive = Boolean(payload.isAdModeActive);
     safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
     const toggle = document.getElementById('host-toggle-ad-mode');
     if (toggle) toggle.checked = isAdModeActive;
   }
-  if (payload.adSlideDurationSeconds !== undefined) {
-    adSlideDurationSeconds = parseInt(payload.adSlideDurationSeconds, 10);
-    safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
-    const durChips = document.querySelectorAll('.ad-dur-chip');
-    durChips.forEach(chip => {
-      chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
-    });
+  const rawDur = payload.adSlideDurationSeconds !== undefined ? payload.adSlideDurationSeconds : payload.ad_slide_duration_seconds;
+  if (rawDur !== undefined && rawDur !== null) {
+    const parsedDur = parseInt(rawDur, 10);
+    if (!isNaN(parsedDur) && parsedDur > 0) {
+      if (parsedDur !== adSlideDurationSeconds) {
+        durChanged = true;
+      }
+      adSlideDurationSeconds = parsedDur;
+      safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+      const durChips = document.querySelectorAll('.ad-dur-chip');
+      durChips.forEach(chip => {
+        chip.classList.toggle('active', parseInt(chip.dataset.dur, 10) === adSlideDurationSeconds);
+      });
+    }
+  }
+  if (durChanged) {
+    const allSlides = getAllActiveAdSlides();
+    const isIntermission = currentGameState === 'ROUND_SUMMARY' || (typeof hostEngineState !== 'undefined' && hostEngineState === 'ROUND_SUMMARY');
+    const tvScreen = document.getElementById('tv-ad-signage-screen');
+    const isShowingAds = (isAdModeActive || isIntermission || (tvScreen && !tvScreen.classList.contains('hidden')));
+    if (isShowingAds && allSlides.length > 0) {
+      startTvAdSignageRotation();
+    }
   }
   syncTvSignageDisplay();
 }
@@ -5297,7 +5349,10 @@ function initHostAdSettings() {
       safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
       broadcastAdModeChange();
       const allSlides = getAllActiveAdSlides();
-      if (isAdModeActive && allSlides.length > 0) {
+      const isIntermission = currentGameState === 'ROUND_SUMMARY' || (typeof hostEngineState !== 'undefined' && hostEngineState === 'ROUND_SUMMARY');
+      const tvScreen = document.getElementById('tv-ad-signage-screen');
+      const isShowingAds = (isAdModeActive || isIntermission || (tvScreen && !tvScreen.classList.contains('hidden')));
+      if (isShowingAds && allSlides.length > 0) {
         startTvAdSignageRotation();
       }
     });
@@ -7863,6 +7918,20 @@ function initPlayerControls() {
               isAdModeActive = adActive;
               safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
               syncTvSignageDisplay();
+            }
+          }
+          if (session.ad_slide_duration_seconds !== undefined && session.ad_slide_duration_seconds !== null) {
+            const remoteDur = parseInt(session.ad_slide_duration_seconds, 10);
+            if (!isNaN(remoteDur) && remoteDur > 0 && remoteDur !== adSlideDurationSeconds) {
+              adSlideDurationSeconds = remoteDur;
+              safeStorage.setItem('bar_trivia_ad_duration', String(adSlideDurationSeconds));
+              const allSlides = getAllActiveAdSlides();
+              const isIntermission = currentGameState === 'ROUND_SUMMARY' || (typeof hostEngineState !== 'undefined' && hostEngineState === 'ROUND_SUMMARY');
+              const tvScreen = document.getElementById('tv-ad-signage-screen');
+              const isShowingAds = (isAdModeActive || isIntermission || (tvScreen && !tvScreen.classList.contains('hidden')));
+              if (isShowingAds && allSlides && allSlides.length > 0) {
+                startTvAdSignageRotation();
+              }
             }
           }
           if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
