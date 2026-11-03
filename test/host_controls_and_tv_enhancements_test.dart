@@ -38,7 +38,8 @@ void main() {
           reason: 'difficulty-chips should be a 4-column grid for uniform button widths');
     });
 
-    test('3. Ad display duration has 1min, 2min, 3min, and 4min options', () {
+    test('3. Ad display duration has 30sec, 1min, 2min, 3min, and 4min options', () {
+      expect(indexHtmlContent.contains('data-dur="30">30 sec</button>'), isTrue);
       expect(indexHtmlContent.contains('data-dur="60">1 min</button>'), isTrue);
       expect(indexHtmlContent.contains('data-dur="120">2 min</button>'), isTrue);
       expect(indexHtmlContent.contains('data-dur="180">3 min</button>'), isTrue);

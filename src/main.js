@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import mqtt from 'mqtt';
 import { createClient } from '@supabase/supabase-js';
-import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES, syncWeeklyTriviaInBackground } from './triviaDatabase.js';
+import { fetchRealtimeTriviaQuestions, getLocalQuestions, initOpenTdbToken, resetQuestionHistory, ALL_SPECIFIC_GENRES, syncWeeklyTriviaInBackground, normalizeDifficulty } from './triviaDatabase.js';
 
 // Global error handler — prevents blank screen on mobile by logging errors
 window.addEventListener('error', (e) => {
@@ -57,7 +57,7 @@ if (isNaN(selectedQuestionDuration) || selectedQuestionDuration < 5) {
   selectedQuestionDuration = 20;
 } // Default 90 seconds
 let selectedInterRoundDuration = parseInt(safeStorage.getItem('bar_trivia_inter_round_duration') || '120', 10); // 30, 60, 120 (Default), 180, 240, 300, 600
-let selectedDifficulty = 'Standard'; // Kids, Beginner, Standard, Advanced
+let selectedDifficulty = normalizeDifficulty(safeStorage.getItem('bar_trivia_difficulty') || 'Standard', 'Standard'); // Kids, Beginner, Standard, Advanced
 let selectedGenreQueue = []; // Up to 10 genres in order
 let currentVenueName = safeStorage.getItem('bar_trivia_venue_name') || "OUR PUB";
 let customBarLogoUrl = safeStorage.getItem('bar_trivia_logo_url') || null;
@@ -93,7 +93,7 @@ let currentGameState = 'LOBBY';
 // Ad Display Signage Mode State - Default OFF when first loading host controls
 let isAdModeActive = false;
 let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '60', 10);
-if (isNaN(adSlideDurationSeconds) || adSlideDurationSeconds < 60) {
+if (isNaN(adSlideDurationSeconds) || adSlideDurationSeconds < 30) {
   adSlideDurationSeconds = 60;
   safeStorage.setItem('bar_trivia_ad_duration', '60');
 }
@@ -644,7 +644,7 @@ window.addEventListener('offline', () => {
 // Robust Host Heartbeat Engine (Epoch Timestamp-Based, Immune to Mobile OS Throttling)
 let hostTargetEpochMs = 0;
 let hostEngineState = 'IDLE'; // 'PRE_GAME', 'QUESTION_READING', 'QUESTION_ACTIVE', 'QUESTION_REVIEW', 'ROUND_SUMMARY'
-let hostGamePlayMode = 'Auto'; // 'Auto' (default) or 'Manual'
+let hostGamePlayMode = (safeStorage.getItem('bar_trivia_game_play_mode') === 'Manual') ? 'Manual' : 'Auto'; // 'Auto' (default) or 'Manual'
 let hostHeartbeatInterval = null;
 
 // Preserved Pause Snapshot for Resuming Where Left Off
@@ -2141,10 +2141,14 @@ function handleIncomingQuestionStart(rawPayload) {
   const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
   const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
 
+  const incomingDiff = normalizeDifficulty(payload.selectedDifficulty || payload.difficulty || qObj.difficulty || selectedDifficulty, 'Standard');
+  selectedDifficulty = incomingDiff;
+  safeStorage.setItem('bar_trivia_difficulty', incomingDiff);
+
   const questionData = {
     id: qObj.id || payload.question_id || payload.id || String(Date.now()),
     category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
-    difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
+    difficulty: incomingDiff,
     text: decodeHtmlEntities(qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || ''),
     options: {
       A: decodeHtmlEntities(optA),
@@ -2273,7 +2277,8 @@ function handleIncomingQuestionStart(rawPayload) {
     durationSeconds: remainingSecs,
     totalTimerDuration: durationSeconds,
     timerEndsAtMs: timerEndsAtGlobalMs,
-    difficulty: questionData.difficulty,
+    difficulty: incomingDiff,
+    selectedDifficulty: incomingDiff,
     timer_state: payload.timer_state,
     question_phase: payload.question_phase,
     is_resumed: payload.is_resumed,
@@ -2499,6 +2504,37 @@ function handleRealtimeIncomingEvent(event, data) {
       });
     }
     syncTvSignageDisplay();
+  } else if (normEvent === 'difficulty_updated') {
+    const newDiff = normalizeDifficulty(payload?.selectedDifficulty || payload?.difficulty || 'Standard', 'Standard');
+    selectedDifficulty = newDiff;
+    safeStorage.setItem('bar_trivia_difficulty', newDiff);
+    const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠', medium: '🎯', Medium: '🎯', easy: '🌱', Easy: '🌱', hard: '🧠', Hard: '🧠' };
+    const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced', medium: 'diff-standard', Medium: 'diff-standard', easy: 'diff-beginner', Easy: 'diff-beginner', hard: 'diff-advanced', Hard: 'diff-advanced' };
+    const playerDiffPill = document.getElementById('player-difficulty-pill');
+    if (playerDiffPill) {
+      playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[newDiff] || 'diff-standard'}`;
+      playerDiffPill.textContent = `${diffEmojiMap[newDiff] || '🎯'} ${newDiff.toUpperCase()}`;
+    }
+    const tvDiffBadge = document.getElementById('tv-difficulty-badge');
+    if (tvDiffBadge) {
+      tvDiffBadge.className = `difficulty-pill ${diffClassMap[newDiff] || 'diff-standard'}`;
+      tvDiffBadge.textContent = `${diffEmojiMap[newDiff] || '🎯'} ${newDiff.toUpperCase()}`;
+    }
+    const statDiff = document.getElementById('stat-difficulty');
+    if (statDiff) statDiff.textContent = newDiff;
+    const diffChips = document.querySelectorAll('.diff-chip');
+    diffChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.diff === newDiff);
+    });
+  } else if (normEvent === 'game_mode_updated') {
+    const newMode = (payload?.game_play_mode === 'Manual' || payload?.gamePlayMode === 'Manual') ? 'Manual' : 'Auto';
+    hostGamePlayMode = newMode;
+    safeStorage.setItem('bar_trivia_game_play_mode', newMode);
+    const modeChips = document.querySelectorAll('.mode-chip');
+    modeChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.mode === newMode);
+    });
+    updateHostManualDock();
   } else if (normEvent === 'sound_toggled' || normEvent === 'sound_effects_toggled') {
     if (payload && (payload.isSoundEffectsEnabled !== undefined || payload.is_sound_effects_enabled !== undefined || payload.is_sound_enabled !== undefined)) {
       const val = payload.isSoundEffectsEnabled !== undefined
@@ -2667,6 +2703,37 @@ function initBroadcastChannelListeners() {
       onAdModeToggled(payload);
     } else if (type === 'AD_SLIDES_UPDATED') {
       onAdSlidesUpdated(payload);
+    } else if (type === 'DIFFICULTY_UPDATED') {
+      const newDiff = normalizeDifficulty(payload?.selectedDifficulty || payload?.difficulty || 'Standard', 'Standard');
+      selectedDifficulty = newDiff;
+      safeStorage.setItem('bar_trivia_difficulty', newDiff);
+      const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠', medium: '🎯', Medium: '🎯', easy: '🌱', Easy: '🌱', hard: '🧠', Hard: '🧠' };
+      const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced', medium: 'diff-standard', Medium: 'diff-standard', easy: 'diff-beginner', Easy: 'diff-beginner', hard: 'diff-advanced', Hard: 'diff-advanced' };
+      const playerDiffPill = document.getElementById('player-difficulty-pill');
+      if (playerDiffPill) {
+        playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[newDiff] || 'diff-standard'}`;
+        playerDiffPill.textContent = `${diffEmojiMap[newDiff] || '🎯'} ${newDiff.toUpperCase()}`;
+      }
+      const tvDiffBadge = document.getElementById('tv-difficulty-badge');
+      if (tvDiffBadge) {
+        tvDiffBadge.className = `difficulty-pill ${diffClassMap[newDiff] || 'diff-standard'}`;
+        tvDiffBadge.textContent = `${diffEmojiMap[newDiff] || '🎯'} ${newDiff.toUpperCase()}`;
+      }
+      const statDiff = document.getElementById('stat-difficulty');
+      if (statDiff) statDiff.textContent = newDiff;
+      const diffChips = document.querySelectorAll('.diff-chip');
+      diffChips.forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.diff === newDiff);
+      });
+    } else if (type === 'GAME_MODE_UPDATED') {
+      const newMode = (payload?.game_play_mode === 'Manual' || payload?.gamePlayMode === 'Manual') ? 'Manual' : 'Auto';
+      hostGamePlayMode = newMode;
+      safeStorage.setItem('bar_trivia_game_play_mode', newMode);
+      const modeChips = document.querySelectorAll('.mode-chip');
+      modeChips.forEach(chip => {
+        chip.classList.toggle('active', chip.dataset.mode === newMode);
+      });
+      updateHostManualDock();
     } else if (type === 'SOUND_TOGGLED' || type === 'SOUND_EFFECTS_TOGGLED') {
       if (payload && (payload.isSoundEffectsEnabled !== undefined || payload.is_sound_effects_enabled !== undefined || payload.is_sound_enabled !== undefined)) {
         const val = payload.isSoundEffectsEnabled !== undefined
@@ -2711,6 +2778,41 @@ function onStateSyncResponse(payload) {
     safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
     const toggle = document.getElementById('host-toggle-ad-mode');
     if (toggle) toggle.checked = isAdModeActive;
+  }
+
+  if (payload.selectedDifficulty || payload.difficulty) {
+    const syncDiff = normalizeDifficulty(payload.selectedDifficulty || payload.difficulty, 'Standard');
+    selectedDifficulty = syncDiff;
+    safeStorage.setItem('bar_trivia_difficulty', syncDiff);
+    const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠', medium: '🎯', Medium: '🎯', easy: '🌱', Easy: '🌱', hard: '🧠', Hard: '🧠' };
+    const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced', medium: 'diff-standard', Medium: 'diff-standard', easy: 'diff-beginner', Easy: 'diff-beginner', hard: 'diff-advanced', Hard: 'diff-advanced' };
+    const playerDiffPill = document.getElementById('player-difficulty-pill');
+    if (playerDiffPill) {
+      playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[syncDiff] || 'diff-standard'}`;
+      playerDiffPill.textContent = `${diffEmojiMap[syncDiff] || '🎯'} ${syncDiff.toUpperCase()}`;
+    }
+    const tvDiffBadge = document.getElementById('tv-difficulty-badge');
+    if (tvDiffBadge) {
+      tvDiffBadge.className = `difficulty-pill ${diffClassMap[syncDiff] || 'diff-standard'}`;
+      tvDiffBadge.textContent = `${diffEmojiMap[syncDiff] || '🎯'} ${syncDiff.toUpperCase()}`;
+    }
+    const statDiff = document.getElementById('stat-difficulty');
+    if (statDiff) statDiff.textContent = syncDiff;
+    const diffChips = document.querySelectorAll('.diff-chip');
+    diffChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.diff === syncDiff);
+    });
+  }
+
+  if (payload.gamePlayMode || payload.game_play_mode) {
+    const syncMode = (payload.gamePlayMode === 'Manual' || payload.game_play_mode === 'Manual') ? 'Manual' : 'Auto';
+    hostGamePlayMode = syncMode;
+    safeStorage.setItem('bar_trivia_game_play_mode', syncMode);
+    const modeChips = document.querySelectorAll('.mode-chip');
+    modeChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.mode === syncMode);
+    });
+    updateHostManualDock();
   }
 
   if (payload.adSlideDurationSeconds !== undefined) {
@@ -2909,8 +3011,9 @@ function initHostControls() {
   // GAME PLAY MODE (AUTO vs MANUAL)
   const modeChips = document.querySelectorAll('.mode-chip');
   function updateGameModeUI(mode) {
-    const targetMode = mode || 'Auto';
+    const targetMode = (mode === 'Manual') ? 'Manual' : 'Auto';
     hostGamePlayMode = targetMode;
+    safeStorage.setItem('bar_trivia_game_play_mode', targetMode);
     modeChips.forEach(chip => {
       const isSelected = chip.dataset.mode === targetMode;
       chip.classList.toggle('active', isSelected);
@@ -2923,6 +3026,8 @@ function initHostControls() {
     if (targetMode === 'Manual') {
       openHostManualModal();
     }
+    channel.postMessage({ type: 'GAME_MODE_UPDATED', payload: { gamePlayMode: targetMode, game_play_mode: targetMode } });
+    broadcastRealtimeEvent('game_mode_updated', { room_code: currentRoomCode, game_play_mode: targetMode, gamePlayMode: targetMode });
     try {
       supabase.from('game_sessions').upsert({
         room_code: currentRoomCode,
@@ -2939,23 +3044,54 @@ function initHostControls() {
     });
   });
 
-  // Default to Auto mode on host controls initialization
+  // Default to saved or Auto mode on host controls initialization
   updateGameModeUI(hostGamePlayMode || 'Auto');
 
   // DIFFICULTY LEVEL SELECTION (KIDS, BEGINNER, STANDARD, ADVANCED)
+  function updateDifficultyUI(diff) {
+    selectedDifficulty = normalizeDifficulty(diff || 'Standard', 'Standard');
+    safeStorage.setItem('bar_trivia_difficulty', selectedDifficulty);
+    diffChips.forEach(chip => {
+      chip.classList.toggle('active', chip.dataset.diff === selectedDifficulty);
+    });
+    const statDifficulty = document.getElementById('stat-difficulty');
+    if (statDifficulty) statDifficulty.textContent = selectedDifficulty;
+
+    // Update Player & TV difficulty pills
+    const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠', medium: '🎯', Medium: '🎯', easy: '🌱', Easy: '🌱', hard: '🧠', Hard: '🧠' };
+    const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced', medium: 'diff-standard', Medium: 'diff-standard', easy: 'diff-beginner', Easy: 'diff-beginner', hard: 'diff-advanced', Hard: 'diff-advanced' };
+    const playerDiffPill = document.getElementById('player-difficulty-pill');
+    if (playerDiffPill) {
+      playerDiffPill.className = `difficulty-pill-sm ${diffClassMap[selectedDifficulty] || 'diff-standard'}`;
+      playerDiffPill.textContent = `${diffEmojiMap[selectedDifficulty] || '🎯'} ${selectedDifficulty.toUpperCase()}`;
+    }
+    const tvDiffBadge = document.getElementById('tv-difficulty-badge');
+    if (tvDiffBadge) {
+      tvDiffBadge.className = `difficulty-pill ${diffClassMap[selectedDifficulty] || 'diff-standard'}`;
+      tvDiffBadge.textContent = `${diffEmojiMap[selectedDifficulty] || '🎯'} ${selectedDifficulty.toUpperCase()}`;
+    }
+
+    channel.postMessage({ type: 'DIFFICULTY_UPDATED', payload: { difficulty: selectedDifficulty, selectedDifficulty } });
+    broadcastRealtimeEvent('difficulty_updated', { room_code: currentRoomCode, difficulty: selectedDifficulty, selectedDifficulty });
+    try {
+      supabase.from('game_sessions').upsert({
+        room_code: currentRoomCode,
+        difficulty: selectedDifficulty,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' }).catch(() => {});
+    } catch (_) {}
+  }
+
   diffChips.forEach(chip => {
     chip.addEventListener('click', (e) => {
       e.preventDefault();
       if (isAutomatedEngineRunning) return;
-
-      diffChips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-
-      selectedDifficulty = chip.dataset.diff || 'Standard';
-      const statDifficulty = document.getElementById('stat-difficulty');
-      if (statDifficulty) statDifficulty.textContent = selectedDifficulty;
+      updateDifficultyUI(chip.dataset.diff || 'Standard');
     });
   });
+
+  // Restore saved difficulty on host controls initialization
+  updateDifficultyUI(selectedDifficulty);
 
   // QUESTION TIMER DURATION SELECTOR
   timerChips.forEach(chip => {
@@ -3649,6 +3785,18 @@ function initHostControls() {
             syncTvSignageDisplay();
           }
         }
+
+        if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
+          const remoteSlides = session.ad_slides;
+          const isDifferent = !customAdSlides || customAdSlides.length !== remoteSlides.length ||
+            remoteSlides.some((s, idx) => !customAdSlides[idx] || (customAdSlides[idx].id || customAdSlides[idx].dataUrl) !== (s.id || s.dataUrl));
+          if (isDifferent) {
+            customAdSlides = remoteSlides;
+            idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+            renderHostAdGallery();
+            syncTvSignageDisplay();
+          }
+        }
       }
     } catch (err) {
       console.warn('[Host Sync] Error checking active session:', err);
@@ -3923,16 +4071,65 @@ async function renderPdfFileToSlides(file) {
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    // Render at 1.25 scale for crisp display while keeping image weight under network payload limits
-    const viewport = page.getViewport({ scale: 1.25 });
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    // Render PDF page to a temporary canvas at crisp scale
+    const viewport = page.getViewport({ scale: 1.5 });
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCanvas.width = viewport.width;
+    tempCanvas.height = viewport.height;
+    await page.render({ canvasContext: tempCtx, viewport }).promise;
 
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    // Export as optimized JPEG (0.72) for crisp text and fast cross-device sync
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+    // Compose onto 16:9 Landscape Canvas (1920x1080)
+    const targetW = 1920;
+    const targetH = 1080;
+    const landscapeCanvas = document.createElement('canvas');
+    const lCtx = landscapeCanvas.getContext('2d');
+    landscapeCanvas.width = targetW;
+    landscapeCanvas.height = targetH;
+
+    // Sleek dark theme backdrop
+    const bgGrad = lCtx.createLinearGradient(0, 0, targetW, targetH);
+    bgGrad.addColorStop(0, '#0a0a14');
+    bgGrad.addColorStop(0.5, '#121026');
+    bgGrad.addColorStop(1, '#0a0a14');
+    lCtx.fillStyle = bgGrad;
+    lCtx.fillRect(0, 0, targetW, targetH);
+
+    // Ambient blurred backdrop if portrait or narrower than 16:9
+    const isLandscape = tempCanvas.width >= tempCanvas.height;
+    if (!isLandscape || (tempCanvas.width / tempCanvas.height) < 1.7) {
+      lCtx.save();
+      lCtx.filter = 'blur(28px) brightness(0.35)';
+      const coverScale = Math.max(targetW / tempCanvas.width, targetH / tempCanvas.height);
+      const coverW = tempCanvas.width * coverScale;
+      const coverH = tempCanvas.height * coverScale;
+      const coverX = (targetW - coverW) / 2;
+      const coverY = (targetH - coverH) / 2;
+      lCtx.drawImage(tempCanvas, coverX, coverY, coverW, coverH);
+      lCtx.restore();
+    }
+
+    // Draw crisp page centered in landscape 1920x1080 frame
+    const fitScale = Math.min(targetW / tempCanvas.width, targetH / tempCanvas.height);
+    const drawW = Math.round(tempCanvas.width * fitScale);
+    const drawH = Math.round(tempCanvas.height * fitScale);
+    const drawX = Math.round((targetW - drawW) / 2);
+    const drawY = Math.round((targetH - drawH) / 2);
+
+    if (!isLandscape || drawW < targetW) {
+      lCtx.save();
+      lCtx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      lCtx.shadowBlur = 30;
+      lCtx.shadowOffsetX = 0;
+      lCtx.shadowOffsetY = 6;
+      lCtx.drawImage(tempCanvas, drawX, drawY, drawW, drawH);
+      lCtx.restore();
+    } else {
+      lCtx.drawImage(tempCanvas, drawX, drawY, drawW, drawH);
+    }
+
+    // Export as optimized JPEG (0.75) for crisp text and fast cross-device sync
+    const dataUrl = landscapeCanvas.toDataURL('image/jpeg', 0.75);
     slides.push({
       id: `slide_${Date.now()}_${pageNum}_${Math.random().toString(36).substring(2, 6)}`,
       name: file.name,
@@ -3955,25 +4152,58 @@ async function renderImageFileToSlide(file) {
       const img = new Image();
       img.onload = () => {
         try {
+          const targetW = 1920;
+          const targetH = 1080;
           const canvas = document.createElement('canvas');
-          let width = img.naturalWidth || img.width;
-          let height = img.naturalHeight || img.height;
-          // Scale to max dimension 1080px for crisp full HD TV rendering with lightweight base64 payload
-          const maxDim = 1080;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = Math.max(1, width);
-          canvas.height = Math.max(1, height);
+          canvas.width = targetW;
+          canvas.height = targetH;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+
+          const imgW = img.naturalWidth || img.width;
+          const imgH = img.naturalHeight || img.height;
+
+          // 1. Sleek dark gradient base
+          const bgGrad = ctx.createLinearGradient(0, 0, targetW, targetH);
+          bgGrad.addColorStop(0, '#0a0a14');
+          bgGrad.addColorStop(0.5, '#121026');
+          bgGrad.addColorStop(1, '#0a0a14');
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, targetW, targetH);
+
+          // 2. Ambient blurred backdrop if portrait or narrower than 16:9
+          const isLandscape = imgW >= imgH;
+          if (!isLandscape || (imgW / imgH) < 1.7) {
+            ctx.save();
+            ctx.filter = 'blur(28px) brightness(0.35)';
+            const coverScale = Math.max(targetW / imgW, targetH / imgH);
+            const coverW = imgW * coverScale;
+            const coverH = imgH * coverScale;
+            const coverX = (targetW - coverW) / 2;
+            const coverY = (targetH - coverH) / 2;
+            ctx.drawImage(img, coverX, coverY, coverW, coverH);
+            ctx.restore();
+          }
+
+          // 3. Draw crisp image centered in 1920x1080 landscape frame
+          const fitScale = Math.min(targetW / imgW, targetH / imgH);
+          const drawW = Math.round(imgW * fitScale);
+          const drawH = Math.round(imgH * fitScale);
+          const drawX = Math.round((targetW - drawW) / 2);
+          const drawY = Math.round((targetH - drawH) / 2);
+
+          if (!isLandscape || drawW < targetW) {
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+            ctx.shadowBlur = 30;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 6;
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          }
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
           resolve([{
             id: `slide_${Date.now()}_1_${Math.random().toString(36).substring(2, 6)}`,
             name: file.name,
@@ -4348,7 +4578,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
         title: 'PERFECT FOR TRIVIA PARTIES',
         color: '#ffd600',
         headline: 'BIG SCREEN VISUAL STAGE',
-        desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events! Connect any Smart TV or projector.',
+        desc: 'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events.',
         badge: '✓ Ready in Under 60 Seconds'
       }
     ];
@@ -4643,13 +4873,12 @@ function getAllActiveAdSlides() {
   if (!customAdSlides || customAdSlides.length === 0) {
     return officialSlides;
   }
-  // Rotate default slides in-between the host uploaded slides:
-  // Alternates between official default slide and custom uploaded slide
+  // Rotate custom slides first, alternating with official default slides
   const result = [];
   const maxPairs = Math.max(officialSlides.length, customAdSlides.length);
   for (let i = 0; i < maxPairs; i++) {
-    result.push(officialSlides[i % officialSlides.length]);
     result.push(customAdSlides[i % customAdSlides.length]);
+    result.push(officialSlides[i % officialSlides.length]);
   }
   return result;
 }
@@ -4741,10 +4970,6 @@ function startTvAdSignageRotation() {
   if (progressFill) {
     progressFill.style.width = '0%';
     progressFill.style.transition = 'none';
-    requestAnimationFrame(() => {
-      progressFill.style.transition = `width ${adSlideDurationSeconds || 10}s linear`;
-      progressFill.style.width = '100%';
-    });
   }
 
   const totalMs = (adSlideDurationSeconds || 10) * 1000;
@@ -4756,7 +4981,7 @@ function startTvAdSignageRotation() {
     const pct = Math.min(100, (elapsed / totalMs) * 100);
     if (progressFill) progressFill.style.width = `${pct}%`;
     if (elapsed >= totalMs) clearInterval(adProgressBarInterval);
-  }, 100);
+  }, 200);
 
   adRotationTimeout = setTimeout(() => {
     const slides = getAllActiveAdSlides();
@@ -4784,19 +5009,46 @@ function displayAdSlide(index) {
   if (!slide) return;
 
   const img = document.getElementById('tv-ad-slide-img');
+  const backdrop = document.getElementById('tv-ad-slide-backdrop');
   const counterText = document.getElementById('tv-ad-slide-counter-text');
-  slide.dataUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
+  const slideUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
 
-  if (img && slide.dataUrl) {
-    if (!img.src || img.src === window.location.href || img.src.endsWith('/') || img.classList.contains('fading')) {
-      img.src = slide.dataUrl;
-      img.classList.remove('fading');
+  if (backdrop && slideUrl) {
+    backdrop.style.backgroundImage = `url("${slideUrl}")`;
+  }
+
+  if (img && slideUrl) {
+    const allTransformClasses = [
+      'fading',
+      'transform-slide-out', 'transform-slide-in',
+      'transform-3d-out', 'transform-3d-in',
+      'transform-zoom-out', 'transform-zoom-in',
+      'transform-rise-out', 'transform-rise-in'
+    ];
+    // Prevent flickering if the image is already displaying this exact slide
+    if (img.src === slideUrl || (img.src.endsWith(slideUrl) && slideUrl.length > 20)) {
+      img.classList.remove(...allTransformClasses);
+    } else if (!img.src || img.src === window.location.href || img.src.endsWith('/') || img.classList.contains('fading')) {
+      img.src = slideUrl;
+      img.classList.remove(...allTransformClasses);
     } else {
+      // Dynamic Transformation Animation in between ad slides
+      const transformTypes = ['slide', '3d', 'zoom', 'rise'];
+      const currentTransform = transformTypes[safeIndex % transformTypes.length];
+      const outClass = `transform-${currentTransform}-out`;
+      const inClass = `transform-${currentTransform}-in`;
+
       img.classList.add('fading');
+      img.classList.add(outClass);
       setTimeout(() => {
         img.src = slide.dataUrl;
         img.classList.remove('fading');
-      }, 200);
+        img.classList.remove(outClass);
+        img.classList.add(inClass);
+        // Force repaint so browser smoothly animates into active transform
+        void img.offsetWidth;
+        img.classList.remove(inClass);
+      }, 300);
     }
   }
 
@@ -4889,6 +5141,7 @@ function broadcastAdModeChange() {
   const payload = {
     isAdModeActive,
     adSlideDurationSeconds,
+    slides: customAdSlides,
     slidesCount: allSlides.length,
     customSlidesCount: customAdSlides.length
   };
@@ -4903,6 +5156,7 @@ function broadcastAdModeChange() {
     supabase.from('game_sessions').upsert({
       room_code: (currentRoomCode || 'TRIV').toUpperCase(),
       is_ad_mode_active: isAdModeActive,
+      ad_slides: customAdSlides,
       updated_at: new Date().toISOString()
     }, { onConflict: 'room_code' }).catch(() => {});
   } catch (_) {}
@@ -4964,32 +5218,44 @@ function onAdModeToggled(payload) {
 
 async function onAdSlidesUpdated(payload) {
   onAdModeToggled(payload);
+  let slidesChanged = false;
   if (payload && Array.isArray(payload.slides)) {
-    customAdSlides = payload.slides;
-    if (customAdSlides.length > 0) {
-      await idbAdStorage.saveSlides(customAdSlides);
-      try {
-        safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
-      } catch (_) {}
-    } else {
-      currentAdSlideIndex = 0;
-      await idbAdStorage.clearSlides();
-      try {
-        safeStorage.removeItem('bar_trivia_custom_ad_slides');
-      } catch (_) {}
+    const newSlides = payload.slides;
+    const sameLength = customAdSlides && customAdSlides.length === newSlides.length;
+    const sameIds = sameLength && newSlides.every((s, i) => customAdSlides[i] && (customAdSlides[i].id || customAdSlides[i].dataUrl) === (s.id || s.dataUrl));
+    if (!sameIds) {
+      customAdSlides = newSlides;
+      slidesChanged = true;
+      if (customAdSlides.length > 0) {
+        await idbAdStorage.saveSlides(customAdSlides);
+        try {
+          safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
+        } catch (_) {}
+      } else {
+        currentAdSlideIndex = 0;
+        await idbAdStorage.clearSlides();
+        try {
+          safeStorage.removeItem('bar_trivia_custom_ad_slides');
+        } catch (_) {}
+      }
     }
   } else {
-    customAdSlides = await idbAdStorage.loadSlides();
     if (!customAdSlides || customAdSlides.length === 0) {
-      try {
-        const fallback = safeStorage.getItem('bar_trivia_custom_ad_slides');
-        if (fallback) customAdSlides = JSON.parse(fallback);
-      } catch (_) {}
+      customAdSlides = await idbAdStorage.loadSlides();
+      if (!customAdSlides || customAdSlides.length === 0) {
+        try {
+          const fallback = safeStorage.getItem('bar_trivia_custom_ad_slides');
+          if (fallback) customAdSlides = JSON.parse(fallback);
+        } catch (_) {}
+      }
+      slidesChanged = true;
     }
   }
-  renderHostAdGallery();
-  stopTvAdSignageRotation();
-  startTvAdSignageRotation();
+  if (slidesChanged) {
+    renderHostAdGallery();
+    stopTvAdSignageRotation();
+    startTvAdSignageRotation();
+  }
   syncTvSignageDisplay();
 }
 
@@ -5002,15 +5268,17 @@ function initHostAdSettings() {
   const durChips = document.querySelectorAll('.ad-dur-chip');
   const btnClearAll = document.getElementById('btn-clear-all-ads');
 
-  // Master switch - default is toggled OFF when loading host controls screen
-  isAdModeActive = false;
-  safeStorage.setItem('bar_trivia_ad_mode_active', 'false');
+  // Master switch - restore saved state or default
+  const savedAdActive = safeStorage.getItem('bar_trivia_ad_mode_active');
+  if (savedAdActive !== null) {
+    isAdModeActive = (savedAdActive === 'true');
+  }
   if (toggleAdMode) {
-    toggleAdMode.checked = false;
+    toggleAdMode.checked = isAdModeActive;
     toggleAdMode.addEventListener('change', () => {
       isAdModeActive = toggleAdMode.checked;
       safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
-      broadcastAdModeChange();
+      broadcastAdSlidesUpdated();
       syncTvSignageDisplay();
     });
   }
@@ -5084,12 +5352,13 @@ function initHostAdSettings() {
         // Jump directly to the newly uploaded custom ad so it displays immediately!
         const allSlides = getAllActiveAdSlides();
         const firstNewCustomIdx = Math.max(0, customAdSlides.length - newSlides.length);
-        const targetIdx = firstNewCustomIdx < officialAdSlides.length
+        const officialSlides = getOfficialBarRoomsTriviaAdSlides();
+        const targetIdx = firstNewCustomIdx < officialSlides.length
           ? (firstNewCustomIdx * 2 + 1)
-          : (officialAdSlides.length + firstNewCustomIdx);
-        currentAdSlideIndex = (allSlides.length > 1 && targetIdx < allSlides.length)
+          : (officialSlides.length + firstNewCustomIdx);
+        currentAdSlideIndex = (allSlides.length > 0 && targetIdx < allSlides.length)
           ? targetIdx
-          : (allSlides.length > 1 ? 1 : 0);
+          : 0;
         stopTvAdSignageRotation();
         displayAdSlide(currentAdSlideIndex);
         startTvAdSignageRotation();
@@ -5168,6 +5437,11 @@ async function loadAdSlidesAndInit() {
     }
   }
   renderHostAdGallery();
+  if (customAdSlides && customAdSlides.length > 0) {
+    currentAdSlideIndex = 0;
+    broadcastAdSlidesUpdated();
+    displayAdSlide(0);
+  }
   syncTvSignageDisplay();
 }
 
@@ -6261,10 +6535,14 @@ function onQuestionStart(payload) {
   const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
   const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
 
+  const incomingDiff = normalizeDifficulty(payload.selectedDifficulty || payload.difficulty || qObj.difficulty || selectedDifficulty, 'Standard');
+  selectedDifficulty = incomingDiff;
+  safeStorage.setItem('bar_trivia_difficulty', incomingDiff);
+
   const questionData = {
     id: qObj.id || payload.question_id || payload.id || String(Date.now()),
     category: qObj.category || qObj.genre || payload.category || payload.genre || 'General Knowledge',
-    difficulty: payload.difficulty || qObj.difficulty || selectedDifficulty || 'Standard',
+    difficulty: incomingDiff,
     text: decodeHtmlEntities(qObj.text || qObj.question_text || payload.question_text || payload.text || payload.question || ''),
     options: {
       A: decodeHtmlEntities(optA),
@@ -6286,7 +6564,7 @@ function onQuestionStart(payload) {
   }
   const roundNumber = Number(payload.roundNumber || payload.round_number || payload.current_round || currentRound || 1);
   const questionNumberInRound = Number(payload.questionNumberInRound || payload.question_number_in_round || ((currentQuestionIndex % 10) + 1));
-  const activeDifficulty = payload.difficulty || questionData.difficulty || selectedDifficulty || 'Standard';
+  const activeDifficulty = normalizeDifficulty(incomingDiff || selectedDifficulty, 'Standard');
 
   if (payload.timerEndsAtMs || payload.timer_ends_at_epoch_ms) {
     timerEndsAtGlobalMs = Number(payload.timerEndsAtMs || payload.timer_ends_at_epoch_ms);
@@ -6378,8 +6656,8 @@ function onQuestionStart(payload) {
   const categoryName = questionData.category || 'General Knowledge';
   const categoryIcon = genreIconMap[categoryName] || '💡';
 
-  const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠' };
-  const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced' };
+  const diffEmojiMap = { Kids: '🧒', Beginner: '🌱', Standard: '🎯', Advanced: '🧠', medium: '🎯', Medium: '🎯', easy: '🌱', Easy: '🌱', hard: '🧠', Hard: '🧠' };
+  const diffClassMap = { Kids: 'diff-kids', Beginner: 'diff-beginner', Standard: 'diff-standard', Advanced: 'diff-advanced', medium: 'diff-standard', Medium: 'diff-standard', easy: 'diff-beginner', Easy: 'diff-beginner', hard: 'diff-advanced', Hard: 'diff-advanced' };
 
   if (tvDiffBadge) {
     tvDiffBadge.className = `difficulty-pill ${diffClassMap[activeDifficulty] || 'diff-standard'}`;
@@ -6576,7 +6854,7 @@ function startCountdown(seconds) {
           roundNumber: currentRound,
           next_question_starts_at_epoch_ms: targetEpoch,
           nextQuestionStartsAtEpochMs: targetEpoch,
-          game_play_mode: 'Auto',
+          game_play_mode: hostGamePlayMode || 'Auto',
         });
       }
     }
@@ -7584,6 +7862,17 @@ function initPlayerControls() {
             if (isAdModeActive !== adActive) {
               isAdModeActive = adActive;
               safeStorage.setItem('bar_trivia_ad_mode_active', String(isAdModeActive));
+              syncTvSignageDisplay();
+            }
+          }
+          if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
+            const remoteSlides = session.ad_slides;
+            const isDifferent = !customAdSlides || customAdSlides.length !== remoteSlides.length ||
+              remoteSlides.some((s, idx) => !customAdSlides[idx] || (customAdSlides[idx].id || customAdSlides[idx].dataUrl) !== (s.id || s.dataUrl));
+            if (isDifferent) {
+              customAdSlides = remoteSlides;
+              idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+              renderHostAdGallery();
               syncTvSignageDisplay();
             }
           }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -72,6 +73,19 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Timer? _adSlideTimer;
   int _adSlideDurationSeconds = 60;
   List<Map<String, dynamic>> _customAdSlides = [];
+  final Map<String, Uint8List> _adImageBytesCache = {};
+
+  bool _areSlidesEqual(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      final aId = a[i]['id'] ?? a[i]['dataUrl'] ?? a[i]['data_url'] ?? '';
+      final bId = b[i]['id'] ?? b[i]['dataUrl'] ?? b[i]['data_url'] ?? '';
+      if (aId != bId) return false;
+    }
+    return true;
+  }
+
 
   int get _totalAdSlides {
     if (_customAdSlides.isEmpty) return 3;
@@ -216,7 +230,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             for (final s in rawSlides) {
               if (s is Map) parsedSlides.add(Map<String, dynamic>.from(s));
             }
-            if (_customAdSlides.length != parsedSlides.length || _customAdSlides != parsedSlides) {
+            if (!_areSlidesEqual(_customAdSlides, parsedSlides)) {
               setState(() {
                 _customAdSlides = parsedSlides;
                 if (_adSlideIndex >= _totalAdSlides) {
@@ -937,16 +951,24 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             final dur = int.tryParse((payload['adSlideDurationSeconds'] ?? payload['ad_slide_duration_seconds']).toString());
             if (dur != null && dur > 0) _adSlideDurationSeconds = dur;
           }
-          setState(() {
-            _customAdSlides = parsed;
-            if (_adSlideIndex >= _totalAdSlides) {
-              _adSlideIndex = 0;
-            }
-            if (payload['isAdModeActive'] != null || payload['is_ad_mode_active'] != null) {
-              _isAdSignageModeActive = payload['isAdModeActive'] == true || payload['is_ad_mode_active'] == true;
-            }
-          });
-          _startAdSlideTimer();
+          final bool newAdActive = payload['isAdModeActive'] == true || payload['is_ad_mode_active'] == true;
+          final bool slidesChanged = !_areSlidesEqual(_customAdSlides, parsed);
+          final bool modeChanged = _isAdSignageModeActive != newAdActive;
+
+          if (slidesChanged || modeChanged) {
+            setState(() {
+              if (slidesChanged) {
+                _customAdSlides = parsed;
+                if (_adSlideIndex >= _totalAdSlides) {
+                  _adSlideIndex = 0;
+                }
+              }
+              if (modeChanged) {
+                _isAdSignageModeActive = newAdActive;
+              }
+            });
+            _startAdSlideTimer();
+          }
         }
       },
       onSoundEffectsToggledBroadcast: (payload) {
@@ -2389,12 +2411,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 4-Page Animated Ad Content Stage (Pure Fade-In / Fade-Out with Zero Jump)
+                // 4-Page Animated Ad Content Stage with Dynamic Transformations in between ads
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 700),
-                    switchInCurve: Curves.easeInOut,
-                    switchOutCurve: Curves.easeInOut,
+                    duration: const Duration(milliseconds: 800),
+                    switchInCurve: Curves.easeInOutCubic,
+                    switchOutCurve: Curves.easeInOutCubic,
                     layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
                       return Stack(
                         alignment: Alignment.centerLeft,
@@ -2404,12 +2426,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         ],
                       );
                     },
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      );
-                    },
+                    transitionBuilder: _buildAdSlideTransformation,
                     child: SizedBox.expand(
                       key: ValueKey(_adSlideIndex),
                       child: Align(
@@ -2533,15 +2550,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         color: Colors.black,
         child: Stack(
           children: [
-            // Fullscreen Animated Slide Content
+            // Fullscreen Animated Slide Content with Dynamic Transformations
             Positioned.fill(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 700),
-                switchInCurve: Curves.easeInOut,
-                switchOutCurve: Curves.easeInOut,
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return FadeTransition(opacity: animation, child: child);
+                duration: const Duration(milliseconds: 800),
+                switchInCurve: Curves.easeInOutCubic,
+                switchOutCurve: Curves.easeInOutCubic,
+                layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
                 },
+                transitionBuilder: _buildAdSlideTransformation,
                 child: KeyedSubtree(
                   key: ValueKey(_adSlideIndex),
                   child: _buildFullscreenAdSlide(_adSlideIndex),
@@ -2552,6 +2576,92 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         ),
       ),
     );
+  }
+
+  /// Dynamic Transformation Animation in between ad slides on TV screen
+  Widget _buildAdSlideTransformation(Widget child, Animation<double> animation) {
+    final isIncoming = child.key == ValueKey(_adSlideIndex);
+    final transformMode = _adSlideIndex % 4;
+
+    switch (transformMode) {
+      case 0:
+        // 1. Push Slide & Scale Transformation
+        final slideTween = isIncoming
+            ? Tween<Offset>(begin: const Offset(0.30, 0.0), end: Offset.zero)
+            : Tween<Offset>(begin: const Offset(-0.30, 0.0), end: Offset.zero);
+        final scaleTween = isIncoming
+            ? Tween<double>(begin: 0.92, end: 1.0)
+            : Tween<double>(begin: 0.92, end: 1.0);
+
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+          child: SlideTransition(
+            position: slideTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: ScaleTransition(
+              scale: scaleTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+              child: child,
+            ),
+          ),
+        );
+
+      case 1:
+        // 2. 3D Perspective Flip / Tilt Transformation
+        return AnimatedBuilder(
+          animation: animation,
+          child: child,
+          builder: (context, childWidget) {
+            final val = animation.value.clamp(0.0, 1.0);
+            final angle = isIncoming ? (1.0 - val) * 0.22 : (1.0 - val) * -0.22;
+            final scale = 0.92 + (0.08 * val);
+            return Transform(
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0008)
+                ..rotateY(angle)
+                ..scale(scale),
+              alignment: isIncoming ? Alignment.centerRight : Alignment.centerLeft,
+              child: Opacity(
+                opacity: val,
+                child: childWidget,
+              ),
+            );
+          },
+        );
+
+      case 2:
+        // 3. Cinematic Zoom & Depth Scale Transformation
+        final scaleTween = isIncoming
+            ? Tween<double>(begin: 0.86, end: 1.0)
+            : Tween<double>(begin: 1.08, end: 1.0);
+
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+          child: ScaleTransition(
+            scale: scaleTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        );
+
+      case 3:
+      default:
+        // 4. Vertical Rise & Settle Transformation
+        final slideTween = isIncoming
+            ? Tween<Offset>(begin: const Offset(0.0, 0.20), end: Offset.zero)
+            : Tween<Offset>(begin: const Offset(0.0, -0.20), end: Offset.zero);
+        final scaleTween = isIncoming
+            ? Tween<double>(begin: 0.94, end: 1.0)
+            : Tween<double>(begin: 0.94, end: 1.0);
+
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+          child: SlideTransition(
+            position: slideTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: ScaleTransition(
+              scale: scaleTween.animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+              child: child,
+            ),
+          ),
+        );
+    }
   }
 
   /// Selects the appropriate advertisement poster for Signage Mode.
@@ -2573,13 +2683,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     // Even indices: default slides (0, 1, 2)
     // Odd indices: custom host uploaded slides
     if (index % 2 == 0) {
+      final customIdx = (index ~/ 2) % _customAdSlides.length;
+      return _buildCustomAdSlide(_customAdSlides[customIdx]);
+    } else {
       final defaultIdx = (index ~/ 2) % 3;
       if (defaultIdx == 0) return _buildFullscreenSlide0();
       if (defaultIdx == 1) return _buildFullscreenSlide1();
       return _buildFullscreenSlide2();
-    } else {
-      final customIdx = (index ~/ 2) % _customAdSlides.length;
-      return _buildCustomAdSlide(_customAdSlides[customIdx]);
     }
   }
 
@@ -2834,7 +2944,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     '🏠',
                     'PERFECT FOR PARTIES',
                     AppTheme.neonYellow,
-                    'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events!',
+                    'Great for family game nights, house parties, brewery taprooms, birthday bashes, office socials, and holiday events.',
                   ),
                 ),
               ],
@@ -3087,19 +3197,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         '';
     final slideName = slide['name']?.toString() ?? 'VENUE AD';
 
-    Uint8List? imageBytes;
-    if (dataUrl.startsWith('data:image')) {
-      try {
-        final commaIdx = dataUrl.indexOf(',');
-        if (commaIdx != -1) {
-          final b64 = dataUrl.substring(commaIdx + 1);
-          imageBytes = base64Decode(b64);
-        }
-      } catch (_) {}
-    } else if (!dataUrl.startsWith('http') && dataUrl.length > 50) {
-      try {
-        imageBytes = base64Decode(dataUrl);
-      } catch (_) {}
+    Uint8List? imageBytes = _adImageBytesCache[dataUrl];
+    if (imageBytes == null) {
+      if (dataUrl.startsWith('data:image')) {
+        try {
+          final commaIdx = dataUrl.indexOf(',');
+          if (commaIdx != -1) {
+            final b64 = dataUrl.substring(commaIdx + 1);
+            imageBytes = base64Decode(b64);
+            _adImageBytesCache[dataUrl] = imageBytes;
+          }
+        } catch (_) {}
+      } else if (!dataUrl.startsWith('http') && dataUrl.length > 50) {
+        try {
+          imageBytes = base64Decode(dataUrl);
+          _adImageBytesCache[dataUrl] = imageBytes;
+        } catch (_) {}
+      }
     }
 
     final Widget imageWidget = imageBytes != null
@@ -3122,10 +3236,36 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               )
             : _buildSlideImageFallback(slideName));
 
+    final Widget backdrop = imageBytes != null
+        ? Image.memory(
+            imageBytes,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+          )
+        : (dataUrl.startsWith('http')
+            ? Image.network(
+                dataUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              )
+            : const SizedBox());
+
     return SizedBox.expand(
-      child: ColoredBox(
-        color: Colors.black,
-        child: imageWidget,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: Colors.black),
+          Opacity(
+            opacity: 0.35,
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: backdrop,
+            ),
+          ),
+          Center(child: imageWidget),
+        ],
       ),
     );
   }

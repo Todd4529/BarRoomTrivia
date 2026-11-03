@@ -23,6 +23,17 @@ class Question {
     this.timeLimitSeconds = 20,
   }) : questionText = cleanQuestionText(questionText);
 
+  /// Normalizes difficulty strings to the 4 canonical levels: 'Kids', 'Beginner', 'Standard', 'Advanced'.
+  static String normalizeDifficulty(String? diff) {
+    if (diff == null || diff.isEmpty) return 'Standard';
+    final lower = diff.trim().toLowerCase();
+    if (lower == 'standard' || lower == 'medium') return 'Standard';
+    if (lower == 'kids') return 'Kids';
+    if (lower == 'beginner' || lower == 'easy') return 'Beginner';
+    if (lower == 'advanced' || lower == 'hard') return 'Advanced';
+    return 'Standard';
+  }
+
   /// Decodes HTML entities (e.g. &percnt; -> %, &#37; -> %, &deg; -> °, &quot;, &amp;, etc.)
   /// and normalizes symbols to ensure full fidelity on all mobile device views.
   static String decodeHtmlAndSymbols(String raw) {
@@ -136,7 +147,7 @@ class Question {
     return Question(
       id: (inner['id'] ?? inner['question_id'] ?? json['id'] ?? json['question_id'] ?? DateTime.now().millisecondsSinceEpoch.toString()).toString(),
       category: (inner['category'] ?? inner['genre'] ?? json['category'] ?? json['genre'] ?? 'General Knowledge').toString(),
-      difficulty: (inner['difficulty'] ?? json['difficulty'] ?? 'Standard').toString(),
+      difficulty: normalizeDifficulty((inner['difficulty'] ?? json['difficulty'] ?? 'Standard').toString()),
       questionText: cleanQuestionText((inner['question_text'] ?? inner['text'] ?? inner['question'] ?? json['question_text'] ?? json['text'] ?? json['question'] ?? '').toString()),
       optionA: decodeHtmlAndSymbols(optA.toString()),
       optionB: decodeHtmlAndSymbols(optB.toString()),

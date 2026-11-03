@@ -59,6 +59,7 @@ void main() {
       expect(htmlContent.contains('id="host-ad-dropzone"'), isTrue);
       expect(htmlContent.contains('id="host-ad-upload-status"'), isTrue);
       expect(htmlContent.contains('id="ad-duration-chips"'), isTrue);
+      expect(htmlContent.contains('data-dur="30"'), isTrue);
       expect(htmlContent.contains('data-dur="60"'), isTrue);
       expect(htmlContent.contains('data-dur="120"'), isTrue);
       expect(htmlContent.contains('data-dur="180"'), isTrue);
@@ -122,6 +123,17 @@ void main() {
       expect(cssContent.contains('.tv-ad-progress-track'), isTrue);
       expect(cssContent.contains('.tv-ad-progress-fill'), isTrue);
       expect(cssContent.contains('.tv-ad-slide-counter'), isTrue);
+    });
+
+    test('CSS defines transformations in between ad slides (slide, 3D tilt, zoom, rise)', () {
+      expect(cssContent.contains('.tv-ad-slide-img.transform-slide-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-slide-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-3d-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-3d-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-zoom-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-zoom-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-rise-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-slide-img.transform-rise-in'), isTrue);
     });
   });
 
@@ -316,6 +328,15 @@ void main() {
           reason: '_startAdSlideTimer must rotate slides while game is paused');
       expect(tvViewContent.contains("status == 'paused' && !_isGamePaused"), isTrue,
           reason: 'TV session polling must detect paused status and start ad slide timer');
+    });
+
+    test('tv_display_view.dart defines _buildAdSlideTransformation with dynamic transitions between ads', () {
+      expect(tvViewContent.contains('_buildAdSlideTransformation'), isTrue);
+      expect(tvViewContent.contains('Push Slide & Scale Transformation'), isTrue);
+      expect(tvViewContent.contains('3D Perspective Flip / Tilt Transformation'), isTrue);
+      expect(tvViewContent.contains('Cinematic Zoom & Depth Scale Transformation'), isTrue);
+      expect(tvViewContent.contains('Vertical Rise & Settle Transformation'), isTrue);
+      expect(tvViewContent.contains('transitionBuilder: _buildAdSlideTransformation'), isTrue);
     });
   });
 }

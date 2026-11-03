@@ -30,6 +30,20 @@ export const ALL_SPECIFIC_GENRES = [
   'World History'
 ];
 
+/**
+ * Normalizes difficulty strings to the 4 canonical levels: 'Kids', 'Beginner', 'Standard', 'Advanced'.
+ * Maps legacy or external API difficulties ('medium' -> 'Standard', 'easy' -> 'Beginner', 'hard' -> 'Advanced').
+ */
+export function normalizeDifficulty(diff, fallback = 'Standard') {
+  if (!diff || typeof diff !== 'string') return fallback || 'Standard';
+  const lower = diff.trim().toLowerCase();
+  if (lower === 'standard' || lower === 'medium') return 'Standard';
+  if (lower === 'kids') return 'Kids';
+  if (lower === 'beginner' || lower === 'easy') return 'Beginner';
+  if (lower === 'advanced' || lower === 'hard') return 'Advanced';
+  return fallback || 'Standard';
+}
+
 // Open Trivia DB Category ID Mapping
 const openTdbCategoryMap = {
   'Pop Culture & Music': 12,
@@ -144,6 +158,7 @@ export function resetQuestionHistory() {
 
 // 1. REAL-TIME INTERNET TRIVIA FETCH ENGINE WITH CUSTOM BAR GENRE BYPASS
 export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard', count = 10) {
+  const normDiff = normalizeDifficulty(difficulty, 'Standard');
   if (!openTdbSessionToken) {
     await initOpenTdbToken();
   }
@@ -155,11 +170,11 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
 
     for (let i = 0; i < count; i++) {
       const targetGenre = shuffledGenres[i % shuffledGenres.length];
-      const singleQBatch = await fetchSingleGenreQuestions(targetGenre, difficulty, 1);
+      const singleQBatch = await fetchSingleGenreQuestions(targetGenre, normDiff, 1);
       if (singleQBatch && singleQBatch.length > 0) {
         mixedBatch.push(singleQBatch[0]);
       } else {
-        const fallback = getLocalQuestions(targetGenre, difficulty, 1);
+        const fallback = getLocalQuestions(targetGenre, normDiff, 1);
         mixedBatch.push(fallback[0]);
       }
     }
@@ -170,10 +185,10 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
   let result;
   // FOR CUSTOM BAR GENRES LIKE HOMEBREWING BEER, USE DEDICATED AUTHENTIC LOCAL DATASET DIRECTLY
   if (customLocalGenres.has(genre)) {
-    result = getLocalQuestions(genre, difficulty, count);
+    result = getLocalQuestions(genre, normDiff, count);
   } else {
     // FOR 'Auto Select' OR SPECIFIC API GENRES
-    result = await fetchSingleGenreQuestions(genre, difficulty, count);
+    result = await fetchSingleGenreQuestions(genre, normDiff, count);
   }
 
   const declustered = deClusterSimilarQuestions(result, 4);
@@ -183,13 +198,14 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
 // Helper to fetch for a single specific genre
 async function fetchSingleGenreQuestions(genre, difficulty, count) {
   const catId = openTdbCategoryMap[genre];
+  const normDiff = normalizeDifficulty(difficulty, 'Standard');
   
   if (catId) {
     let diffParam = 'medium';
-    if (difficulty === 'Kids') diffParam = 'easy';
-    else if (difficulty === 'Beginner') diffParam = 'easy';
-    else if (difficulty === 'Standard') diffParam = 'medium';
-    else if (difficulty === 'Advanced') diffParam = 'hard';
+    if (normDiff === 'Kids') diffParam = 'easy';
+    else if (normDiff === 'Beginner') diffParam = 'easy';
+    else if (normDiff === 'Standard') diffParam = 'medium';
+    else if (normDiff === 'Advanced') diffParam = 'hard';
 
     try {
       let url = `https://opentdb.com/api.php?amount=${count + 3}&category=${catId}&difficulty=${diffParam}&type=multiple`;
@@ -227,7 +243,7 @@ async function fetchSingleGenreQuestions(genre, difficulty, count) {
             fetched.push({
               id: `realtime_${Date.now()}_${Math.random()}`,
               category: genre,
-              difficulty,
+              difficulty: normDiff,
               text: decodedText,
               options: optionsObj,
               correct: correctKey,
@@ -238,7 +254,7 @@ async function fetchSingleGenreQuestions(genre, difficulty, count) {
 
         if (fetched.length > 0) {
           if (fetched.length < count) {
-            const localFill = getLocalQuestions(genre, difficulty, count - fetched.length);
+            const localFill = getLocalQuestions(genre, normDiff, count - fetched.length);
             fetched.push(...localFill);
           }
           return fetched.slice(0, count);
@@ -249,7 +265,7 @@ async function fetchSingleGenreQuestions(genre, difficulty, count) {
     }
   }
 
-  return getLocalQuestions(genre, difficulty, count);
+  return getLocalQuestions(genre, normDiff, count);
 }
 
 // 2. AUTHENTIC BAR TRIVIA DATABASE (INCLUDING 500+ HOMEBREWING BEER QUESTIONS)
@@ -345,6 +361,7 @@ export async function syncWeeklyTriviaInBackground() {
             const t = (q.text || '').toLowerCase().trim();
             if (t && !seenHashes.has(t)) {
               seenHashes.add(t);
+              q.difficulty = normalizeDifficulty(q.difficulty, 'Standard');
               dynamicWeeklyPool.push(q);
             }
           }
@@ -389,7 +406,7 @@ export async function syncWeeklyTriviaInBackground() {
         dynamicWeeklyPool.unshift({
           id: item.id || `weekly_${Date.now()}_${Math.random()}`,
           category: item.category || 'Pop Culture & Music',
-          difficulty: item.difficulty || 'Standard',
+          difficulty: normalizeDifficulty(item.difficulty, 'Standard'),
           text: qText,
           options: {
             A: item.option_a || item.options?.A || 'Option A',
@@ -430,6 +447,7 @@ export function isHumanMade(q) {
 }
 
 export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
+  const normDiff = normalizeDifficulty(difficulty, 'Standard');
   let targetGenre = genre;
   if (!targetGenre || targetGenre === 'Random' || targetGenre === 'Auto Select') {
     const valid = ALL_SPECIFIC_GENRES.filter(g => g !== 'Random' && g !== 'Auto Select');
@@ -484,7 +502,7 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
       ...q,
       id: q.id || `offline_${Date.now()}_${Math.random()}`,
       category: q.category || targetGenre,
-      difficulty: q.difficulty || difficulty
+      difficulty: normDiff || normalizeDifficulty(q.difficulty, 'Standard')
     });
   }
 
@@ -496,7 +514,7 @@ export function getLocalQuestions(genre, difficulty = 'Standard', count = 10) {
         ...q,
         id: q.id || `offline_fallback_${Date.now()}_${i}`,
         category: q.category || targetGenre,
-        difficulty: q.difficulty || difficulty
+        difficulty: normDiff || normalizeDifficulty(q.difficulty, 'Standard')
       });
     }
   }
