@@ -1,0 +1,2 @@
+ninja: Entering directory `C:\Users\todd4\AppData\Local\Pub\Cache\hosted\pub.dev\jni-1.0.2\android\.cxx\RelWithDebInfo\5w3h4r37\armeabi-v7a'
+ninja: no work to do.

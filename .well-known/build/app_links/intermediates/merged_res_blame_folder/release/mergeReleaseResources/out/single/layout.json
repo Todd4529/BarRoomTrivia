@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.llfbandit.app_links-release-26:/layout/ime_base_split_test_activity.xml",
+        "source": "com.llfbandit.app_links-core-1.13.1-6:/layout/ime_base_split_test_activity.xml"
+    },
+    {
+        "merged": "com.llfbandit.app_links-release-26:/layout/notification_template_part_time.xml",
+        "source": "com.llfbandit.app_links-core-1.13.1-6:/layout/notification_template_part_time.xml"
+    },
+    {
+        "merged": "com.llfbandit.app_links-release-26:/layout/ime_secondary_split_test_activity.xml",
+        "source": "com.llfbandit.app_links-core-1.13.1-6:/layout/ime_secondary_split_test_activity.xml"
+    },
+    {
+        "merged": "com.llfbandit.app_links-release-26:/layout/custom_dialog.xml",
+        "source": "com.llfbandit.app_links-core-1.13.1-6:/layout/custom_dialog.xml"
+    },
+    {
+        "merged": "com.llfbandit.app_links-release-26:/layout/notification_template_part_chronometer.xml",
+        "source": "com.llfbandit.app_links-core-1.13.1-6:/layout/notification_template_part_chronometer.xml"
+    }
+]

@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "de.ffuf.in_app_update-release-28:/layout-v21/notification_action.xml",
+        "source": "de.ffuf.in_app_update-core-1.13.1-8:/layout-v21/notification_action.xml"
+    },
+    {
+        "merged": "de.ffuf.in_app_update-release-28:/layout-v21/notification_action_tombstone.xml",
+        "source": "de.ffuf.in_app_update-core-1.13.1-8:/layout-v21/notification_action_tombstone.xml"
+    },
+    {
+        "merged": "de.ffuf.in_app_update-release-28:/layout-v21/notification_template_icon_group.xml",
+        "source": "de.ffuf.in_app_update-core-1.13.1-8:/layout-v21/notification_template_icon_group.xml"
+    },
+    {
+        "merged": "de.ffuf.in_app_update-release-28:/layout-v21/notification_template_custom_big.xml",
+        "source": "de.ffuf.in_app_update-core-1.13.1-8:/layout-v21/notification_template_custom_big.xml"
+    }
+]

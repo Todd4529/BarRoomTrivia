@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "de.ffuf.in_app_update-release-28:/drawable-v21/notification_action_background.xml",
+        "source": "de.ffuf.in_app_update-core-1.13.1-8:/drawable-v21/notification_action_background.xml"
+    }
+]

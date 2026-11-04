@@ -1,0 +1,32 @@
+<variant
+    name="release"
+    package="com.github.dart_lang.jni"
+    minSdkVersion="21"
+    targetSdkVersion="21"
+    mergedManifest="E:\Coding\BarRoomTrivia\build\jni\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml"
+    manifestMergeReport="E:\Coding\BarRoomTrivia\build\jni\outputs\logs\manifest-merger-release-report.txt"
+    proguardFiles="E:\Coding\BarRoomTrivia\build\jni\intermediates\default_proguard_files\global\proguard-android.txt-8.9.1"
+    consumerProguardFiles="consumer-rules.pro"
+    partialResultsDir="E:\Coding\BarRoomTrivia\build\jni\intermediates\lint_vital_partial_results\release\lintVitalAnalyzeRelease\out">
+  <buildFeatures
+      namespacing="REQUIRED"/>
+  <sourceProviders>
+    <sourceProvider
+        manifests="src\main\AndroidManifest.xml"
+        javaDirectories="src\main\java;C:\Users\todd4\AppData\Local\Pub\Cache\hosted\pub.dev\jni-1.0.2\java\src\main\java;src\release\java;src\main\kotlin;src\release\kotlin"
+        resDirectories="src\main\res;src\release\res"
+        assetsDirectories="src\main\assets;src\release\assets"/>
+  </sourceProviders>
+  <testSourceProviders>
+  </testSourceProviders>
+  <testFixturesSourceProviders>
+  </testFixturesSourceProviders>
+  <artifact
+      classOutputs="E:\Coding\BarRoomTrivia\build\jni\intermediates\javac\release\compileReleaseJavaWithJavac\classes;E:\Coding\BarRoomTrivia\build\jni\tmp\kotlin-classes\release;E:\Coding\BarRoomTrivia\build\jni\intermediates\compile_r_class_jar\release\generateReleaseRFile\R.jar"
+      type="MAIN"
+      applicationId="com.github.dart_lang.jni"
+      generatedSourceFolders="E:\Coding\BarRoomTrivia\build\jni\generated\ap_generated_sources\release\out"
+      generatedResourceFolders="E:\Coding\BarRoomTrivia\build\jni\generated\res\resValues\release"
+      desugaredMethodsFiles="C:\Users\todd4\.gradle\caches\9.1.0\transforms\096fa8bccf96250abb9d3a41b0527bdb\workspace\transformed\D8BackportedDesugaredMethods.txt">
+  </artifact>
+</variant>

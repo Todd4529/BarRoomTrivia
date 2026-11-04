@@ -101,6 +101,9 @@ let customAdSlides = [];
 let currentAdSlideIndex = 0;
 let adRotationTimeout = null;
 let adProgressBarInterval = null;
+let pauseAdTimeout = null;
+let isPauseTimeoutAdActive = false;
+let pausedAtEpochMs = 0;
 
 // Screen WakeLock to prevent mobile browsers (Safari / Chrome) from sleeping during game
 let screenWakeLock = null;
@@ -1619,6 +1622,8 @@ function switchView(viewName) {
           difficulty: selectedDifficulty
         });
       }
+    } else if (currentGameState === 'PAUSED') {
+      syncTvSignageDisplay();
     } else {
       // Idle / Lobby state:
       const allSlides = getAllActiveAdSlides();
@@ -1986,6 +1991,7 @@ function handleIncomingPreGameCountdown(rawPayload) {
   hideWinnerModals();
   hideInterQuestionCountdown();
   clearInterval(preGameCountdownInterval);
+  clearPauseAdTimeout();
 
   const rawStarts = payload.starts_at_epoch_ms || payload.startsAtMs;
   let startsAt = 0;
@@ -2668,7 +2674,10 @@ function initBroadcastChannelListeners() {
           totalTimerDuration,
           isAdModeActive,
           adSlideDurationSeconds,
-          isSoundEffectsEnabled
+          isSoundEffectsEnabled,
+          isPauseTimeoutAdActive,
+          pausedAtEpochMs,
+          pausedRemainingQuestionSeconds
         }
       });
     } else if (type === 'STATE_SYNC_RESPONSE') {
@@ -2836,6 +2845,14 @@ function onStateSyncResponse(payload) {
         }
       }
     }
+  }
+
+  if (payload.currentGameState === 'PAUSED') {
+    currentGameState = 'PAUSED';
+    if (payload.pausedRemainingQuestionSeconds) pausedRemainingQuestionSeconds = Number(payload.pausedRemainingQuestionSeconds);
+    handlePauseAdTimeout(payload.pausedAtEpochMs);
+  } else if (payload.currentGameState) {
+    clearPauseAdTimeout();
   }
 
   syncTvSignageDisplay();
@@ -3219,10 +3236,13 @@ function initHostControls() {
     currentGameState = 'PAUSED';
     updateHostEngineUI('PAUSED');
     updateHostManualDock();
+    const pausedNowEpoch = Date.now();
+    handlePauseAdTimeout(pausedNowEpoch);
     onGamePaused({
       remaining_question_seconds: pausedRemainingQuestionSeconds,
       round_number: pausedRound,
-      question_index: pausedQuestionIndex
+      question_index: pausedQuestionIndex,
+      paused_at_epoch_ms: pausedNowEpoch
     });
 
     channel.postMessage({
@@ -3231,7 +3251,8 @@ function initHostControls() {
         roomCode: currentRoomCode,
         remaining_question_seconds: pausedRemainingQuestionSeconds,
         roundNumber: pausedRound,
-        questionIndex: pausedQuestionIndex
+        questionIndex: pausedQuestionIndex,
+        paused_at_epoch_ms: pausedNowEpoch
       }
     });
     broadcastRealtimeEvent('game_paused', {
@@ -3240,7 +3261,8 @@ function initHostControls() {
       round_number: pausedRound,
       roundNumber: pausedRound,
       question_index: pausedQuestionIndex,
-      questionIndex: pausedQuestionIndex
+      questionIndex: pausedQuestionIndex,
+      paused_at_epoch_ms: pausedNowEpoch
     });
     syncTvSignageDisplay();
 
@@ -3251,13 +3273,15 @@ function initHostControls() {
         current_round: pausedRound,
         current_question_index: pausedQuestionIndex,
         remaining_question_seconds: pausedRemainingQuestionSeconds,
-        updated_at: new Date().toISOString()
+        paused_at: new Date(pausedNowEpoch).toISOString(),
+        updated_at: new Date(pausedNowEpoch).toISOString()
       }, { onConflict: 'room_code' }).catch(() => {});
     } catch (_) {}
   }
 
   function resumeGameEngine() {
     if (isAutomatedEngineRunning) return;
+    clearPauseAdTimeout();
     isAutomatedEngineRunning = true;
     isLocalHostEngineMaster = true;
     currentGameState = 'IN PROGRESS';
@@ -3637,6 +3661,7 @@ function initHostControls() {
   });
 
   btnResetGame?.addEventListener('click', () => {
+    clearPauseAdTimeout();
     isAutomatedEngineRunning = false;
     isLocalHostEngineMaster = false;
     activeHostQuestion = null;
@@ -3718,6 +3743,7 @@ function initHostControls() {
           }
           startsAt = startsAt || now;
           if (startsAt > now - 45000) {
+            clearPauseAdTimeout();
             isAutomatedEngineRunning = true;
             currentGameState = 'PRE_GAME';
             currentRound = session.current_round || session.round_number || currentRound || 1;
@@ -3735,6 +3761,7 @@ function initHostControls() {
             endsAt = Number(endsAt);
           }
           if (endsAt && !isNaN(endsAt) && endsAt > now) {
+            clearPauseAdTimeout();
             isAutomatedEngineRunning = true;
             currentGameState = 'QUESTION_ACTIVE';
             currentRound = session.current_round || session.round_number || currentRound || 1;
@@ -3749,6 +3776,7 @@ function initHostControls() {
             updateHostEngineUI('IN PROGRESS');
           }
         } else if (session.status === 'question_review') {
+          clearPauseAdTimeout();
           isAutomatedEngineRunning = true;
           currentGameState = 'QUESTION_REVIEW';
           currentRound = session.current_round || session.round_number || currentRound || 1;
@@ -3757,6 +3785,7 @@ function initHostControls() {
           }
           updateHostEngineUI('IN PROGRESS');
         } else if (session.status === 'round_summary' || session.status === 'inter_round') {
+          clearPauseAdTimeout();
           currentGameState = 'ROUND_SUMMARY';
           isAutomatedEngineRunning = true;
           updateHostEngineUI('IN PROGRESS');
@@ -3787,6 +3816,7 @@ function initHostControls() {
           if (session.remaining_question_seconds) pausedRemainingQuestionSeconds = Number(session.remaining_question_seconds);
           if (session.question_data) currentQuestionData = session.question_data;
           updateHostEngineUI('PAUSED');
+          handlePauseAdTimeout(session.paused_at || session.updated_at);
         }
 
         if (session.is_ad_mode_active !== undefined) {
@@ -4916,6 +4946,42 @@ function getAllActiveAdSlides() {
   return result;
 }
 
+function handlePauseAdTimeout(pausedAt) {
+  clearTimeout(pauseAdTimeout);
+  let parsedEpoch = Date.now();
+  if (pausedAt) {
+    const num = typeof pausedAt === 'string' ? Date.parse(pausedAt) : Number(pausedAt);
+    if (!isNaN(num) && num > 0) {
+      parsedEpoch = num;
+    }
+  }
+  if (!pausedAtEpochMs || parsedEpoch < pausedAtEpochMs) {
+    pausedAtEpochMs = parsedEpoch;
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - pausedAtEpochMs);
+  if (elapsedMs >= 20000) {
+    isPauseTimeoutAdActive = true;
+    syncTvSignageDisplay(true);
+  } else {
+    isPauseTimeoutAdActive = false;
+    syncTvSignageDisplay();
+    pauseAdTimeout = setTimeout(() => {
+      if (currentGameState === 'PAUSED') {
+        isPauseTimeoutAdActive = true;
+        syncTvSignageDisplay(true);
+      }
+    }, 20000 - elapsedMs);
+  }
+}
+
+function clearPauseAdTimeout() {
+  clearTimeout(pauseAdTimeout);
+  pauseAdTimeout = null;
+  isPauseTimeoutAdActive = false;
+  pausedAtEpochMs = 0;
+}
+
 // 6. TV Ad Signage Synchronization & Carousel Rotation
 function syncTvSignageDisplay(forceRestartRotation = false) {
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
@@ -4950,9 +5016,10 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
 
   const allSlides = getAllActiveAdSlides();
   const isIntermission = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
+  const isPausedAd = (currentGameState === 'PAUSED' && isPauseTimeoutAdActive);
 
-  // Intermission between rounds or active ad mode: ALWAYS display ads!
-  if ((isAdModeActive || isIntermission) && allSlides && allSlides.length > 0) {
+  // Intermission between rounds, active ad mode, or paused for >20 seconds: ALWAYS display ads!
+  if ((isAdModeActive || isIntermission || isPausedAd) && allSlides && allSlides.length > 0) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
@@ -5519,6 +5586,9 @@ window.isSoundEffectsEnabled = () => isSoundEffectsEnabled;
 window.unlockAudioContext = unlockAudioContext;
 window.updateTvAudioUI = updateTvAudioUI;
 window.showNetworkStatus = showNetworkStatus;
+window.handlePauseAdTimeout = handlePauseAdTimeout;
+window.clearPauseAdTimeout = clearPauseAdTimeout;
+window.isPauseTimeoutAdActive = () => isPauseTimeoutAdActive;
 
 function renderHostPlayersRoster() {
   const rosterList = document.getElementById('host-connected-players-list');
@@ -6643,6 +6713,7 @@ function onQuestionStart(payload) {
   hideWinnerModals();
   hideInterQuestionCountdown();
   clearInterval(preGameCountdownInterval);
+  clearPauseAdTimeout();
   clearInterval(modalCountdownInterval);
   clearInterval(playerReviewInterval);
   clearInterval(winnerCountdownInterval);
@@ -7460,6 +7531,7 @@ let interRoundTargetEpochMs = 0;
 let activeInterRoundCompletedNum = 0;
 
 function onRoundWinner(payload) {
+  clearPauseAdTimeout();
   hideResultModal();
   hideInterQuestionCountdown();
 
@@ -8353,7 +8425,8 @@ function onGamePaused(payload) {
   clearInterval(winnerCountdownInterval);
   clearInterval(playerInterQuestionInterval);
   updateHostEngineUI('PAUSED');
-  syncTvSignageDisplay();
+  const pausedAt = payload?.paused_at_epoch_ms || payload?.paused_at || payload?.timestamp || Date.now();
+  handlePauseAdTimeout(pausedAt);
 
   const tvTimerVal = document.getElementById('tv-timer-val');
   if (tvTimerVal) tvTimerVal.textContent = 'PAUSED';
@@ -8365,6 +8438,7 @@ function onGamePaused(payload) {
 }
 
 function onGameResuming(payload) {
+  clearPauseAdTimeout();
   currentGameState = 'IN PROGRESS';
   updateHostEngineUI('IN PROGRESS');
   syncTvSignageDisplay();
@@ -8427,6 +8501,7 @@ function onGameReset() {
   hideWinnerModals();
   hideInterQuestionCountdown();
   clearInterval(preGameCountdownInterval);
+  clearPauseAdTimeout();
   const playerTimerVal = document.getElementById('player-timer-val');
   if (playerTimerVal) {
     playerTimerVal.textContent = selectedQuestionDuration || 20;
