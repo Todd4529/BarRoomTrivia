@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,7 +8,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
+import '../shared/services/broadcast_sync.dart';
 import '../shared/services/mqtt_service.dart';
+import '../shared/services/realtime_service.dart';
 import '../shared/theme/app_theme.dart';
 import '../utils/app_exit.dart';
 
@@ -39,6 +42,14 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
   late AnimationController _animController;
   late Animation<double> _pulseAnimation;
 
+  RealtimeChannel? _roomChannel;
+  RealtimeChannel? _userCodeChannel;
+  RealtimeChannel? _globalChannel;
+  Timer? _pollingTimer;
+  StreamSubscription<Map<String, dynamic>>? _mqttPairingSubscription;
+  StreamSubscription<Map<String, dynamic>>? _localBusSubscription;
+  StreamSubscription<AuthState>? _authStateSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +61,38 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _pulseAnimation = Tween<double>(begin: 0.96, end: 1.04).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
     );
+
+    // If already signed in on this device, automatically acknowledge and proceed!
+    final currentAuthUser = Supabase.instance.client.auth.currentUser;
+    if (currentAuthUser != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isAuthorized) {
+          _handleDeviceAuthorized({
+            'user_id': currentAuthUser.id,
+            'user_info': {
+              'email': currentAuthUser.email,
+              'display_name': currentAuthUser.userMetadata?['display_name'] ??
+                  currentAuthUser.email?.split('@').first ??
+                  'Host',
+            },
+          });
+        }
+      });
+    }
+
+    _authStateSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (_isAuthorized || !mounted) return;
+      if (data.event == AuthChangeEvent.signedIn && data.session?.user != null) {
+        final u = data.session!.user;
+        _handleDeviceAuthorized({
+          'user_id': u.id,
+          'user_info': {
+            'email': u.email,
+            'display_name': u.userMetadata?['display_name'] ?? u.email?.split('@').first ?? 'Host',
+          },
+        });
+      }
+    });
 
     _generateNewPairingSession();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -66,6 +109,8 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _pollingTimer?.cancel();
     _countdownTimer?.cancel();
     _mqttPairingSubscription?.cancel();
+    _localBusSubscription?.cancel();
+    _authStateSubscription?.cancel();
     _animController.dispose();
     _refreshFocusNode.dispose();
     super.dispose();
@@ -79,19 +124,14 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     final randomHex = random.nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0');
     _deviceToken = 'tv_${timestamp}_$randomHex';
 
-    // Universal pairing URL (opens mobile auth view with token & code)
-    _qrAuthUrl = 'https://barroomstrivia.com/?view=auth&device_token=$_deviceToken&user_code=$_userCode&room=$_userCode';
+    // Universal pairing URL (direct /tv-auth route + query fallback)
+    final origin = kIsWeb ? Uri.base.origin : 'https://barroomstrivia.com';
+    _qrAuthUrl = '$origin/tv-auth?device_token=$_deviceToken&user_code=$_userCode&room=$_userCode&view=auth';
 
     _remainingSeconds = 300;
     _subscribeToPairingChannel();
     _startCountdown();
   }
-
-  RealtimeChannel? _roomChannel;
-  RealtimeChannel? _userCodeChannel;
-  RealtimeChannel? _globalChannel;
-  Timer? _pollingTimer;
-  StreamSubscription<Map<String, dynamic>>? _mqttPairingSubscription;
 
   void _subscribeToPairingChannel() {
     _authChannel?.unsubscribe();
@@ -100,24 +140,66 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _globalChannel?.unsubscribe();
     _pollingTimer?.cancel();
     _mqttPairingSubscription?.cancel();
+    _localBusSubscription?.cancel();
 
-    // 1. MQTT real-time subscription (works globally across devices)
+    // 1. Cross-tab & local bus event listener (instant local web synchronization)
+    BroadcastSync.listen((data) {
+      if (_isAuthorized || !mounted) return;
+      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
+      final token = data['device_token']?.toString();
+      final code = (data['user_code'] ?? data['room_code'])?.toString();
+      if (ev == 'device_authorized' ||
+          ev == 'pre_game_countdown' ||
+          ev == 'question_start' ||
+          ev == 'start_game') {
+        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
+          _countdownTimer?.cancel();
+          _handleDeviceAuthorized(data);
+        }
+      }
+    });
+
+    _localBusSubscription = RealtimeService.localEventStream.listen((data) {
+      if (_isAuthorized || !mounted) return;
+      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
+      final token = data['device_token']?.toString();
+      final code = (data['user_code'] ?? data['room_code'])?.toString();
+      if (ev == 'device_authorized' ||
+          ev == 'pre_game_countdown' ||
+          ev == 'question_start' ||
+          ev == 'start_game') {
+        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
+          _countdownTimer?.cancel();
+          _handleDeviceAuthorized(data);
+        }
+      }
+    });
+
+    // 2. MQTT real-time subscription (works globally across devices)
     final mqtt = MqttService();
     mqtt.connect();
     mqtt.subscribeTopic('device_auth_$_deviceToken');
     mqtt.subscribeTopic('barrooms_trivia/room_$_userCode');
+    final stripped = _userCode.replaceAll('-', '');
+    if (stripped != _userCode) {
+      mqtt.subscribeTopic('barrooms_trivia/room_$stripped');
+    }
     mqtt.subscribeTopic('barrooms_trivia/room_TRIV');
     mqtt.subscribeTopic('tv_pairing');
 
     _mqttPairingSubscription = mqtt.eventStream.listen((data) {
       if (_isAuthorized || !mounted) return;
       final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
+      final token = data['device_token']?.toString();
+      final code = (data['user_code'] ?? data['room_code'])?.toString();
       if (ev == 'device_authorized' ||
           ev == 'pre_game_countdown' ||
           ev == 'question_start' ||
           ev == 'start_game') {
-        _countdownTimer?.cancel();
-        _handleDeviceAuthorized(data);
+        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
+          _countdownTimer?.cancel();
+          _handleDeviceAuthorized(data);
+        }
       }
     });
 
@@ -180,18 +262,22 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           )
           .subscribe();
 
-      // Polling fallback to check if game session exists or is active
+      // Database-level Polling fallback: check if host signed in & created game session
       _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
         if (_isAuthorized || !mounted) return;
         try {
-          final res = await SupabaseConfig.client
+          final list = await SupabaseConfig.client
               .from('game_sessions')
               .select()
-              .or('room_code.eq.$_userCode,room_code.eq.TRIV')
-              .maybeSingle()
+              .eq('room_code', _userCode)
+              .limit(1)
               .timeout(const Duration(seconds: 1));
-          if (res != null && mounted) {
-            _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}});
+          if (list.isNotEmpty && mounted) {
+            final session = list.first;
+            _handleDeviceAuthorized({
+              'user_id': session['host_id'],
+              'user_info': {'display_name': 'Host'},
+            });
           }
         } catch (_) {}
       });

@@ -13,7 +13,8 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/data/trivia_genres.dart';
 
 class HostDashboardView extends StatefulWidget {
-  const HostDashboardView({super.key});
+  final String? initialRoomCode;
+  const HostDashboardView({super.key, this.initialRoomCode});
 
   @override
   State<HostDashboardView> createState() => _HostDashboardViewState();
@@ -68,6 +69,10 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   Future<void> _loadRoomCode() async {
+    if (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty) {
+      if (mounted) setState(() => _targetRoomCode = widget.initialRoomCode!.toUpperCase().trim());
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString('tv_room_code');
@@ -80,6 +85,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty) {
+      _targetRoomCode = widget.initialRoomCode!.toUpperCase().trim();
+    }
     final initialIndex = _availableTimerDurations.indexOf(_selectedTimerSeconds);
     _timerPageController = PageController(
       viewportFraction: 0.28,

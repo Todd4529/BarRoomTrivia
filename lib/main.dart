@@ -42,6 +42,19 @@ final GoRouter _router = GoRouter(
         final view = state.uri.queryParameters['view'];
         final room = state.uri.queryParameters['room'] ??
             state.uri.queryParameters['room_id'];
+        final deviceToken = state.uri.queryParameters['device_token'] ??
+            state.uri.queryParameters['token'] ??
+            state.uri.queryParameters['code'];
+        final userCode = state.uri.queryParameters['user_code'];
+
+        // If launched via host TV pairing QR code or URL
+        if (view == 'auth' || view == 'tv-auth' || (deviceToken != null && deviceToken.isNotEmpty)) {
+          return TvAuthVerifyView(
+            deviceToken: deviceToken,
+            userCode: userCode ?? room,
+          );
+        }
+
         if (view == 'player' || (view == null && room != null && state.uri.queryParameters['view'] != 'tv')) {
           return PlayerControllerView(initialRoomCode: room);
         }
@@ -54,7 +67,20 @@ final GoRouter _router = GoRouter(
     ),
     GoRoute(
       path: '/auth',
-      builder: (context, state) => const AuthPage(),
+      builder: (context, state) {
+        final deviceToken = state.uri.queryParameters['device_token'] ??
+            state.uri.queryParameters['token'] ??
+            state.uri.queryParameters['code'];
+        final userCode = state.uri.queryParameters['user_code'] ??
+            state.uri.queryParameters['room'];
+        if (deviceToken != null && deviceToken.isNotEmpty) {
+          return TvAuthVerifyView(
+            deviceToken: deviceToken,
+            userCode: userCode,
+          );
+        }
+        return const AuthPage();
+      },
     ),
     GoRoute(
       path: '/hub',
@@ -80,7 +106,8 @@ final GoRouter _router = GoRouter(
         final deviceToken = state.uri.queryParameters['device_token'] ??
             state.uri.queryParameters['token'] ??
             state.uri.queryParameters['code'];
-        final userCode = state.uri.queryParameters['user_code'];
+        final userCode = state.uri.queryParameters['user_code'] ??
+            state.uri.queryParameters['room'];
         return TvAuthVerifyView(
           deviceToken: deviceToken,
           userCode: userCode,
@@ -97,7 +124,11 @@ final GoRouter _router = GoRouter(
     ),
     GoRoute(
       path: '/host',
-      builder: (context, state) => const HostDashboardView(),
+      builder: (context, state) {
+        final roomCode = state.uri.queryParameters['room'] ??
+            state.uri.queryParameters['room_id'];
+        return HostDashboardView(initialRoomCode: roomCode);
+      },
     ),
     GoRoute(
       path: '/reset-password',

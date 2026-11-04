@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../shared/services/broadcast_sync.dart';
+import '../shared/services/mqtt_service.dart';
+import '../shared/services/realtime_service.dart';
 import '../shared/theme/app_theme.dart';
 import '../shared/services/supabase_service.dart';
 
@@ -342,6 +345,28 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   void _navigateToHome() {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final payload = {
+          'event': 'device_authorized',
+          'type': 'device_authorized',
+          'user_id': user.id,
+          'user_info': {
+            'email': user.email ?? 'Host User',
+            'display_name': user.userMetadata?['display_name'] ?? user.email?.split('@').first ?? 'Host',
+          },
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        BroadcastSync.postEvent(payload);
+        RealtimeService.postLocalEvent(payload);
+        final mqtt = MqttService();
+        mqtt.connect();
+        mqtt.publish('tv_pairing', payload);
+        mqtt.publish('barrooms_trivia/room_TRIV', payload);
+      }
+    } catch (_) {}
+
     if (mounted) {
       context.go('/hub');
     }

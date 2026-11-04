@@ -15,6 +15,12 @@ class RealtimeService {
   static final StreamController<Map<String, dynamic>> _localEventBus =
       StreamController<Map<String, dynamic>>.broadcast();
 
+  static void postLocalEvent(Map<String, dynamic> event) {
+    _localEventBus.add(event);
+  }
+
+  static Stream<Map<String, dynamic>> get localEventStream => _localEventBus.stream;
+
   // Cache of active, subscribed Supabase channels by room code
   static final Map<String, RealtimeChannel> _activeChannels = {};
 

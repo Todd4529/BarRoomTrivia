@@ -1,17 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/config/supabase_config.dart';
+import '../shared/services/broadcast_sync.dart';
+import '../shared/services/mqtt_service.dart';
+import '../shared/services/realtime_service.dart';
 import '../shared/services/supabase_service.dart';
 import '../shared/theme/app_theme.dart';
 
 /// Mobile Verification & Host Auth View
 /// Scanned by the host's phone from the TV QR Code.
 /// Allows the host to Sign In or Sign Up directly on their phone.
-/// Once authenticated, it broadcasts the session to the TV over Supabase Realtime
-/// and advances the phone router directly to the Host Controls.
+/// Once authenticated, it broadcasts the session to the TV over Supabase Realtime,
+/// MQTT, and database updates, and advances the phone router directly to the Host Controls.
 class TvAuthVerifyView extends StatefulWidget {
   final String? deviceToken;
   final String? userCode;
@@ -56,8 +61,9 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
     // If user is already authenticated on this phone, verify immediately
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Supabase.instance.client.auth.currentUser;
-      if (user != null && widget.deviceToken != null) {
-        _verifyDeviceWithSupabase(widget.deviceToken!, user);
+      if (user != null) {
+        final token = widget.deviceToken ?? 'tv_general';
+        _verifyDeviceWithSupabase(token, user);
       }
     });
   }
@@ -78,44 +84,106 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
 
     try {
       final session = Supabase.instance.client.auth.currentSession;
+      final targetRoom = (widget.userCode != null && widget.userCode!.isNotEmpty)
+          ? widget.userCode!.toUpperCase().trim()
+          : 'TRIV';
+      final displayName = user.userMetadata?['display_name'] ??
+          user.email?.split('@').first ??
+          'Host';
+
       final payload = {
+        'event': 'device_authorized',
+        'type': 'device_authorized',
         'device_token': token,
+        'user_code': targetRoom,
+        'room_code': targetRoom,
         'user_id': user.id,
         'user_info': {
           'email': user.email ?? 'Host User',
-          'display_name': user.userMetadata?['display_name'] ?? user.email?.split('@').first ?? 'Host',
+          'display_name': displayName,
         },
         'auth_tokens': {
           'access_token': session?.accessToken ?? '',
         },
         'timestamp': DateTime.now().toIso8601String(),
+        'sent_at_epoch_ms': DateTime.now().millisecondsSinceEpoch,
       };
 
-      // 1. Broadcast to Supabase Realtime channel for instant TV pickup
-      final channelName = 'device_auth_$token';
-      final channel = SupabaseConfig.client.channel(channelName);
-      channel.subscribe();
-      await channel.sendBroadcastMessage(
-        event: 'device_authorized',
-        payload: payload,
-      );
+      // 1. Broadcast locally & cross-tab for instant responsiveness in same environment
+      BroadcastSync.postEvent(payload);
+      RealtimeService.postLocalEvent(payload);
 
-      // 2. Also broadcast to global room_TRIV channel as redundancy
-      final roomChannel = SupabaseConfig.client.channel('room_TRIV');
-      roomChannel.subscribe();
-      await roomChannel.sendBroadcastMessage(
-        event: 'device_authorized',
-        payload: payload,
-      );
+      // 2. Publish over EMQX MQTT (immediate global internet delivery to TV)
+      try {
+        final mqtt = MqttService();
+        mqtt.connect();
+        mqtt.publish('device_auth_$token', payload);
+        mqtt.publish('barrooms_trivia/room_$targetRoom', payload);
+        final stripped = targetRoom.replaceAll('-', '');
+        if (stripped != targetRoom) {
+          mqtt.publish('barrooms_trivia/room_$stripped', payload);
+        }
+        mqtt.publish('barrooms_trivia/room_TRIV', payload);
+        mqtt.publish('tv_pairing', payload);
+      } catch (e) {
+        debugPrint('[Auth] MQTT publish error: $e');
+      }
 
-      // 3. Optional HTTP fallback attempt
+      // 3. Upsert game_sessions record in Supabase database
+      // This is the guaranteed source of truth that TV polling & realtime DB events pick up
+      try {
+        await SupabaseConfig.client.from('game_sessions').upsert({
+          'room_code': targetRoom,
+          'host_id': user.id,
+          'status': 'lobby',
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'room_code').timeout(const Duration(seconds: 3));
+      } catch (e) {
+        debugPrint('[Auth] game_sessions upsert notice: $e');
+      }
+
+      // 4. Broadcast to Supabase Realtime channels
+      Future<void> sendToChannel(String chName) async {
+        try {
+          final ch = SupabaseConfig.client.channel(chName);
+          final completer = Completer<void>();
+          ch.subscribe((status, [error]) {
+            if (status == RealtimeSubscribeStatus.subscribed) {
+              if (!completer.isCompleted) completer.complete();
+            }
+          });
+          try {
+            await completer.future.timeout(const Duration(milliseconds: 1200));
+          } catch (_) {}
+          await ch.sendBroadcastMessage(
+            event: 'device_authorized',
+            payload: payload,
+          );
+        } catch (_) {}
+      }
+
+      await Future.wait([
+        sendToChannel('device_auth_$token'),
+        sendToChannel('room_$targetRoom'),
+        if (targetRoom != 'TRIV') sendToChannel('room_TRIV'),
+        sendToChannel('tv_pairing'),
+      ]);
+
+      // 5. Save paired room to SharedPreferences
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('tv_room_code', targetRoom);
+        await prefs.setBool('onboardingCompleted', true);
+      } catch (_) {}
+
+      // 6. Optional HTTP fallback attempt
       try {
         final uri = Uri.parse('${widget.backendBaseUrl.replaceAll(RegExp(r'/+$'), '')}/auth/device/verify');
         await http.post(
           uri,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(payload),
-        ).timeout(const Duration(milliseconds: 1200));
+        ).timeout(const Duration(milliseconds: 1000));
       } catch (_) {}
 
       if (mounted) {
@@ -126,9 +194,9 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         _animController.forward();
 
         // Brief delay to show success animation, then advance to Host Controls
-        await Future.delayed(const Duration(milliseconds: 1300));
+        await Future.delayed(const Duration(milliseconds: 1200));
         if (mounted) {
-          context.go('/host');
+          context.go('/host?room=$targetRoom');
         }
       }
     } catch (e) {
@@ -165,10 +233,9 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         user = await supabaseService.signInWithEmail(email, password);
       }
 
-      if (user != null && widget.deviceToken != null) {
-        await _verifyDeviceWithSupabase(widget.deviceToken!, user);
-      } else if (user != null) {
-        if (mounted) context.go('/host');
+      if (user != null) {
+        final token = widget.deviceToken ?? 'tv_general';
+        await _verifyDeviceWithSupabase(token, user);
       } else {
         setState(() {
           _isLoading = false;
@@ -384,9 +451,8 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () {
-              if (widget.deviceToken != null) {
-                _verifyDeviceWithSupabase(widget.deviceToken!, user);
-              }
+              final token = widget.deviceToken ?? 'tv_general';
+              _verifyDeviceWithSupabase(token, user);
             },
             child: const Text(
               'AUTHORIZE BIG SCREEN & LAUNCH HOST',
