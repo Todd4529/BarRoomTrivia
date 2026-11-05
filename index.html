@@ -1362,7 +1362,7 @@
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
                 <div class="title-right-actions">
-                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.clearHostLeaderboard && window.clearHostLeaderboard()" title="Clear leaderboard and remove all player scores">
+                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.openClearLeaderboardModal ? window.openClearLeaderboardModal() : (window.clearHostLeaderboard && window.clearHostLeaderboard())" title="Clear leaderboard and remove all player scores">
                     Clear Leaderboard
                   </button>
 
@@ -1695,6 +1695,28 @@
       </div>
     </section>
   </main>
+
+  <!-- G. DEDICATED CLEAR LEADERBOARD CONFIRMATION MODAL -->
+  <div id="clear-leaderboard-modal-overlay" class="clear-leaderboard-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="clear-lb-modal-title">
+    <div class="clear-leaderboard-modal-backdrop" id="clear-lb-modal-backdrop"></div>
+    <div class="clear-leaderboard-modal-card">
+      <div class="clear-lb-icon-wrap">
+        <span class="clear-lb-icon">🗑️</span>
+      </div>
+      <h3 id="clear-lb-modal-title" class="clear-lb-title">Clear Leaderboard?</h3>
+      <p class="clear-lb-desc">
+        Are you sure you want to clear the leaderboard? This will remove all connected players and reset all scores back to zero.
+      </p>
+      <div class="clear-lb-btn-row">
+        <button type="button" id="btn-cancel-clear-lb" class="btn-clear-lb-cancel">
+          Cancel
+        </button>
+        <button type="button" id="btn-confirm-clear-lb" class="btn-clear-lb-confirm">
+          Yes, Clear Leaderboard
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

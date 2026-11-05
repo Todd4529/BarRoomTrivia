@@ -749,17 +749,12 @@ function isFictitiousPlayer(nickname) {
 
 // INITIALIZE LEADERBOARD FOR REAL PLAYERS ONLY
 let playersLeaderboard = [];
+let lastLeaderboardClearedEpoch = Number(safeStorage.getItem('bar_trivia_lb_cleared_at') || 0);
 
 async function refreshHostPlayers() {
   const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
 
-  // 1. Broadcast request state sync in background so connected player devices immediately re-announce themselves
-  try {
-    channel.postMessage({ type: 'REQUEST_STATE_SYNC', payload: { room_code: normRoom } });
-    broadcastRealtimeEvent('request_state_sync', { room_code: normRoom });
-  } catch (_) {}
-
-  // 2. Fetch fresh roster silently in background from Supabase players table
+  // 1. Fetch fresh roster silently in background from Supabase players table
   try {
     if (supabase) {
       let { data, error } = await supabase
@@ -769,7 +764,18 @@ async function refreshHostPlayers() {
         .order('cumulative_score', { ascending: false });
 
       if (!error && Array.isArray(data)) {
-        const realPlayers = data.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+        const realPlayers = data.filter(p => {
+          if (!p || !p.nickname || isFictitiousPlayer(p.nickname)) return false;
+          if (p.is_connected === false) return false;
+          if (lastLeaderboardClearedEpoch > 0 && p.updated_at) {
+            const updatedMs = Date.parse(p.updated_at);
+            if (!isNaN(updatedMs) && updatedMs <= lastLeaderboardClearedEpoch) {
+              return false; // Row was created before leaderboard was cleared
+            }
+          }
+          return true;
+        });
+
         if (realPlayers.length === 0) {
           playersLeaderboard = [];
         } else {
@@ -794,7 +800,7 @@ async function refreshHostPlayers() {
     console.warn('[Leaderboard] Background refresh players error:', err);
   }
 
-  // 3. Purge any fictitious players & quietly update host roster and leaderboard in background
+  // 2. Purge any fictitious players & quietly update host roster and leaderboard in background
   playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
   renderLeaderboard();
   renderHostPlayersRoster();
@@ -880,10 +886,21 @@ function loadInitialPlayers() {
 window.refreshHostPlayers = refreshHostPlayers;
 window.loadInitialPlayers = loadInitialPlayers;
 
-async function clearHostLeaderboard() {
-  const confirmed = window.confirm('Are you sure you want to clear the leaderboard? This will remove all players and reset all scores.');
-  if (!confirmed) return;
+function openClearLeaderboardModal() {
+  const overlay = document.getElementById('clear-leaderboard-modal-overlay');
+  if (overlay) overlay.classList.remove('hidden');
+}
 
+function closeClearLeaderboardModal() {
+  const overlay = document.getElementById('clear-leaderboard-modal-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function clearHostLeaderboard() {
+  openClearLeaderboardModal();
+}
+
+async function executeClearHostLeaderboard() {
   const buttonsToUpdate = [
     document.getElementById('btn-clear-leaderboard'),
     document.getElementById('btn-clear-leaderboard-bottom')
@@ -895,36 +912,40 @@ async function clearHostLeaderboard() {
   });
 
   const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
+  const clearEpoch = Date.now();
+  lastLeaderboardClearedEpoch = clearEpoch;
+  safeStorage.setItem('bar_trivia_lb_cleared_at', String(clearEpoch));
 
   // 1. Completely clear in-memory leaderboard
   playersLeaderboard = [];
 
-  // 2. Reset active player score if running on this device
-  if (currentPlayer) {
-    currentPlayer.score = 0;
-    currentPlayer.streak = 0;
-    const scoreVal = document.getElementById('player-score-val');
-    if (scoreVal) scoreVal.textContent = '0';
-  }
+  // 2. Wipe player registration if on this device so it doesn't re-announce itself
+  currentPlayer = null;
+  safeStorage.removeItem('bar_trivia_player_nickname');
+  const scoreVal = document.getElementById('player-score-val');
+  if (scoreVal) scoreVal.textContent = '0';
+  const playerDispNickname = document.getElementById('player-disp-nickname');
+  if (playerDispNickname) playerDispNickname.textContent = '';
 
   // 3. Re-render host roster and TV leaderboard immediately to empty state
   renderLeaderboard();
   renderHostPlayersRoster();
 
-  // 4. Delete players from Supabase players table
+  // 4. Delete players from Supabase players table & deactivate
   try {
     if (supabase) {
-      await supabase
-        .from('players')
-        .delete()
-        .eq('room_code', normRoom);
+      await supabase.from('players').delete().eq('room_code', normRoom);
+      await supabase.from('players').delete().eq('room_code', 'TRIV');
+      await supabase.from('players').delete().ilike('room_code', `%${normRoom}%`);
+      await supabase.from('players').update({ is_connected: false, cumulative_score: 0, score: 0 }).eq('room_code', normRoom);
+      await supabase.from('players').update({ is_connected: false, cumulative_score: 0, score: 0 }).eq('room_code', 'TRIV');
 
-      if (normRoom !== 'TRIV') {
-        await supabase
-          .from('players')
-          .delete()
-          .eq('room_code', 'TRIV');
-      }
+      // Also persist to game_sessions so other devices know the clear timestamp
+      await supabase.from('game_sessions').upsert({
+        room_code: normRoom,
+        leaderboard_cleared_at: new Date(clearEpoch).toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' }).catch(() => {});
     }
   } catch (err) {
     console.warn('[Leaderboard] Supabase clear scores error:', err);
@@ -932,27 +953,17 @@ async function clearHostLeaderboard() {
 
   // 5. Broadcast to all clients (TV displays and player phones)
   try {
-    channel.postMessage({
-      type: 'LEADERBOARD_UPDATED',
-      payload: {
-        leaderboard: [],
-        players: [],
-        room_code: normRoom
-      }
-    });
-    channel.postMessage({
-      type: 'LEADERBOARD_CLEARED',
-      payload: { room_code: normRoom }
-    });
-    broadcastRealtimeEvent('leaderboard_updated', {
-      players: [],
+    const clearPayload = {
       leaderboard: [],
-      room_code: normRoom
-    });
-    broadcastRealtimeEvent('leaderboard_cleared', {
+      players: [],
       room_code: normRoom,
-      timestamp: Date.now()
-    });
+      timestamp: clearEpoch,
+      cleared_at: clearEpoch
+    };
+    channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: clearPayload });
+    channel.postMessage({ type: 'LEADERBOARD_CLEARED', payload: clearPayload });
+    broadcastRealtimeEvent('leaderboard_updated', clearPayload);
+    broadcastRealtimeEvent('leaderboard_cleared', clearPayload);
   } catch (err) {
     console.warn('[Leaderboard] Broadcast clear error:', err);
   }
@@ -971,19 +982,35 @@ async function clearHostLeaderboard() {
   }, 2000);
 }
 
-function onLeaderboardCleared() {
+function onLeaderboardCleared(payload) {
+  const clearEpoch = payload?.timestamp || payload?.cleared_at || Date.now();
+  lastLeaderboardClearedEpoch = clearEpoch;
+  safeStorage.setItem('bar_trivia_lb_cleared_at', String(clearEpoch));
   playersLeaderboard = [];
-  if (currentPlayer) {
-    currentPlayer.score = 0;
-    currentPlayer.streak = 0;
-    const scoreVal = document.getElementById('player-score-val');
-    if (scoreVal) scoreVal.textContent = '0';
+  currentPlayer = null;
+  safeStorage.removeItem('bar_trivia_player_nickname');
+  const scoreVal = document.getElementById('player-score-val');
+  if (scoreVal) scoreVal.textContent = '0';
+  const playerDispNickname = document.getElementById('player-disp-nickname');
+  if (playerDispNickname) playerDispNickname.textContent = '';
+
+  const playerEntryScreen = document.getElementById('player-entry-screen');
+  const playerControllerScreen = document.getElementById('player-controller-screen');
+  if (playerEntryScreen && playerControllerScreen) {
+    playerEntryScreen.classList.remove('hidden');
+    playerEntryScreen.style.display = '';
+    playerControllerScreen.classList.add('hidden');
+    playerControllerScreen.style.display = 'none';
   }
+
   renderLeaderboard();
   renderHostPlayersRoster();
 }
 
 window.clearHostLeaderboard = clearHostLeaderboard;
+window.openClearLeaderboardModal = openClearLeaderboardModal;
+window.closeClearLeaderboardModal = closeClearLeaderboardModal;
+window.executeClearHostLeaderboard = executeClearHostLeaderboard;
 window.onLeaderboardCleared = onLeaderboardCleared;
 
 // PROGRESSIVE WEB APP (PWA) SUPPORT & INSTALL PROMPTS
@@ -4075,12 +4102,30 @@ function initHostControls() {
   const btnClearLeaderboard = document.getElementById('btn-clear-leaderboard');
   btnClearLeaderboard?.addEventListener('click', (e) => {
     e.preventDefault();
-    clearHostLeaderboard();
+    openClearLeaderboardModal();
   });
   const btnClearLeaderboardBottom = document.getElementById('btn-clear-leaderboard-bottom');
   btnClearLeaderboardBottom?.addEventListener('click', (e) => {
     e.preventDefault();
-    clearHostLeaderboard();
+    openClearLeaderboardModal();
+  });
+
+  const btnCancelClearLb = document.getElementById('btn-cancel-clear-lb');
+  const btnConfirmClearLb = document.getElementById('btn-confirm-clear-lb');
+  const clearLbBackdrop = document.getElementById('clear-lb-modal-backdrop');
+
+  btnCancelClearLb?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeClearLeaderboardModal();
+  });
+  clearLbBackdrop?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeClearLeaderboardModal();
+  });
+  btnConfirmClearLb?.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeClearLeaderboardModal();
+    executeClearHostLeaderboard();
   });
 
   const btnRefreshPlayers = document.getElementById('btn-refresh-players');
@@ -4156,6 +4201,16 @@ function initHostControls() {
 
       const session = (data && data.length > 0) ? data[0] : null;
       if (session) {
+        if (session.leaderboard_cleared_at) {
+          const sClearMs = Date.parse(session.leaderboard_cleared_at);
+          if (!isNaN(sClearMs) && sClearMs > lastLeaderboardClearedEpoch) {
+            lastLeaderboardClearedEpoch = sClearMs;
+            safeStorage.setItem('bar_trivia_lb_cleared_at', String(sClearMs));
+            playersLeaderboard = [];
+            renderLeaderboard();
+            renderHostPlayersRoster();
+          }
+        }
         if (session.is_sound_effects_enabled !== undefined) {
           setSoundEffectsEnabled(Boolean(session.is_sound_effects_enabled), false);
         } else if (session.is_sound_enabled !== undefined) {
@@ -8809,6 +8864,12 @@ function initPlayerControls() {
 
         const session = (data && data.length > 0) ? data[0] : null;
         if (session) {
+          if (session.leaderboard_cleared_at) {
+            const sClearMs = Date.parse(session.leaderboard_cleared_at);
+            if (!isNaN(sClearMs) && sClearMs > lastLeaderboardClearedEpoch) {
+              onLeaderboardCleared({ timestamp: sClearMs });
+            }
+          }
           if (session.is_sound_effects_enabled !== undefined) {
             setSoundEffectsEnabled(Boolean(session.is_sound_effects_enabled), false);
           } else if (session.is_sound_enabled !== undefined) {
@@ -9081,6 +9142,9 @@ function initPlayerControls() {
 
 function onPlayerJoined(player) {
   if (!player || !player.nickname || isFictitiousPlayer(player.nickname)) return;
+  if (lastLeaderboardClearedEpoch > 0 && player.timestamp && player.timestamp <= lastLeaderboardClearedEpoch) {
+    return;
+  }
   player.nickname = formatPlayerNickname(player.nickname);
   const initialScore = Number(player.score ?? player.cumulative_score ?? 0);
   const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
@@ -9201,7 +9265,14 @@ function mergeIncomingLeaderboard(list) {
     return;
   }
   const valid = list
-    .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
+    .filter(p => {
+      if (!p || !p.nickname || isFictitiousPlayer(p.nickname)) return false;
+      if (lastLeaderboardClearedEpoch > 0 && p.updated_at) {
+        const uMs = Date.parse(p.updated_at);
+        if (!isNaN(uMs) && uMs <= lastLeaderboardClearedEpoch) return false;
+      }
+      return true;
+    })
     .map(p => ({
       ...p,
       nickname: formatPlayerNickname(p.nickname),
