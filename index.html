@@ -543,6 +543,7 @@
               ⚡ QUICK CONNECT AS HOST
             </button>
 
+
             <div class="auth-separator">
               <span>OR ENTER CREDENTIALS</span>
             </div>
@@ -560,12 +561,14 @@
             <button type="submit" id="btn-submit-auth" class="btn btn-secondary btn-block" onclick="window.handleHostAuthSubmit && window.handleHostAuthSubmit(event)" style="cursor: pointer; pointer-events: auto;">
               SIGN IN & CONNECT TV
             </button>
+
           </form>
 
           <div class="auth-mode-switch">
             <button type="button" id="btn-toggle-sign-mode" class="btn-text-link">
               Don't have an account? <strong>Sign Up</strong>
             </button>
+
           </div>
         </div>
       </div>
@@ -576,18 +579,19 @@
       <div class="tv-viewport 16-9" style="position: relative;">
         <!-- TOP HEADER: CENTERED BEER ICON & BAR ROOMS TRIVIA ONLY WITH TV MODE TOGGLE -->
         <div class="tv-header tv-header-centered">
+          <button id="btn-tv-back" class="tv-back-btn" title="Exit / Host Controls Recovery" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); border-radius: 10px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">← MENU</button>
           <div class="tv-brand">
-            <button id="btn-tv-back" class="tv-back-btn" title="Exit / Host Controls Recovery" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); border-radius: 10px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; margin-right: 14px; display: inline-flex; align-items: center; gap: 6px;">
-              ← MENU
-            </button>
+
+
+
             <div id="tv-custom-logo-container" class="custom-logo-wrapper hidden">
               <img id="tv-custom-logo-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Bar Logo" class="tv-logo-img">
             </div>
-            <span id="tv-brand-icon" class="brand-icon">🍻</span>
+            <img src="./assets/images/app_logo.png" alt="Bar Rooms Trivia" class="tv-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';" style="width: 32px; height: 32px; border-radius: 8px; object-fit: cover;">
             <span id="tv-bar-name" class="brand-name">BAR ROOMS TRIVIA</span>
           </div>
 
-          <div class="tv-mode-toggle">
+          <div class="tv-mode-toggle" style="display: none !important;">
             <button id="btn-tv-toggle-promo" class="tv-toggle-btn active">📣 Promo Ads</button>
             <button id="btn-tv-toggle-live" class="tv-toggle-btn">🎯 Live Stage</button>
           </div>
@@ -839,14 +843,14 @@
             <div style="display: flex; gap: 12px; margin-bottom: 14px;">
               <button id="btn-tv-exit-yes" class="btn btn-danger" autofocus style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 800; cursor: pointer; background: #ff4d4d; border: 2px solid #ffffff; color: #ffffff; box-shadow: 0 0 20px rgba(255, 77, 77, 0.7);">
                 Yes
-              </button>
+  
               <button id="btn-tv-exit-cancel" class="btn btn-outline" style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 700; cursor: pointer;">
                 Cancel
-              </button>
+  
             </div>
             <button id="btn-tv-show-host-qr" class="btn btn-block" style="background: var(--accent-yellow); color: #000; font-weight: 900; font-size: 15px; letter-spacing: 1px; padding: 14px; border-radius: 14px; cursor: pointer;">
               📱 HOST CONTROL QR CODE
-            </button>
+
           </div>
         </div>
 
@@ -873,7 +877,7 @@
             </div>
             <button id="btn-tv-close-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               BACK TO TV DISPLAY
-            </button>
+
           </div>
 
           <!-- NO ACTIVE GAME CARD -->
@@ -889,7 +893,7 @@
             </div>
             <button id="btn-tv-close-empty-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               RETURN TO TV DISPLAY
-            </button>
+
           </div>
         </div>
 
@@ -904,7 +908,7 @@
             </p>
             <button id="btn-reopen-app" class="btn btn-secondary btn-block" style="border-radius: 14px; font-weight: 800; letter-spacing: 0.5px; padding: 14px; cursor: pointer;">
               🔄 Re-open Bar Rooms Trivia
-            </button>
+
           </div>
         </div>
       </div>
@@ -930,7 +934,7 @@
             </div>
             <button type="submit" id="btn-player-join" class="btn btn-primary btn-block">
               ENTER GAME
-            </button>
+
           </form>
         </div>
       </div>
@@ -1469,19 +1473,19 @@
               <button type="button" id="btn-open-manual-modal" class="btn-dock-manual btn-dock-console" title="Open Full Host MC Console">
                 <span class="btn-icon">🎙️</span>
                 <span>MC CONSOLE</span>
-              </button>
+  
               <button type="button" id="btn-dock-start-timer" class="btn-dock-manual btn-dock-timer" title="Start Question Countdown">
                 <span class="btn-icon">⏱️</span>
                 <span id="btn-dock-start-timer-text">Start Timer</span>
-              </button>
+  
               <button type="button" id="btn-dock-reveal" class="btn-dock-manual btn-dock-reveal" title="Reveal Correct Answer">
                 <span class="btn-icon">💡</span>
                 <span id="btn-dock-reveal-text">Reveal</span>
-              </button>
+  
               <button type="button" id="btn-dock-next-q" class="btn-dock-manual btn-dock-next" title="Next Question">
                 <span class="btn-icon">⏭️</span>
                 <span id="btn-dock-next-text">Next</span>
-              </button>
+  
             </div>
           </div>
 
@@ -1493,7 +1497,7 @@
                 </svg>
               </span>
               <span class="btn-dock-text" id="btn-start-auto-text">Start Game</span>
-            </button>
+
             <button type="button" id="btn-pause-auto" class="btn btn-warning btn-dock-action" disabled title="Pause Game">
               <span class="btn-dock-icon-wrapper">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -1501,7 +1505,7 @@
                 </svg>
               </span>
               <span class="btn-dock-text" id="btn-pause-auto-text">Pause</span>
-            </button>
+
             <button type="button" id="btn-reset-game" class="btn btn-danger btn-dock-icon" title="Reset Game & Room">
               <span class="btn-dock-icon-wrapper">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1510,7 +1514,7 @@
                 </svg>
               </span>
               <span class="btn-dock-text" id="btn-reset-text">Reset</span>
-            </button>
+
           </div>
         </div>
 
@@ -1530,7 +1534,7 @@
               </div>
               <button type="button" class="btn-manual-modal-close" id="btn-close-manual-modal" title="Minimize Host Console" aria-label="Close">
                 ✕
-              </button>
+  
             </div>
 
             <!-- Status Indicator Bar -->
@@ -1572,7 +1576,7 @@
                     <span class="manual-control-title" id="btn-manual-modal-start-timer-text">Start Timer</span>
                     <span class="manual-control-hint" id="btn-manual-modal-start-timer-hint">Start countdown</span>
                   </div>
-                </button>
+    
 
                 <!-- 2. PAUSE / RESUME -->
                 <button type="button" id="btn-manual-modal-pause" class="btn-manual-control btn-manual-pause" title="Pause or Resume Live Game">
@@ -1581,7 +1585,7 @@
                     <span class="manual-control-title" id="btn-manual-modal-pause-text">Pause</span>
                     <span class="manual-control-hint" id="btn-manual-modal-pause-sub">Hold timer</span>
                   </div>
-                </button>
+    
 
                 <!-- 3. REVEAL ANSWER -->
                 <button type="button" id="btn-manual-modal-reveal" class="btn-manual-control btn-manual-reveal" title="Reveal Correct Answer Immediately">
@@ -1590,7 +1594,7 @@
                     <span class="manual-control-title" id="btn-manual-modal-reveal-text">Reveal Answer</span>
                     <span class="manual-control-hint" id="btn-manual-modal-reveal-hint">Show correct</span>
                   </div>
-                </button>
+    
 
                 <!-- 4. NEXT QUESTION -->
                 <button type="button" id="btn-manual-modal-next-q" class="btn-manual-control btn-manual-next-q" title="Advance to Next Question">
@@ -1599,14 +1603,14 @@
                     <span class="manual-control-title" id="btn-manual-modal-next-q-text">Next Question</span>
                     <span class="manual-control-hint" id="btn-manual-modal-next-q-hint">Advance</span>
                   </div>
-                </button>
+    
               </div>
 
               <!-- Dedicated Start Game Bottom Button -->
               <div class="manual-bottom-btn-container">
                 <button type="button" id="btn-manual-modal-start-game" class="btn-manual-start-game" title="Start Game">
                   Start Game
-                </button>
+    
               </div>
             </div>
 

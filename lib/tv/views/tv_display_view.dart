@@ -102,6 +102,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   int _interRoundTargetEpochMs = 0;
   bool _isExitDialogOpen = false;
   bool _isAdSignageModeActive = false;
+  Timer? _pauseAdTimeoutTimer;
+  bool _isPauseTimeoutAdActive = false;
   bool _isSoundEffectsEnabled = true;
   String? _lastAnswerRevealSoundQuestionId;
   final Set<String> _previousWrongOptions = {};
@@ -267,19 +269,38 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _timer?.cancel();
             _preGameTimer?.cancel();
             _resumeTimer?.cancel();
+            _pauseAdTimeoutTimer?.cancel();
+            final pausedAtEpochMs = (res['paused_at_epoch_ms'] as num?)?.toInt() ??
+                (res['updated_at'] != null ? DateTime.tryParse(res['updated_at'].toString())?.millisecondsSinceEpoch : null) ??
+                DateTime.now().millisecondsSinceEpoch;
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final elapsedMs = now - pausedAtEpochMs;
+            final remMs = (20000 - elapsedMs).clamp(0, 20000);
+
             setState(() {
               _isGamePaused = true;
               _isResumeCountdownActive = false;
+              _isPauseTimeoutAdActive = elapsedMs >= 20000;
             });
-            _startAdSlideTimer();
-          } else if (status == 'question_active' && _isGamePaused) {
-            final qData = res['question_data'];
-            final qId = (qData is Map ? qData['id'] : null)?.toString();
-            if (qId != null && qId.isNotEmpty && qId != _currentQuestion?.id) {
-              setState(() {
-                _isGamePaused = false;
+
+            if (!_isPauseTimeoutAdActive) {
+              _pauseAdTimeoutTimer = Timer(Duration(milliseconds: remMs), () {
+                if (mounted && _isGamePaused) {
+                  setState(() {
+                    _isPauseTimeoutAdActive = true;
+                  });
+                  _startAdSlideTimer();
+                }
               });
             }
+
+            _startAdSlideTimer();
+          } else if (status != 'paused' && _isGamePaused) {
+            _pauseAdTimeoutTimer?.cancel();
+            setState(() {
+              _isGamePaused = false;
+              _isPauseTimeoutAdActive = false;
+            });
           } else if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
             final startsAt = res['starts_at'] as int?;
             final now = DateTime.now().millisecondsSinceEpoch;
@@ -552,6 +573,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _interQuestionTimer?.cancel();
           _interRoundCountdownTimer?.cancel();
           _roundWinnersOverlayTimer?.cancel();
+          _pauseAdTimeoutTimer?.cancel();
           _timer?.cancel();
 
           setState(() {
@@ -569,6 +591,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isInterQuestionPhase = false;
             _showRoundWinnersOverlay = false;
             _isGamePaused = false;
+            _isPauseTimeoutAdActive = false;
             _isResumeCountdownActive = false;
             _isQuestionTimerRunning = !isIdleTimer;
           });
@@ -619,15 +642,37 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           _preGameTimer?.cancel();
           _resumeTimer?.cancel();
           _interQuestionTimer?.cancel();
+          _pauseAdTimeoutTimer?.cancel();
+
+          final pausedAtEpochMs = (payload['paused_at_epoch_ms'] as num?)?.toInt() ??
+              (payload['paused_at'] as num?)?.toInt() ??
+              now;
+          final elapsedMs = now - pausedAtEpochMs;
+          final remainingMsUntilAd = (20000 - elapsedMs).clamp(0, 20000);
+
           setState(() {
             _isGamePaused = true;
             _isResumeCountdownActive = false;
+            _isPauseTimeoutAdActive = elapsedMs >= 20000;
           });
+
+          if (!_isPauseTimeoutAdActive) {
+            _pauseAdTimeoutTimer = Timer(Duration(milliseconds: remainingMsUntilAd), () {
+              if (mounted && _isGamePaused) {
+                setState(() {
+                  _isPauseTimeoutAdActive = true;
+                });
+                _startAdSlideTimer();
+              }
+            });
+          }
+
           _startAdSlideTimer();
         }
       },
       onGameResumingBroadcast: (payload) {
         if (mounted) {
+          _pauseAdTimeoutTimer?.cancel();
           _targetTimerEndsAtMs = null;
           _timer?.cancel();
           _preGameTimer?.cancel();
@@ -652,6 +697,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
           setState(() {
             _isGamePaused = false;
+            _isPauseTimeoutAdActive = false;
             _isResumeCountdownActive = true;
             _resumeSecondsRemaining = remaining > 0 ? remaining : 10;
           });
@@ -1535,6 +1581,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   @override
   void dispose() {
     _tvSessionPollingTimer?.cancel();
+    _pauseAdTimeoutTimer?.cancel();
     _timer?.cancel();
     _preGameTimer?.cancel();
     _adSlideTimer?.cancel();
@@ -2163,7 +2210,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isSignageActive = (_isGamePaused && _isAdSignageModeActive) ||
+    final bool isSignageActive = (_isGamePaused && (_isAdSignageModeActive || _isPauseTimeoutAdActive)) ||
         _isInterRoundPhase ||
         ((_isAdSignageModeActive || _customAdSlides.isNotEmpty) &&
             !_isGameActive &&

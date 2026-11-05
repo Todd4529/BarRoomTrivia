@@ -79,6 +79,37 @@ body[data-view="player"] .logo-container {
   justify-content: center;
 }
 
+/* TV View Header & Fullscreen Customization (matches native Google TV app) */
+body[data-view="tv"] .app-header {
+  display: none !important;
+}
+
+body[data-view="tv"] .main-container {
+  padding: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100vh !important;
+}
+
+body[data-view="tv"] .view-panel {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+body[data-view="tv"] .tv-viewport {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  min-height: 100vh !important;
+  height: 100vh !important;
+  padding: 16px 28px !important;
+}
+
+.tv-mode-toggle {
+  display: none !important;
+}
+
 .logo-icon {
   font-size: 28px;
 }
