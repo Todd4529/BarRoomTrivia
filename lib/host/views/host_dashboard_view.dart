@@ -1089,9 +1089,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 final isSelected = _selectedDifficulty == diff;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: (_isEngineRunning || _isPreGameCountdownActive)
-                        ? null
-                        : () => setState(() => _selectedDifficulty = diff),
+                    onTap: () => setState(() => _selectedDifficulty = diff),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       height: 48,
@@ -1187,7 +1185,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.chevron_left, color: AppTheme.neonCyan, size: 28),
-                  onPressed: (_isEngineRunning || _isPreGameCountdownActive || currentIndex <= 0)
+                  onPressed: currentIndex <= 0
                       ? null
                       : () {
                           _timerPageController.previousPage(
@@ -1220,11 +1218,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                         itemCount: _availableTimerDurations.length,
                         physics: const BouncingScrollPhysics(),
                         onPageChanged: (index) {
-                          if (!_isEngineRunning && !_isPreGameCountdownActive) {
-                            setState(() {
-                              _selectedTimerSeconds = _availableTimerDurations[index];
-                            });
-                          }
+                          setState(() {
+                            _selectedTimerSeconds = _availableTimerDurations[index];
+                          });
                         },
                         itemBuilder: (context, index) {
                           final secs = _availableTimerDurations[index];
@@ -1232,15 +1228,13 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                           final labelText = '${secs}s';
 
                           return GestureDetector(
-                            onTap: (_isEngineRunning || _isPreGameCountdownActive)
-                                ? null
-                                : () {
-                                    _timerPageController.animateToPage(
-                                      index,
-                                      duration: const Duration(milliseconds: 200),
-                                      curve: Curves.easeOut,
-                                    );
-                                  },
+                            onTap: () {
+                              _timerPageController.animateToPage(
+                                index,
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOut,
+                              );
+                            },
                             child: AnimatedScale(
                               scale: isSelected ? 1.2 : 0.8,
                               duration: const Duration(milliseconds: 180),
@@ -1263,7 +1257,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.chevron_right, color: AppTheme.neonCyan, size: 28),
-                  onPressed: (_isEngineRunning || _isPreGameCountdownActive || currentIndex >= _availableTimerDurations.length - 1)
+                  onPressed: currentIndex >= _availableTimerDurations.length - 1
                       ? null
                       : () {
                           _timerPageController.nextPage(

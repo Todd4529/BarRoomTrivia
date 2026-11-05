@@ -3116,7 +3116,6 @@ function initHostControls() {
   diffChips.forEach(chip => {
     chip.addEventListener('click', (e) => {
       e.preventDefault();
-      if (isAutomatedEngineRunning) return;
       updateDifficultyUI(chip.dataset.diff || 'Standard');
     });
   });
@@ -3131,7 +3130,6 @@ function initHostControls() {
 
     chip.addEventListener('click', (e) => {
       e.preventDefault();
-      if (isAutomatedEngineRunning) return;
 
       timerChips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
@@ -3141,6 +3139,16 @@ function initHostControls() {
         selectedQuestionDuration = parsedSecs;
         totalTimerDuration = parsedSecs;
         safeStorage.setItem('bar_trivia_question_duration', String(parsedSecs));
+
+        channel.postMessage({ type: 'TIMER_DURATION_UPDATED', payload: { question_duration: parsedSecs, duration_seconds: parsedSecs } });
+        broadcastRealtimeEvent('timer_duration_updated', { room_code: currentRoomCode, question_duration: parsedSecs, duration_seconds: parsedSecs });
+        try {
+          supabase.from('game_sessions').upsert({
+            room_code: currentRoomCode,
+            duration_seconds: parsedSecs,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'room_code' }).catch(() => {});
+        } catch (_) {}
       }
 
       const statActiveTimer = document.getElementById('stat-active-timer');
@@ -3163,7 +3171,6 @@ function initHostControls() {
     chip.classList.toggle('active', dur === selectedInterRoundDuration);
     chip.addEventListener('click', (e) => {
       e.preventDefault();
-      if (isAutomatedEngineRunning) return;
 
       interRoundChips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
@@ -3171,6 +3178,16 @@ function initHostControls() {
       if (!isNaN(dur)) {
         selectedInterRoundDuration = dur;
         safeStorage.setItem('bar_trivia_inter_round_duration', String(dur));
+
+        channel.postMessage({ type: 'INTER_ROUND_DURATION_UPDATED', payload: { inter_round_duration: dur, delay_seconds: dur } });
+        broadcastRealtimeEvent('inter_round_duration_updated', { room_code: currentRoomCode, inter_round_duration: dur, delay_seconds: dur });
+        try {
+          supabase.from('game_sessions').upsert({
+            room_code: currentRoomCode,
+            inter_round_duration: dur,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'room_code' }).catch(() => {});
+        } catch (_) {}
       }
     });
   });
