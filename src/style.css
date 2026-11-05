@@ -9,6 +9,12 @@
   --accent-green: #00e676;
   --accent-yellow: #ffd600;
 
+  --neon-green: #00e676;
+  --neon-cyan: #00e5ff;
+  --neon-purple: #bb86fc;
+  --neon-yellow: #ffd600;
+  --neon-pink: #ff007a;
+
   --button-a: #e53935;
   --button-b: #1e88e5;
   --button-c: #fdd835;
@@ -4994,32 +5000,58 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-start.is-active {
-  background: var(--neon-green);
-  color: #000;
-  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.45);
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 200, 83, 0.38)) !important;
+  border: 2px solid #00e676 !important;
+  box-shadow: 0 0 24px rgba(0, 230, 118, 0.5), inset 0 0 12px rgba(0, 230, 118, 0.2) !important;
+  color: #ffffff !important;
+  animation: pulseNeonGreen 1.6s infinite alternate !important;
 }
 
-.btn-manual-start.is-active .manual-control-title,
+.btn-manual-start.is-active .manual-control-title {
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.5px !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9) !important;
+}
+
 .btn-manual-start.is-active .manual-control-hint {
-  color: #000;
+  color: #00e676 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid #00e676 !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.4px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  text-transform: uppercase !important;
 }
 
 .btn-manual-start.is-running {
-  background: rgba(0, 230, 118, 0.25) !important;
-  border: 1.5px solid var(--neon-green) !important;
-  color: var(--neon-green) !important;
-  animation: pulse-border 1.5s infinite;
+  background: rgba(0, 230, 118, 0.2) !important;
+  border: 2px solid #00e676 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.4) !important;
+  animation: pulse-border 1.5s infinite !important;
 }
 
 .btn-manual-start.is-running .manual-control-title {
-  color: #00e676 !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.5px !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9) !important;
 }
 
 .btn-manual-start.is-running .manual-control-hint {
-  color: #000 !important;
-  background: #00e676 !important;
-  border-color: #00e676 !important;
-  font-weight: 800 !important;
+  color: #00e676 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid #00e676 !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  text-transform: uppercase !important;
 }
 
 .btn-manual-start:disabled:not(.is-running) {
@@ -5046,15 +5078,27 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-pause.is-resuming {
-  background: var(--neon-green);
-  border-color: var(--neon-green);
-  color: #000;
-  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.5);
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 200, 83, 0.38)) !important;
+  border: 2px solid #00e676 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px rgba(0, 230, 118, 0.5) !important;
 }
 
-.btn-manual-pause.is-resuming .manual-control-title,
+.btn-manual-pause.is-resuming .manual-control-title {
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9) !important;
+}
+
 .btn-manual-pause.is-resuming .manual-control-hint {
-  color: #000;
+  color: #00e676 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid #00e676 !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
 }
 
 /* 3. Reveal Answer Button */
@@ -5070,18 +5114,31 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-reveal:not(:disabled) {
-  background: #ffab00;
-  color: #000;
-  box-shadow: 0 4px 18px rgba(255, 171, 0, 0.45);
+  background: linear-gradient(135deg, rgba(255, 171, 0, 0.28), rgba(255, 145, 0, 0.38)) !important;
+  border: 2px solid #ffab00 !important;
+  box-shadow: 0 4px 18px rgba(255, 171, 0, 0.45) !important;
+  color: #ffffff !important;
 }
 
-.btn-manual-reveal:not(:disabled) .manual-control-title,
+.btn-manual-reveal:not(:disabled) .manual-control-title {
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9) !important;
+}
+
 .btn-manual-reveal:not(:disabled) .manual-control-hint {
-  color: #000;
+  color: #ffd600 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid #ffd600 !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
 }
 
 .btn-manual-reveal:not(:disabled):hover {
-  filter: brightness(1.1);
+  filter: brightness(1.15);
   transform: translateY(-2px);
   box-shadow: 0 6px 22px rgba(255, 171, 0, 0.6);
 }
@@ -5094,13 +5151,18 @@ body.auth-mode .main-container {
 
 .btn-manual-reveal.is-revealed .manual-control-title {
   color: var(--neon-cyan) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
 }
 
 .btn-manual-reveal.is-revealed .manual-control-hint {
-  color: #000 !important;
-  background: var(--neon-cyan) !important;
-  border-color: var(--neon-cyan) !important;
-  font-weight: 800 !important;
+  color: #80f0ff !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid var(--neon-cyan) !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
 }
 
 /* 4. Next Question Button in Action Deck */
@@ -5124,18 +5186,31 @@ body.auth-mode .main-container {
 
 .btn-manual-control.btn-manual-next-q.is-active,
 .btn-manual-control.btn-manual-next-q.is-ready {
-  background: var(--neon-cyan);
-  border-color: var(--neon-cyan);
-  color: #000;
-  box-shadow: 0 4px 18px rgba(0, 229, 255, 0.5);
-  animation: glow-pulse 2s infinite ease-in-out;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.28), rgba(0, 176, 255, 0.38)) !important;
+  border: 2px solid var(--neon-cyan) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.5) !important;
+  animation: glow-pulse 2s infinite ease-in-out !important;
 }
 
 .btn-manual-control.btn-manual-next-q.is-active .manual-control-title,
+.btn-manual-control.btn-manual-next-q.is-ready .manual-control-title {
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9) !important;
+}
+
 .btn-manual-control.btn-manual-next-q.is-active .manual-control-hint,
-.btn-manual-control.btn-manual-next-q.is-ready .manual-control-title,
 .btn-manual-control.btn-manual-next-q.is-ready .manual-control-hint {
-  color: #000;
+  color: #80f0ff !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid var(--neon-cyan) !important;
+  font-weight: 900 !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  text-transform: uppercase !important;
 }
 
 /* Question prompt tip banner just above question */
@@ -5329,8 +5404,12 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-next-q:disabled {
-  opacity: 0.35;
+  opacity: 1 !important;
   cursor: not-allowed;
+  filter: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
   box-shadow: none !important;
   transform: none !important;
 }
@@ -5365,15 +5444,31 @@ body.auth-mode .main-container {
 }
 
 .btn-dock-timer {
-  background: var(--neon-green);
-  border-color: var(--neon-green);
-  color: #000;
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.28), rgba(0, 200, 83, 0.38)) !important;
+  border: 1.5px solid #00e676 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.35) !important;
+}
+
+.btn-dock-timer:hover:not(:disabled) {
+  background: #00e676 !important;
+  color: #000000 !important;
+  box-shadow: 0 0 22px rgba(0, 230, 118, 0.6) !important;
 }
 
 .btn-dock-reveal {
-  background: #ffab00;
-  border-color: #ffab00;
-  color: #000;
+  background: linear-gradient(135deg, rgba(255, 171, 0, 0.25), rgba(255, 145, 0, 0.35)) !important;
+  border: 1.5px solid #ffab00 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  box-shadow: 0 0 16px rgba(255, 171, 0, 0.35) !important;
+}
+
+.btn-dock-reveal:hover:not(:disabled) {
+  background: #ffab00 !important;
+  color: #000000 !important;
+  box-shadow: 0 0 22px rgba(255, 171, 0, 0.6) !important;
 }
 
 .btn-dock-next {
