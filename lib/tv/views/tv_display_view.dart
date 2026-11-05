@@ -71,7 +71,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   // Active Advertisement Slides
   int _adSlideIndex = 0;
   Timer? _adSlideTimer;
-  int _adSlideDurationSeconds = 60;
+  int _adSlideDurationSeconds = 20;
   List<Map<String, dynamic>> _customAdSlides = [];
   final Map<String, Uint8List> _adImageBytesCache = {};
 
@@ -181,7 +181,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       }
       return;
     }
-    final dur = _adSlideDurationSeconds > 0 ? _adSlideDurationSeconds : 60;
+    final dur = _adSlideDurationSeconds > 0 ? _adSlideDurationSeconds : 20;
     _adSlideTimer = Timer.periodic(Duration(seconds: dur), (t) {
       final canRotate = ((!_isGameActive || _isGamePaused) && !_isPreGameCountdown && !_isResumeCountdownActive) || _isInterRoundPhase;
       if (canRotate && !_isPreGameCountdown && mounted) {
@@ -1221,6 +1221,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     }
     _timer?.cancel();
     _interQuestionTimer?.cancel();
+    _adSlideTimer?.cancel();
 
     final isRoundEndingQuestion = _questionIndex > 0 && (_questionIndex % _totalQuestionsInRound == 0);
     final reviewSeconds = isRoundEndingQuestion ? 20 : 15;
@@ -1331,6 +1332,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
     _timer?.cancel();
     _interQuestionTimer?.cancel();
+    _adSlideTimer?.cancel();
 
     // Determine top 3 players & award 20 points to the round winner
     final sorted = List<Player>.from(_leaderboard)
@@ -2215,7 +2217,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         ((_isAdSignageModeActive || _customAdSlides.isNotEmpty) &&
             !_isGameActive &&
             !_isPreGameCountdown &&
-            !_isResumeCountdownActive);
+            !_isResumeCountdownActive &&
+            !_isInterQuestionPhase);
 
     return PopScope(
       canPop: false,
@@ -2608,6 +2611,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   /// Fullscreen Venue Ad / Sponsor Signage Display Screen
   Widget _buildFullscreenSignageDisplay() {
+    final playUrl = _getPlayUrl();
     return SizedBox.expand(
       child: ColoredBox(
         color: Colors.black,
@@ -2632,6 +2636,84 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 child: KeyedSubtree(
                   key: ValueKey(_adSlideIndex),
                   child: _buildFullscreenAdSlide(_adSlideIndex),
+                ),
+              ),
+            ),
+
+            // Permanent Floating Join QR Code in Lower Right Corner of Every Ad
+            Positioned(
+              right: 28,
+              bottom: 24,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xEE0E121E),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.neonCyan, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.3),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: QrImageView(
+                        data: playUrl,
+                        version: QrVersions.auto,
+                        size: 64,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'SCAN TO PLAY',
+                          style: TextStyle(
+                            color: AppTheme.neonCyan,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'ROOM CODE',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        Text(
+                          _displayRoomCode,
+                          style: const TextStyle(
+                            color: AppTheme.neonYellow,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -3165,7 +3247,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.play_arrow_rounded, color: AppTheme.neonGreen, size: 24),
+                                    _buildGooglePlayIcon(size: 26),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
@@ -3231,6 +3313,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             child: _buildSignageBottomJoinBanner(playUrl, 'SCAN TO PLAY BAR ROOMS TRIVIA FROM YOUR TABLE!'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGooglePlayIcon({double size = 26}) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: const CustomPaint(
+        painter: _GooglePlayIconPainter(),
       ),
     );
   }
@@ -3457,7 +3549,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   /// Helper banner for bottom of Slides 1, 2, and 3
   Widget _buildSignageBottomJoinBanner(String playUrl, String hookText) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black38,
         borderRadius: BorderRadius.circular(16),
@@ -3465,20 +3557,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: QrImageView(
-              data: playUrl,
-              version: QrVersions.auto,
-              size: 55,
-              backgroundColor: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3497,12 +3575,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
                     ),
                     const SizedBox(width: 14),
-                    const Text('•  Scan with phone camera to join instantly!', style: TextStyle(color: AppTheme.neonCyan, fontSize: 11)),
+                    const Text('•  Scan the QR code in the corner with any phone camera to join!', style: TextStyle(color: AppTheme.neonCyan, fontSize: 11)),
                   ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 170), // Reserved space for floating lower-right QR badge
         ],
       ),
     );
@@ -4264,4 +4343,65 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       ),
     );
   }
+}
+
+/// Official 4-Color Google Play Store Icon Painter
+class _GooglePlayIconPainter extends CustomPainter {
+  const _GooglePlayIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sX = size.width / 512.0;
+    final sY = size.height / 512.0;
+
+    // Cyan (Left Wing)
+    final cyanPaint = Paint()
+      ..color = const Color(0xFF00E5FF)
+      ..style = PaintingStyle.fill;
+    final pathCyan = Path()
+      ..moveTo(32.5 * sX, 15.1 * sY)
+      ..lineTo(32.5 * sX, 477.0 * sY)
+      ..lineTo(280.0 * sX, 256.0 * sY)
+      ..close();
+    canvas.drawPath(pathCyan, cyanPaint);
+
+    // Green (Top Wing)
+    final greenPaint = Paint()
+      ..color = const Color(0xFF00E676)
+      ..style = PaintingStyle.fill;
+    final pathGreen = Path()
+      ..moveTo(32.5 * sX, 15.1 * sY)
+      ..lineTo(280.0 * sX, 256.0 * sY)
+      ..lineTo(365.0 * sX, 171.0 * sY)
+      ..lineTo(75.5 * sX, 7.0 * sY)
+      ..close();
+    canvas.drawPath(pathGreen, greenPaint);
+
+    // Red (Bottom Wing)
+    final redPaint = Paint()
+      ..color = const Color(0xFFFF007A)
+      ..style = PaintingStyle.fill;
+    final pathRed = Path()
+      ..moveTo(32.5 * sX, 477.0 * sY)
+      ..lineTo(280.0 * sX, 256.0 * sY)
+      ..lineTo(365.0 * sX, 341.0 * sY)
+      ..lineTo(75.5 * sX, 505.0 * sY)
+      ..close();
+    canvas.drawPath(pathRed, redPaint);
+
+    // Yellow (Right Arrow Tip)
+    final yellowPaint = Paint()
+      ..color = const Color(0xFFFFD600)
+      ..style = PaintingStyle.fill;
+    final pathYellow = Path()
+      ..moveTo(280.0 * sX, 256.0 * sY)
+      ..lineTo(365.0 * sX, 171.0 * sY)
+      ..lineTo(465.0 * sX, 256.0 * sY)
+      ..lineTo(365.0 * sX, 341.0 * sY)
+      ..close();
+    canvas.drawPath(pathYellow, yellowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

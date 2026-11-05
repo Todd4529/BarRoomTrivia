@@ -4223,6 +4223,70 @@ body.auth-mode .main-container {
   display: none !important;
 }
 
+/* Lower Right QR Code on Every Ad */
+.tv-ad-qr-corner {
+  position: absolute;
+  bottom: 24px;
+  right: 28px;
+  z-index: 100;
+  background: rgba(14, 18, 30, 0.94);
+  border: 2px solid var(--accent-cyan);
+  border-radius: 18px;
+  padding: 10px 14px;
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(0, 229, 255, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.tv-ad-qr-frame {
+  background-color: #fff;
+  padding: 5px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#tv-ad-qr-canvas {
+  width: 80px !important;
+  height: 80px !important;
+  display: block;
+}
+
+.tv-ad-qr-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.tv-ad-qr-scan-lbl {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--accent-cyan);
+  letter-spacing: 1.2px;
+}
+
+.tv-ad-qr-room-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  margin-top: 2px;
+}
+
+.tv-ad-qr-room-code {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--accent-yellow);
+  letter-spacing: 2px;
+  line-height: 1.1;
+}
+
 #tv-ad-intermission-banner {
   display: none !important;
 }

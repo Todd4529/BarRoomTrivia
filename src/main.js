@@ -92,10 +92,11 @@ let currentGameState = 'LOBBY';
 
 // Ad Display Signage Mode State - Default OFF when first loading host controls
 let isAdModeActive = false;
-let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '60', 10);
-if (isNaN(adSlideDurationSeconds) || adSlideDurationSeconds < 30) {
-  adSlideDurationSeconds = 60;
-  safeStorage.setItem('bar_trivia_ad_duration', '60');
+const VALID_AD_DURATIONS = [10, 20, 30, 60];
+let adSlideDurationSeconds = parseInt(safeStorage.getItem('bar_trivia_ad_duration') || '20', 10);
+if (isNaN(adSlideDurationSeconds) || !VALID_AD_DURATIONS.includes(adSlideDurationSeconds)) {
+  adSlideDurationSeconds = 20;
+  safeStorage.setItem('bar_trivia_ad_duration', '20');
 }
 let customAdSlides = [];
 let currentAdSlideIndex = 0;
@@ -1600,18 +1601,29 @@ function switchView(viewName) {
     const btnPromo = document.getElementById('btn-tv-toggle-promo');
     const btnLive = document.getElementById('btn-tv-toggle-live');
 
-    if ((currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) || currentGameState === 'COUNTDOWN' || currentGameState === 'PRE_GAME' || currentGameState === 'QUESTION_READING') {
+    const isPaused = (currentGameState === 'PAUSED' || hostEngineState === 'PAUSED');
+    const isIntermission = (currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY');
+    const isGameRunning = isAutomatedEngineRunning ||
+      currentGameState === 'QUESTION_ACTIVE' ||
+      currentGameState === 'QUESTION_READING' ||
+      currentGameState === 'QUESTION_REVIEW' ||
+      currentGameState === 'PRE_GAME' ||
+      currentGameState === 'COUNTDOWN' ||
+      currentGameState === 'TRANSITIONING' ||
+      (hostEngineState && hostEngineState !== 'IDLE' && hostEngineState !== 'ROUND_SUMMARY');
+
+    if (isGameRunning && !isPaused && !isIntermission) {
       if (tvAdScreen) tvAdScreen.classList.add('hidden');
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (tvLiveGrid) {
-    tvLiveGrid.classList.remove('hidden');
-    initQrCodes();
-  }
+        tvLiveGrid.classList.remove('hidden');
+        initQrCodes();
+      }
       if (btnLive) btnLive.classList.add('active');
       if (btnPromo) btnPromo.classList.remove('active');
       stopTvAdSignageRotation();
 
-      if (currentQuestionData) {
+      if (currentQuestionData && (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'QUESTION_READING')) {
         const now = Date.now();
         const remainingSecs = (timerEndsAtGlobalMs && (timerEndsAtGlobalMs - now) > 2000)
           ? Math.ceil((timerEndsAtGlobalMs - now) / 1000)
@@ -1625,27 +1637,8 @@ function switchView(viewName) {
           difficulty: selectedDifficulty
         });
       }
-    } else if (currentGameState === 'PAUSED') {
-      syncTvSignageDisplay();
     } else {
-      // Idle / Lobby state:
-      const allSlides = getAllActiveAdSlides();
-      if (isAdModeActive && allSlides && allSlides.length > 0) {
-        if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-        if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
-        if (tvAdScreen) tvAdScreen.classList.remove('hidden');
-        if (btnPromo) btnPromo.classList.add('active');
-        if (btnLive) btnLive.classList.remove('active');
-        startTvAdSignageRotation();
-      } else {
-        if (tvAdScreen) tvAdScreen.classList.add('hidden');
-        stopTvAdSignageRotation();
-        if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
-        if (tvPromoScreen) tvPromoScreen.classList.remove('hidden');
-        if (btnPromo) btnPromo.classList.add('active');
-        if (btnLive) btnLive.classList.remove('active');
-        startPromoCarouselRotation();
-      }
+      syncTvSignageDisplay();
     }
   }
 
@@ -1829,6 +1822,13 @@ function initQrCodes() {
   if (canvasMarketingTv) {
     QRCode.toCanvas(canvasMarketingTv, playUrl, { width: 92, margin: 1 }, (err) => {
       if (err) console.error('Marketing TV QR Code error:', err);
+    });
+  }
+
+  const canvasAdCorner = document.getElementById('tv-ad-qr-canvas');
+  if (canvasAdCorner) {
+    QRCode.toCanvas(canvasAdCorner, playUrl, { width: 80, margin: 1 }, (err) => {
+      if (err) console.error('Ad Corner QR Code error:', err);
     });
   }
 
@@ -2337,6 +2337,16 @@ function handleIncomingManualTimerStarted(rawPayload) {
 function handleIncomingTimerExpired(rawPayload) {
   const payload = rawPayload?.payload || rawPayload || {};
   console.log('[Realtime] Processing timer_expired:', payload);
+
+  currentGameState = 'QUESTION_REVIEW';
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+  if (tvAdScreen) tvAdScreen.classList.add('hidden');
+  stopTvAdSignageRotation();
+  const tvLiveGrid = document.getElementById('tv-live-grid');
+  if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
 
   const nextEpoch = payload.next_question_starts_at_epoch_ms || 
                     payload.nextQuestionStartsAtEpochMs || 
@@ -4657,11 +4667,11 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "600 18px 'Inter', sans-serif";
     ctx.fillStyle = '#ffd600';
-    ctx.fillText('🌐 Or Play Instantly Online in Any Browser: barroomstrivia.com', 120, botY + 104);
+    ctx.fillText('📱 Open phone camera & point at QR code • Instant join • No downloads needed', 120, botY + 104);
 
     ctx.font = "500 15px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('Ask your host for the 4-letter room code displayed on the screen. No download or registration needed!', 120, botY + 144);
+    ctx.fillText('Live synchronized scoring and buzzers on your mobile device!', 120, botY + 144);
 
   } else if (slideNumber === 2) {
     // ==========================================
@@ -4757,7 +4767,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "500 15px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('★ Compatible with any Smart TV, Projector, Android TV, Google TV, Fire TV, iPad & Laptop ★', 120, botY + 154);
+    ctx.fillText('★ Compatible with any Smart TV, Projector, Android TV, Google TV, Fire TV & Tablets ★', 120, botY + 154);
 
   } else {
     // ==========================================
@@ -4782,7 +4792,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     ctx.fillText('⭐ EVERYTHING YOU NEED TO HOST & PLAY', 120, cardY + 60);
 
     const appBullets = [
-      '✓ 100% Free Forever: Unlimited trivia games and unlimited connected players.',
+      '✓ Unlimited Trivia: Unlimited games and unlimited connected players.',
       '✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzer scoring.',
       '✓ Mobile Host Controls: Skip questions, pause anytime, and manage player roster.',
       '✓ Custom Signage & Ads: Upload food specials, drink menus, and flyer ads.',
@@ -4821,36 +4831,46 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     const iconCenterX = badgeX + 55;
     const iconCenterY = badgeY + 47;
+    const s = 0.102;
+    const ox = iconCenterX - 24;
+    const oy = iconCenterY - 26;
 
+    // Cyan (left wing)
     ctx.fillStyle = '#00e5ff';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX - 22, iconCenterY - 26);
-    ctx.lineTo(iconCenterX + 18, iconCenterY);
-    ctx.lineTo(iconCenterX - 4, iconCenterY);
+    ctx.moveTo(ox + 33 * s, oy + 15 * s);
+    ctx.lineTo(ox + 33 * s, oy + 477 * s);
+    ctx.lineTo(ox + 280 * s, oy + 256 * s);
     ctx.closePath();
     ctx.fill();
 
+    // Green (top wing)
     ctx.fillStyle = '#00e676';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX + 18, iconCenterY);
-    ctx.lineTo(iconCenterX + 30, iconCenterY + 10);
-    ctx.lineTo(iconCenterX - 22, iconCenterY + 26);
+    ctx.moveTo(ox + 33 * s, oy + 15 * s);
+    ctx.lineTo(ox + 280 * s, oy + 256 * s);
+    ctx.lineTo(ox + 365 * s, oy + 171 * s);
+    ctx.lineTo(ox + 75 * s, oy + 7 * s);
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = '#ffd600';
-    ctx.beginPath();
-    ctx.moveTo(iconCenterX + 18, iconCenterY);
-    ctx.lineTo(iconCenterX + 30, iconCenterY - 10);
-    ctx.lineTo(iconCenterX - 22, iconCenterY - 26);
-    ctx.closePath();
-    ctx.fill();
-
+    // Red/Pink (bottom wing)
     ctx.fillStyle = '#ff007a';
     ctx.beginPath();
-    ctx.moveTo(iconCenterX + 18, iconCenterY);
-    ctx.lineTo(iconCenterX + 30, iconCenterY - 10);
-    ctx.lineTo(iconCenterX + 30, iconCenterY + 10);
+    ctx.moveTo(ox + 33 * s, oy + 477 * s);
+    ctx.lineTo(ox + 280 * s, oy + 256 * s);
+    ctx.lineTo(ox + 365 * s, oy + 341 * s);
+    ctx.lineTo(ox + 75 * s, oy + 505 * s);
+    ctx.closePath();
+    ctx.fill();
+
+    // Yellow (right arrow tip)
+    ctx.fillStyle = '#ffd600';
+    ctx.beginPath();
+    ctx.moveTo(ox + 280 * s, oy + 256 * s);
+    ctx.lineTo(ox + 365 * s, oy + 171 * s);
+    ctx.lineTo(ox + 465 * s, oy + 256 * s);
+    ctx.lineTo(ox + 365 * s, oy + 341 * s);
     ctx.closePath();
     ctx.fill();
 
@@ -4917,7 +4937,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
 
     ctx.font = "600 15px 'Inter', sans-serif";
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('✓ 100% Free Download • No Subscriptions • Optimized for TVs', rightX + 40, cardY + 455);
+    ctx.fillText('✓ Fast Download • No Subscriptions • Optimized for TVs', rightX + 40, cardY + 455);
 
     const botY = 830;
     const botH = 180;
@@ -5047,42 +5067,44 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
   const btnPromo = document.getElementById('btn-tv-toggle-promo');
   const btnLive = document.getElementById('btn-tv-toggle-live');
 
-  // Active game play ALWAYS overrides ad mode
-  if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {
+  const isPaused = (currentGameState === 'PAUSED' || hostEngineState === 'PAUSED');
+  const isIntermission = (currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY');
+  const isGameRunning = isAutomatedEngineRunning ||
+    currentGameState === 'QUESTION_ACTIVE' ||
+    currentGameState === 'QUESTION_READING' ||
+    currentGameState === 'QUESTION_REVIEW' ||
+    currentGameState === 'PRE_GAME' ||
+    currentGameState === 'COUNTDOWN' ||
+    currentGameState === 'TRANSITIONING' ||
+    (hostEngineState && hostEngineState !== 'IDLE' && hostEngineState !== 'ROUND_SUMMARY');
+
+  // CRITICAL: When a game is running and NOT paused, NEVER display ads in between questions!
+  // Active questions, question review, answer reveals, and countdowns must stay on the live TV stage.
+  if (isGameRunning && !isPaused && !isIntermission) {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) tvAdBanner.classList.add('hidden');
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) {
-    tvLiveGrid.classList.remove('hidden');
-    initQrCodes();
-  }
-    if (btnLive) btnLive.classList.add('active');
-    if (btnPromo) btnPromo.classList.remove('active');
-    return;
-  }
-  if (currentGameState === 'COUNTDOWN' || currentGameState === 'QUESTION_READING') {
-    if (tvAdScreen) tvAdScreen.classList.add('hidden');
-    stopTvAdSignageRotation();
-    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
-    if (tvAdBanner) tvAdBanner.classList.add('hidden');
-    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-    if (tvLiveGrid) {
-    tvLiveGrid.classList.remove('hidden');
-    initQrCodes();
-  }
+      tvLiveGrid.classList.remove('hidden');
+      initQrCodes();
+    }
     if (btnLive) btnLive.classList.add('active');
     if (btnPromo) btnPromo.classList.remove('active');
     return;
   }
 
   const allSlides = getAllActiveAdSlides();
-  const isIntermission = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
-  const isPausedAd = (currentGameState === 'PAUSED' && isPauseTimeoutAdActive);
+  const isPausedAd = (isPaused && isPauseTimeoutAdActive);
 
-  // Intermission between rounds, active ad mode, or paused for >20 seconds: ALWAYS display ads!
-  if ((isAdModeActive || isIntermission || isPausedAd) && allSlides && allSlides.length > 0) {
+  // Ads are ONLY displayed:
+  // 1. When game is paused and 20s timeout has passed (isPausedAd)
+  // 2. During inter-round intermission (isIntermission)
+  // 3. When game is idle / lobby and ad mode is active (!isGameRunning && isAdModeActive)
+  const shouldShowAds = (isPausedAd || isIntermission || (!isGameRunning && isAdModeActive)) && (allSlides && allSlides.length > 0);
+
+  if (shouldShowAds) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) tvLiveGrid.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.remove('hidden');
@@ -5104,11 +5126,11 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
     const isLiveActive = btnLive?.classList.contains('active');
-    if (currentGameState === 'PAUSED' || currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME' || currentGameState === 'COUNTDOWN' || currentGameState === 'QUESTION_READING' || isLiveActive) {
+    if (isPaused || isGameRunning || isLiveActive) {
       if (tvLiveGrid) {
-    tvLiveGrid.classList.remove('hidden');
-    initQrCodes();
-  }
+        tvLiveGrid.classList.remove('hidden');
+        initQrCodes();
+      }
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (btnLive) btnLive.classList.add('active');
       if (btnPromo) btnPromo.classList.remove('active');
@@ -5123,6 +5145,26 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
 
 function startTvAdSignageRotation() {
   stopTvAdSignageRotation();
+
+  // If a game is active and not paused or in intermission, do NOT start ad rotation!
+  const isPaused = (currentGameState === 'PAUSED' || hostEngineState === 'PAUSED');
+  const isIntermission = (currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY');
+  const isGameRunning = isAutomatedEngineRunning ||
+    currentGameState === 'QUESTION_ACTIVE' ||
+    currentGameState === 'QUESTION_READING' ||
+    currentGameState === 'QUESTION_REVIEW' ||
+    currentGameState === 'PRE_GAME' ||
+    currentGameState === 'COUNTDOWN' ||
+    currentGameState === 'TRANSITIONING' ||
+    (hostEngineState && hostEngineState !== 'IDLE' && hostEngineState !== 'ROUND_SUMMARY');
+
+  if (isGameRunning && !isPaused && !isIntermission) {
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    return;
+  }
+
+  try { initQrCodes(); } catch (_) {}
   const allSlides = getAllActiveAdSlides();
   if (!allSlides || allSlides.length === 0) return;
 
@@ -7165,6 +7207,15 @@ function onTimerExpired(payload) {
 
   clearInterval(countdownInterval);
   currentGameState = 'QUESTION_REVIEW';
+
+  const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+  if (tvAdScreen) tvAdScreen.classList.add('hidden');
+  stopTvAdSignageRotation();
+  const tvLiveGrid = document.getElementById('tv-live-grid');
+  if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
 
   const qIdentifier = (currentQuestionData?.id || currentQuestionData?.text || `r${currentRound}_q${currentQuestionIndex}`);
   if (lastScoredQuestionKey === qIdentifier && isCurrentQuestionScored) {

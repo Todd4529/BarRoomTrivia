@@ -501,7 +501,14 @@
               </div>
             </div>
             <div class="store-badge">
-              <span class="badge-icon">🤖</span>
+              <span class="badge-icon" style="display:inline-flex; align-items:center; justify-content:center;">
+                <svg viewBox="0 0 512 512" width="28" height="28" style="display:block;">
+                  <path fill="#00e5ff" d="M32.5 15.1c-4.2 4.6-6.5 11.4-6.5 19.9v442c0 8.5 2.3 15.3 6.5 19.9l1.1 1.1 247.3-247.3v-5.7L33.6 14l-1.1 1.1z"/>
+                  <path fill="#ffd600" d="M363.3 358.5l-82.4-82.4v-5.7l82.4-82.4 1.8 1 97.6 55.4c27.9 15.8 27.9 41.8 0 57.7l-97.6 55.4-1.8 1z"/>
+                  <path fill="#ff007a" d="M280.9 270.4L33.6 517.7c9.3 9.9 24.6 11.1 41.9 1.4l289.6-164.5-84.2-84.2z"/>
+                  <path fill="#00e676" d="M280.9 241.6l84.2-84.2L75.5 -7.1C58.2 -16.8 42.9 -15.6 33.6 -5.7L280.9 241.6z"/>
+                </svg>
+              </span>
               <div class="badge-text">
                 <span class="badge-sub">Available on</span>
                 <strong class="badge-main">Google Play Store</strong>
@@ -693,6 +700,18 @@
           <!-- Slide Counter Pill -->
           <div class="tv-ad-slide-counter">
             <span id="tv-ad-slide-counter-text">Ad 1 of 1</span>
+          </div>
+
+          <!-- Permanent Floating Join QR Code in Lower Right Corner of Every Ad -->
+          <div id="tv-ad-qr-corner" class="tv-ad-qr-corner">
+            <div class="tv-ad-qr-frame">
+              <canvas id="tv-ad-qr-canvas"></canvas>
+            </div>
+            <div class="tv-ad-qr-info">
+              <span class="tv-ad-qr-scan-lbl">SCAN TO PLAY</span>
+              <span class="tv-ad-qr-room-lbl">ROOM CODE</span>
+              <strong id="tv-ad-qr-room-code" class="tv-ad-qr-room-code qr-room-code">TRIV</strong>
+            </div>
           </div>
 
           <!-- Bottom Rotation Progress Indicator -->
@@ -1437,11 +1456,13 @@
                   <div class="ad-config-row">
                     <label class="ad-field-label">Ad Display Duration:</label>
                     <div class="ad-duration-chips" id="ad-duration-chips">
+                      <button type="button" class="ad-dur-chip" data-dur="10">10 sec</button>
+                      <button type="button" class="ad-dur-chip active" data-dur="20">20 sec</button>
                       <button type="button" class="ad-dur-chip" data-dur="30">30 sec</button>
-                      <button type="button" class="ad-dur-chip active" data-dur="60">1 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="120">2 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="180">3 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="240">4 min</button>
+                      <button type="button" class="ad-dur-chip" data-dur="60">60 sec</button>
+
+
+
                     </div>
                   </div>
                 </div>
