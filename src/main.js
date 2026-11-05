@@ -892,14 +892,23 @@ async function clearHostLeaderboard() {
     console.warn('[Leaderboard] Broadcast clear error:', err);
   }
 
-  // Visual confirmation on button
-  if (btnClear) {
-    btnClear.innerHTML = '<span>✓</span> Cleared!';
-    setTimeout(() => {
-      btnClear.innerHTML = '<span class="btn-icon">🗑️</span> Clear Leaderboard';
-      btnClear.disabled = false;
-    }, 2000);
-  }
+  // Visual confirmation on buttons (pure text, no icons)
+  const buttonsToUpdate = [
+    document.getElementById('btn-clear-leaderboard'),
+    document.getElementById('btn-clear-leaderboard-bottom')
+  ].filter(Boolean);
+
+  buttonsToUpdate.forEach(b => {
+    b.textContent = 'Cleared!';
+    b.disabled = true;
+  });
+
+  setTimeout(() => {
+    buttonsToUpdate.forEach(b => {
+      b.textContent = 'Clear Leaderboard';
+      b.disabled = false;
+    });
+  }, 2000);
 }
 
 function onLeaderboardCleared() {
@@ -3979,6 +3988,11 @@ function initHostControls() {
     e.preventDefault();
     clearHostLeaderboard();
   });
+  const btnClearLeaderboardBottom = document.getElementById('btn-clear-leaderboard-bottom');
+  btnClearLeaderboardBottom?.addEventListener('click', (e) => {
+    e.preventDefault();
+    clearHostLeaderboard();
+  });
 
   const btnRefreshPlayers = document.getElementById('btn-refresh-players');
   btnRefreshPlayers?.addEventListener('click', (e) => {
@@ -6030,7 +6044,6 @@ function renderHostPlayersRoster() {
   if (count === 0) {
     rosterList.innerHTML = `
       <div class="host-empty-roster">
-        <span class="empty-icon">📱</span>
         <p class="empty-headline">No players joined yet</p>
         <small>Players can scan the TV QR code or join with room code <strong>${escapeHtml(currentRoomCode)}</strong>.</small>
       </div>
@@ -6049,16 +6062,13 @@ function renderHostPlayersRoster() {
   rosterList.innerHTML = sorted.map((p, idx) => {
     const score = Number(p.score ?? p.cumulative_score ?? 0);
     const rankClass = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
-    const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
-    const streakHtml = (p.streak && p.streak > 1) ? `<span class="player-streak-tag">🔥 ${p.streak} streak</span>` : '';
     
     return `
       <div class="host-player-item ${rankClass}">
         <div class="player-item-left">
-          <span class="player-rank-badge ${rankClass}">${medal}</span>
+          <span class="player-rank-badge ${rankClass}">#${idx + 1}</span>
           <div class="player-info-col">
             <span class="player-name">${escapeHtml(formatPlayerNickname(p.nickname))}</span>
-            ${streakHtml}
           </div>
         </div>
         <div class="player-item-right">

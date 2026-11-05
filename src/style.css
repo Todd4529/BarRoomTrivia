@@ -4675,7 +4675,9 @@ body.auth-mode .main-container {
   gap: 8px;
 }
 
-#btn-clear-leaderboard {
+#btn-clear-leaderboard,
+#btn-clear-leaderboard-bottom,
+.btn-clear-leaderboard {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4691,7 +4693,9 @@ body.auth-mode .main-container {
   user-select: none;
 }
 
-#btn-clear-leaderboard:hover:not(:disabled) {
+#btn-clear-leaderboard:hover:not(:disabled),
+#btn-clear-leaderboard-bottom:hover:not(:disabled),
+.btn-clear-leaderboard:hover:not(:disabled) {
   background: rgba(255, 77, 77, 0.28);
   border-color: #ff4d4d;
   color: #ffffff;
@@ -4699,16 +4703,22 @@ body.auth-mode .main-container {
   transform: translateY(-1px);
 }
 
-#btn-clear-leaderboard:active:not(:disabled) {
+#btn-clear-leaderboard:active:not(:disabled),
+#btn-clear-leaderboard-bottom:active:not(:disabled),
+.btn-clear-leaderboard:active:not(:disabled) {
   transform: translateY(0);
 }
 
-#btn-clear-leaderboard:disabled {
+#btn-clear-leaderboard:disabled,
+#btn-clear-leaderboard-bottom:disabled,
+.btn-clear-leaderboard:disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }
 
-#btn-clear-leaderboard .btn-icon {
+#btn-clear-leaderboard .btn-icon,
+#btn-clear-leaderboard-bottom .btn-icon,
+.btn-clear-leaderboard .btn-icon {
   font-size: 13px;
 }
 

@@ -1193,7 +1193,7 @@
             </span>
             <span class="tab-lbl">Playlist</span>
           </button>
-          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false" style="display: none !important;" aria-hidden="true">
+          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
             <span class="tab-ico">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1348,13 +1348,13 @@
             <div class="host-card players-roster-card">
               <div class="card-title-row">
                 <div class="title-left">
-                  <span class="icon">👥</span>
+                  
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
                 <div class="title-right-actions">
                   <button type="button" class="btn btn-clear-leaderboard btn-xs" id="btn-clear-leaderboard" title="Reset all player scores on leaderboard">
-                    <span class="btn-icon">🗑️</span> Clear Leaderboard
+                    Clear Leaderboard
                   </button>
                   <button type="button" id="btn-refresh-players" style="display: none !important;" aria-hidden="true"></button>
                 </div>
@@ -1364,9 +1364,10 @@
               <!-- Live Player Roster Container -->
               <div class="host-players-roster" id="host-connected-players-list">
                 <div class="host-empty-roster">
-                  <span class="empty-icon">📱</span>
+                  
                   <p class="empty-headline">No players joined yet</p>
                   <small>Players can scan the TV QR code or join at this URL with room code <strong>TRIV</strong>.</small>
+
                 </div>
               </div>
             </div>
