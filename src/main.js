@@ -5163,14 +5163,15 @@ function getOfficialBarRoomsTriviaAdSlide() {
 
 function getAllActiveAdSlides() {
   const officialSlides = getOfficialBarRoomsTriviaAdSlides();
-  if (!customAdSlides || customAdSlides.length === 0) {
+  const validCustomSlides = (customAdSlides || []).filter(s => s && (s.dataUrl || s.data_url || s.url || s.image_url));
+  if (!validCustomSlides || validCustomSlides.length === 0) {
     return officialSlides;
   }
   // Rotate custom slides first, alternating with official default slides
   const result = [];
-  const maxPairs = Math.max(officialSlides.length, customAdSlides.length);
+  const maxPairs = Math.max(officialSlides.length, validCustomSlides.length);
   for (let i = 0; i < maxPairs; i++) {
-    result.push(customAdSlides[i % customAdSlides.length]);
+    result.push(validCustomSlides[i % validCustomSlides.length]);
     result.push(officialSlides[i % officialSlides.length]);
   }
   return result;
@@ -5212,6 +5213,9 @@ function clearPauseAdTimeout() {
   pausedAtEpochMs = 0;
 }
 
+let isTop3CelebrationActive = false;
+let top3CelebrationEpochMs = 0;
+
 // 6. TV Ad Signage Synchronization & Carousel Rotation
 function syncTvSignageDisplay(forceRestartRotation = false) {
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
@@ -5238,6 +5242,25 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
     stopTvAdSignageRotation();
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) tvAdBanner.classList.add('hidden');
+    if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
+    if (tvLiveGrid) {
+      tvLiveGrid.classList.remove('hidden');
+      initQrCodes();
+    }
+    if (btnLive) btnLive.classList.add('active');
+    if (btnPromo) btnPromo.classList.remove('active');
+    return;
+  }
+
+  // CRITICAL: When Top 3 round leaders celebration is active (first 20s of round completion),
+  // DO NOT show ads! The Top 3 Leaderboard overlay MUST be shown on TV for 20 seconds before ads!
+  if (isTop3CelebrationActive && Date.now() < top3CelebrationEpochMs) {
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    stopTvAdSignageRotation();
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) tvAdBanner.classList.add('hidden');
+    const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
+    if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvLiveGrid) {
       tvLiveGrid.classList.remove('hidden');
@@ -5298,6 +5321,13 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
 
 function startTvAdSignageRotation() {
   stopTvAdSignageRotation();
+
+  // If Top 3 celebration is active, do NOT start ad rotation!
+  if (isTop3CelebrationActive && Date.now() < top3CelebrationEpochMs) {
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    return;
+  }
 
   // If a game is active and not paused or in intermission, do NOT start ad rotation!
   const isPaused = (currentGameState === 'PAUSED' || hostEngineState === 'PAUSED');
@@ -5373,7 +5403,15 @@ function displayAdSlide(index) {
   const backdrop = document.getElementById('tv-ad-slide-backdrop');
   const counterText = document.getElementById('tv-ad-slide-counter-text');
   const qrCorner = document.getElementById('tv-ad-qr-corner');
-  const slideUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
+  let slideUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
+
+  // Fallback: If slide URL is missing or invalid, fallback to official built-in slide
+  if (!slideUrl) {
+    const fallbackSlide = getOfficialBarRoomsTriviaAdSlide();
+    if (fallbackSlide) {
+      slideUrl = fallbackSlide.dataUrl || '';
+    }
+  }
 
   // Hide the floating 'Scan to Play' QR code on custom uploaded ads; show it only on official built-in ads
   const isCustomSlide = Boolean(slide && !slide.isSystemPermanent && slide.type !== 'system' && !String(slide.id || '').startsWith(OFFICIAL_SYSTEM_AD_ID));
@@ -5392,6 +5430,15 @@ function displayAdSlide(index) {
   }
 
   if (img && slideUrl) {
+    // Add image error fallback to guarantee an ad slide never appears blank
+    img.onerror = () => {
+      const fallback = getOfficialBarRoomsTriviaAdSlide();
+      if (fallback && fallback.dataUrl && img.src !== fallback.dataUrl) {
+        img.src = fallback.dataUrl;
+        if (backdrop) backdrop.style.backgroundImage = `url("${fallback.dataUrl}")`;
+      }
+    };
+
     const allTransformClasses = [
       'fading',
       'transform-slide-out', 'transform-slide-in',
@@ -5415,7 +5462,7 @@ function displayAdSlide(index) {
       img.classList.add('fading');
       img.classList.add(outClass);
       setTimeout(() => {
-        img.src = slide.dataUrl;
+        img.src = slideUrl;
         img.classList.remove('fading');
         img.classList.remove(outClass);
         img.classList.add(inClass);
@@ -6486,7 +6533,12 @@ function updateHostManualModalUI() {
       phaseBadge.textContent = '💡 ANSWER REVEALED';
     } else if (hostEngineState === 'ROUND_SUMMARY') {
       phaseBadge.classList.add('phase-summary');
-      phaseBadge.textContent = '🏆 ROUND COMPLETE';
+      if (isTop3CelebrationActive && Date.now() < top3CelebrationEpochMs) {
+        const top3Rem = Math.max(0, Math.ceil((top3CelebrationEpochMs - Date.now()) / 1000));
+        phaseBadge.textContent = `🏆 TOP 3 LEADERS (${top3Rem}s)`;
+      } else {
+        phaseBadge.textContent = '📺 VENUE ADS (INTERMISSION)';
+      }
     } else if (hostEngineState === 'PRE_GAME') {
       phaseBadge.classList.add('phase-reading');
       phaseBadge.textContent = '🚀 STARTING SOON';
@@ -6727,6 +6779,8 @@ function updateHostManualDock() {
     if (btnDockNextText) {
       if (isLobby) {
         btnDockNextText.textContent = 'Start 🚀';
+      } else if (hostEngineState === 'ROUND_SUMMARY') {
+        btnDockNextText.textContent = 'Next Round ➔';
       } else if (isWaiting) {
         btnDockNextText.textContent = 'Next ➔';
       } else {
@@ -6829,6 +6883,10 @@ function advanceManualNextQuestion() {
 async function handleHostAdvanceAfterRoundSummary() {
   if (!isAutomatedEngineRunning || hostEngineState !== 'ROUND_SUMMARY') return;
   isLocalHostEngineMaster = true;
+  isTop3CelebrationActive = false;
+  top3CelebrationEpochMs = 0;
+  clearTimeout(tvWinnerOverlayTimeout);
+  hideWinnerModals();
   currentRoundQuestions = [];
   currentQuestionData = null;
   activeHostQuestion = null;
@@ -7147,17 +7205,34 @@ function onQuestionStart(payload) {
   const isIdle = payload.timer_state === 'idle' || payload.question_phase === 'reading';
   if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
 
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  const durSecs = totalTimerDuration || 20;
+
   if (isIdle) {
     clearInterval(countdownInterval);
-    remainingTimerSeconds = totalTimerDuration;
+    remainingTimerSeconds = durSecs;
     const tvTimerVal = document.getElementById('tv-timer-val');
     const timerProgress = document.getElementById('timer-progress');
     const playerTimerVal = document.getElementById('player-timer-val');
-    if (tvTimerVal) tvTimerVal.textContent = 'READY';
-    if (playerTimerVal) playerTimerVal.textContent = totalTimerDuration;
+
+    // Display clean countdown number in ring and activate professional Ready badge
+    if (tvTimerVal) tvTimerVal.textContent = durSecs;
+    if (timerLabel) {
+      timerLabel.textContent = 'SEC';
+      timerLabel.style.display = '';
+    }
+    if (tvTimerContainer) {
+      tvTimerContainer.classList.add('is-ready-mode');
+      tvTimerContainer.classList.remove('has-text-value');
+      tvTimerContainer.classList.remove('hidden');
+    }
+    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.remove('hidden');
+
+    if (playerTimerVal) playerTimerVal.textContent = durSecs;
     if (timerProgress) {
       timerProgress.style.strokeDashoffset = '0';
-      timerProgress.style.stroke = 'var(--neon-green)';
+      timerProgress.style.stroke = '#00e676';
     }
     const hostStageBadge = document.getElementById('host-stage-badge');
     if (hostStageBadge) {
@@ -7165,6 +7240,11 @@ function onQuestionStart(payload) {
       hostStageBadge.textContent = '🎤 HOST READING QUESTION';
     }
   } else {
+    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+    if (tvTimerContainer) {
+      tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+    }
+    if (timerLabel) timerLabel.style.display = '';
     startCountdown(durationSeconds);
   }
   // Silent countdown: do not play sound until last 5 seconds (playSound('question_start') omitted during countdown)
@@ -7232,6 +7312,17 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  if (tvTimerContainer) {
+    tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+  }
+  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  if (timerLabel) {
+    timerLabel.textContent = 'SEC';
+    timerLabel.style.display = '';
+  }
   const validSeconds = Math.max(1, Number(seconds) || Number(totalTimerDuration) || Number(selectedQuestionDuration) || (hostGamePlayMode === 'Manual' ? 20 : 90));
   totalTimerDuration = validSeconds;
   const now = Date.now();
@@ -7527,8 +7618,12 @@ function onTimerExpired(payload) {
   const timerProgress = document.getElementById('timer-progress');
   const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
 
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+
   if (tvTimerContainer) {
     tvTimerContainer.classList.remove('hidden');
+    tvTimerContainer.classList.remove('is-ready-mode');
     if (timerLabel) timerLabel.textContent = '';
     if (tvTimerSublabel) {
       const isManual = (hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
@@ -7904,6 +7999,8 @@ function onRoundWinner(payload) {
   clearPauseAdTimeout();
   hideResultModal();
   hideInterQuestionCountdown();
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
 
   const rawCompleted = Number(payload?.completedRound || payload?.completed_round || payload?.roundNumber || payload?.round_number || 0);
   const rawNext = Number(payload?.nextRound || payload?.next_round || 0);
@@ -8028,13 +8125,20 @@ function onRoundWinner(payload) {
       if (scoreVal) scoreVal.textContent = topScore;
     }
   } else {
-    // If no players are registered yet, hide podium rows rather than showing fictitious names
+    // If no players are registered yet, show placeholder rather than showing fictitious names
+    const tvPodiumEmpty = document.getElementById('tv-podium-empty');
+    if (tvPodiumEmpty) tvPodiumEmpty.style.display = 'block';
     if (tvPodium1) tvPodium1.style.display = 'none';
     if (tvPodium2) tvPodium2.style.display = 'none';
     if (tvPodium3) tvPodium3.style.display = 'none';
     if (playerPodium1) playerPodium1.style.display = 'none';
     if (playerPodium2) playerPodium2.style.display = 'none';
     if (playerPodium3) playerPodium3.style.display = 'none';
+  }
+
+  const tvPodiumEmpty = document.getElementById('tv-podium-empty');
+  if (top3.length > 0 && tvPodiumEmpty) {
+    tvPodiumEmpty.style.display = 'none';
   }
 
   const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
@@ -8072,16 +8176,33 @@ function onRoundWinner(payload) {
     }
   }
 
-  // Dismiss Top 3 Winners overlay on TV after 20 seconds so ad signage is displayed uncovered for remainder of intermission
-  if (!wasAlreadyInSummaryForRound) {
+  const isManualModeActive = Boolean(hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
+
+  // Dismiss Top 3 Winners overlay on TV after exactly 20 seconds so ad signage is displayed for remainder of intermission
+  if (!wasAlreadyInSummaryForRound || !isTop3CelebrationActive) {
+    isTop3CelebrationActive = true;
+    top3CelebrationEpochMs = Date.now() + 20000;
     clearTimeout(tvWinnerOverlayTimeout);
-    const winnerDisplayMs = Math.min(20000, remWinnerSecs * 1000);
     tvWinnerOverlayTimeout = setTimeout(() => {
+      isTop3CelebrationActive = false;
+      top3CelebrationEpochMs = 0;
       if (tvWinnerOverlay) {
         tvWinnerOverlay.classList.add('hidden');
       }
-      syncTvSignageDisplay();
-    }, winnerDisplayMs);
+      if (playerWinnerOverlay) {
+        playerWinnerOverlay.classList.add('hidden');
+      }
+      syncTvSignageDisplay(true);
+      const hostStageBadge = document.getElementById('host-stage-badge');
+      const hostStageQCounter = document.getElementById('host-stage-q-counter');
+      if (hostStageBadge && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
+        hostStageBadge.textContent = '📺 SPONSOR ADS RUNNING';
+      }
+      if (hostStageQCounter && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
+        hostStageQCounter.textContent = `Sponsor ads displaying on TV. Tap Next Round to launch Round ${nextR}.`;
+      }
+      updateHostManualModalUI();
+    }, 20000);
   }
 
   syncTvSignageDisplay();
@@ -8107,7 +8228,14 @@ function onRoundWinner(payload) {
 
   const isManualModeActive = Boolean(hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
 
-  if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadgeText(remWinnerSecs);
+  const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
+  if (isManualModeActive) {
+    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '📺 SPONSOR ADS IN';
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = '20 SECONDS';
+  } else {
+    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND IN';
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadgeText(remWinnerSecs);
+  }
   if (playerWinnerTimer) {
     playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : formatRoundTimer(remWinnerSecs);
   }
@@ -8190,11 +8318,31 @@ function onRoundWinner(payload) {
 
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
-    const currentSecs = interRoundTargetEpochMs ? Math.max(0, Math.ceil((interRoundTargetEpochMs - Date.now()) / 1000)) : Math.max(0, --remWinnerSecs);
+    const nowMs = Date.now();
+    const isShowingTop3 = isTop3CelebrationActive && (nowMs < top3CelebrationEpochMs);
+    const currentSecs = interRoundTargetEpochMs ? Math.max(0, Math.ceil((interRoundTargetEpochMs - nowMs) / 1000)) : Math.max(0, --remWinnerSecs);
     const badgeText = formatIntermissionBadgeText(currentSecs);
     const roundTimerText = formatRoundTimer(currentSecs);
 
-    if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
+    if (isShowingTop3) {
+      const top3Rem = Math.max(0, Math.ceil((top3CelebrationEpochMs - nowMs) / 1000));
+      const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
+      if (tvWinnerTimerLabel) {
+        tvWinnerTimerLabel.textContent = isManualModeActive ? '📺 SPONSOR ADS IN' : '⏱️ NEXT ROUND IN';
+      }
+      if (tvNextRoundTimer) {
+        tvNextRoundTimer.textContent = isManualModeActive 
+          ? (top3Rem > 0 ? `${top3Rem} SECONDS` : 'STARTING ADS...') 
+          : formatIntermissionBadgeText(top3Rem);
+      }
+    } else {
+      const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
+      if (tvWinnerTimerLabel) {
+        tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND IN';
+      }
+      if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
+    }
+
     if (!isManualModeActive) {
       if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
       const cardTimer = document.getElementById('player-card-round-timer');
@@ -8204,16 +8352,28 @@ function onRoundWinner(payload) {
     // Actively display the countdown timer on the TV promo bottom banner and ad signage
     const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
     if (promoFluctuating) {
-      promoFluctuating.textContent = `NEXT ROUND IN ${badgeText}`;
+      if (isManualModeActive) {
+        promoFluctuating.textContent = `ROUND ${nextR} • WAITING FOR HOST TO START`;
+      } else {
+        promoFluctuating.textContent = `NEXT ROUND IN ${badgeText}`;
+      }
       promoFluctuating.style.color = 'var(--accent-yellow)';
     }
 
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     const tvAdTimer = document.getElementById('tv-ad-round-timer');
-    if (tvAdBanner) tvAdBanner.classList.remove('hidden');
-    if (tvAdTimer) tvAdTimer.textContent = badgeText;
+    if (tvAdBanner && !isShowingTop3) {
+      tvAdBanner.classList.remove('hidden');
+      if (isManualModeActive) {
+        tvAdBanner.innerHTML = `<span>🎙️ ROUND ${nextR}</span> <strong id="tv-ad-round-timer" style="color: #fff; font-weight: 900;">WAITING FOR HOST</strong>`;
+      } else {
+        if (tvAdTimer) tvAdTimer.textContent = badgeText;
+      }
+    } else if (tvAdBanner && isShowingTop3) {
+      tvAdBanner.classList.add('hidden');
+    }
 
-    if (currentSecs <= 0) {
+    if (currentSecs <= 0 && !isManualModeActive) {
       clearInterval(winnerCountdownInterval);
       winnerCountdownInterval = null;
       hideWinnerModals();
@@ -8256,10 +8416,14 @@ function onRoundWinner(payload) {
 function hideWinnerModals() {
   const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
   const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
+  const tvPodiumEmpty = document.getElementById('tv-podium-empty');
 
+  isTop3CelebrationActive = false;
+  top3CelebrationEpochMs = 0;
   clearTimeout(tvWinnerOverlayTimeout);
   if (tvWinnerOverlay) tvWinnerOverlay.classList.add('hidden');
   if (playerWinnerOverlay) playerWinnerOverlay.classList.add('hidden');
+  if (tvPodiumEmpty) tvPodiumEmpty.style.display = 'none';
   if (currentGameState !== 'ROUND_SUMMARY') {
     clearInterval(winnerCountdownInterval);
     const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
@@ -8868,6 +9032,14 @@ function onGamePaused(payload) {
   const pausedAt = payload?.paused_at_epoch_ms || payload?.paused_at || payload?.timestamp || Date.now();
   handlePauseAdTimeout(pausedAt);
 
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  if (tvTimerContainer) {
+    tvTimerContainer.classList.remove('is-ready-mode');
+    tvTimerContainer.classList.add('has-text-value');
+  }
+
   const tvTimerVal = document.getElementById('tv-timer-val');
   if (tvTimerVal) tvTimerVal.textContent = 'PAUSED';
   const playerTimerVal = document.getElementById('player-timer-val');
@@ -8904,13 +9076,34 @@ function onGameResuming(payload) {
       tvLiveGrid.classList.remove('hidden');
       initQrCodes();
     }
+    const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.remove('hidden');
+
+    const tvTimerContainer = document.getElementById('tv-timer-container');
+    if (tvTimerContainer) {
+      tvTimerContainer.classList.remove('hidden');
+      tvTimerContainer.classList.add('is-ready-mode');
+      tvTimerContainer.classList.remove('has-text-value');
+    }
+
+    const durVal = pausedRemainingQuestionSeconds || totalTimerDuration || 20;
     const tvTimerVal = document.getElementById('tv-timer-val');
     if (tvTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
-      tvTimerVal.textContent = 'READY';
+      tvTimerVal.textContent = durVal;
+    }
+    const timerLabel = document.querySelector('.timer-text-container .timer-label');
+    if (timerLabel) {
+      timerLabel.textContent = 'SEC';
+      timerLabel.style.display = '';
+    }
+    const timerProgress = document.getElementById('timer-progress');
+    if (timerProgress) {
+      timerProgress.style.strokeDashoffset = '0';
+      timerProgress.style.stroke = '#00e676';
     }
     const playerTimerVal = document.getElementById('player-timer-val');
     if (playerTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
-      playerTimerVal.textContent = '20';
+      playerTimerVal.textContent = durVal;
     }
     const playerStatusBadge = document.getElementById('player-status-badge');
     if (playerStatusBadge && currentGameState !== 'QUESTION_ACTIVE') {
@@ -8974,6 +9167,10 @@ function onGameReset() {
   hideInterQuestionCountdown();
   clearInterval(preGameCountdownInterval);
   clearPauseAdTimeout();
+  const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
+  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  if (tvTimerContainer) tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
   const playerTimerVal = document.getElementById('player-timer-val');
   if (playerTimerVal) {
     playerTimerVal.textContent = selectedQuestionDuration || 20;

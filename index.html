@@ -626,9 +626,19 @@
 
             <!-- SLIDE 2: WHAT IS BAR ROOMS TRIVIA? -->
             <div class="promo-slide" data-slide="2">
+              <div class="promo-logo-box">
+                <span class="big-icon">🍻</span>
+              </div>
+
               <div class="promo-badge">🍻 WHAT IS BAR ROOMS TRIVIA?</div>
               
-              <h1 class="promo-title-centered title-no-wrap">REAL-TIME TRIVIA BUILT FOR BARS</h1>
+              <h1 class="promo-title-centered">REAL-TIME TRIVIA BUILT FOR BARS</h1>
+              
+              <div class="promo-steps-row">
+                <div class="p-step"><span class="step-num">⚡</span> Live Phone Buzzers</div>
+                <div class="p-step"><span class="step-num">🎯</span> 30+ Trivia Genres</div>
+                <div class="p-step"><span class="step-num">🏆</span> Instant TV Standings</div>
+              </div>
               
               <p class="promo-para">Compete against everyone in the venue right from your mobile phone!</p>
               
@@ -637,6 +647,10 @@
 
             <!-- SLIDE 3: 3 EASY STEPS TO PLAY -->
             <div class="promo-slide" data-slide="3">
+              <div class="promo-logo-box">
+                <span class="big-icon">📱</span>
+              </div>
+
               <div class="promo-badge">📱 EASY TO PLAY</div>
               
               <h1 class="promo-title-centered">JOIN THE GAME IN SECONDS</h1>
@@ -652,6 +666,10 @@
 
             <!-- SLIDE 4: LEADERBOARD COMPETITION -->
             <div class="promo-slide" data-slide="4">
+              <div class="promo-logo-box">
+                <span class="big-icon">🏆</span>
+              </div>
+
               <div class="promo-badge">🏆 REAL-TIME COMPETITION</div>
               
               <h1 class="promo-title-centered">CLIMB THE LIVE LEADERBOARD</h1>
@@ -738,7 +756,13 @@
               
               <!-- Countdown Timer Ring for Question Active Phase -->
               <div class="tv-timer-block">
-                <div id="tv-timer-container" class="timer-ring-wrapper hidden">
+                <!-- Professional MC Host Ready Indicator Pill -->
+                <div id="tv-timer-ready-badge" class="tv-timer-ready-badge hidden">
+                  <span class="tv-ready-pulse-dot"></span>
+                  <span class="tv-ready-text">READY</span>
+                </div>
+                <div class="tv-timer-ring-column">
+                  <div id="tv-timer-container" class="timer-ring-wrapper hidden">
                   <svg class="timer-svg" viewBox="0 0 100 100">
                     <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
                     <circle id="timer-progress" class="timer-stroke" cx="50" cy="50" r="42"></circle>
@@ -748,7 +772,8 @@
                     <span class="timer-label">SEC</span>
                   </div>
                 </div>
-                <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
+                  <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
+                </div>
               </div>
             </div>
 
@@ -842,8 +867,9 @@
               </div>
             </div>
 
+            <div id="tv-podium-empty" style="display: none; text-align: center; color: rgba(255,255,255,0.7); font-size: 16px; font-weight: 700; padding: 14px 0;">Round complete! No scored players yet.</div>
             <div class="tv-next-round-timer-box" style="padding: 12px 24px; border-radius: 18px; border: 2px solid var(--accent-cyan); background: rgba(0, 229, 255, 0.12); margin-top: 8px;">
-              <span style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND IN</span>
+              <span id="tv-winner-timer-label" style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND IN</span>
               <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">2 MINUTES</strong>
             </div>
           </div>

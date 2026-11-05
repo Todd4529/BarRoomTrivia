@@ -965,9 +965,74 @@ body[data-view="tv"] .tv-viewport {
 
 .tv-timer-block {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.tv-timer-ring-column {
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+/* Professional MC Host Ready Indicator Pill */
+.tv-timer-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(0, 230, 118, 0.16), rgba(0, 229, 255, 0.1));
+  border: 1.5px solid #00e676;
+  padding: 6px 14px;
+  border-radius: 14px;
+  box-shadow: 0 0 16px rgba(0, 230, 118, 0.35);
+  animation: tvReadyBadgeGlow 2s ease-in-out infinite alternate;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tv-ready-pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #00e676;
+  box-shadow: 0 0 10px #00e676, 0 0 16px #00e676;
+  animation: tvReadyDotPulse 1.2s ease-in-out infinite alternate;
+  flex-shrink: 0;
+}
+
+.tv-ready-text {
+  font-family: var(--font-heading, 'Outfit', sans-serif);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #00ff87;
+  text-shadow: 0 0 10px rgba(0, 255, 135, 0.6);
+  text-transform: uppercase;
+}
+
+@keyframes tvReadyBadgeGlow {
+  0% {
+    border-color: rgba(0, 230, 118, 0.55);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.25);
+  }
+  100% {
+    border-color: rgba(0, 255, 135, 0.95);
+    box-shadow: 0 0 22px rgba(0, 255, 135, 0.55), inset 0 0 10px rgba(0, 255, 135, 0.15);
+  }
+}
+
+@keyframes tvReadyDotPulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
 }
 
 .timer-ring-wrapper {
@@ -977,6 +1042,38 @@ body[data-view="tv"] .tv-viewport {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Timer Ring Styling in Ready State */
+.timer-ring-wrapper.is-ready-mode .timer-stroke {
+  stroke: #00e676 !important;
+  filter: drop-shadow(0 0 8px rgba(0, 230, 118, 0.5));
+}
+
+.timer-ring-wrapper.is-ready-mode .timer-number {
+  color: #00ff87 !important;
+  text-shadow: 0 0 10px rgba(0, 255, 135, 0.4);
+}
+
+.timer-ring-wrapper.is-ready-mode .timer-label {
+  color: rgba(0, 230, 118, 0.8) !important;
+}
+
+/* Guard: If any text string (e.g. PAUSED or READY) is placed inside the timer number, format cleanly without overlap */
+.timer-ring-wrapper.has-text-value .timer-number {
+  font-size: 11px !important;
+  letter-spacing: 1.2px !important;
+  font-weight: 900 !important;
+  color: #00ff87 !important;
+  line-height: 1.1 !important;
+  max-width: 44px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-ring-wrapper.has-text-value .timer-label {
+  display: none !important;
 }
 
 .timer-sublabel {
@@ -1303,18 +1400,17 @@ body[data-view="tv"] .tv-viewport {
 
 /* TV DISPLAY OVERLAYS */
 .tv-modal-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 15, 20, 0.92);
-  backdrop-filter: blur(12px);
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(10, 15, 30, 0.94);
+  backdrop-filter: blur(16px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 250;
-  border-radius: 28px;
+  z-index: 1050;
+  border-radius: 0;
   animation: fadeInTvModal 0.3s ease-in-out;
 }
 
