@@ -33,6 +33,10 @@
   padding: 0;
 }
 
+.hidden {
+  display: none !important;
+}
+
 body.dark-theme {
   background-color: var(--bg-dark);
   color: var(--text-white);
@@ -972,7 +976,21 @@ body[data-view="tv"] .tv-viewport {
   min-height: 58px;
 }
 
-/* Guard: When READY badge is active, guarantee that any timer ring or sublabel is completely hidden */
+/* Guard: Guarantee READY badge and Countdown Timer are mutually exclusive on TV display */
+.tv-timer-block.is-ready-state .tv-timer-ring-column,
+.tv-timer-block.is-ready-state .timer-ring-wrapper,
+.tv-timer-block.is-ready-state .timer-sublabel,
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .tv-timer-ring-column,
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-ring-wrapper,
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-sublabel,
+.tv-timer-ring-column.hidden,
+.timer-ring-wrapper.hidden {
+  display: none !important;
+}
+
+.tv-timer-block:not(.is-ready-state) .tv-timer-ready-badge {
+  display: none !important;
+}
 .tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .tv-timer-ring-column,
 .tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-ring-wrapper,
 .tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-sublabel {
@@ -2894,6 +2912,35 @@ button.refreshing .spin-icon {
   background: rgba(0, 230, 118, 0.15);
   padding: 3px 8px;
   border-radius: 6px;
+}
+
+.btn-clear-leaderboard {
+  background: rgba(255, 23, 68, 0.12);
+  color: #ff5252;
+  border: 1px solid rgba(255, 23, 68, 0.35);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-clear-leaderboard:hover {
+  background: rgba(255, 23, 68, 0.25);
+  border-color: #ff1744;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(255, 23, 68, 0.4);
+}
+
+.btn-clear-leaderboard:active {
+  transform: scale(0.96);
+}
+
+.btn-clear-leaderboard:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .host-players-roster {

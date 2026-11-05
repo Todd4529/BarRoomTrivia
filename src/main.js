@@ -804,6 +804,76 @@ async function refreshHostPlayers() {
   if (hostPlayersRoom) hostPlayersRoom.textContent = normRoom;
 }
 
+function renderHostPlayersRoster() {
+  const container = document.getElementById('host-connected-players-list');
+  const countBadge = document.getElementById('host-live-player-badge');
+  const tabBadge = document.getElementById('host-tab-player-count');
+  const statPlayers = document.getElementById('stat-players-count');
+  const roomCodeEl = document.getElementById('host-players-room-code');
+  const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
+
+  if (roomCodeEl) {
+    roomCodeEl.textContent = normRoom;
+  }
+
+  // Filter out any fictitious players
+  const realPlayers = (playersLeaderboard || []).filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+
+  if (countBadge) {
+    countBadge.textContent = `${realPlayers.length} Active`;
+  }
+  if (tabBadge) {
+    tabBadge.textContent = realPlayers.length;
+  }
+  if (statPlayers) {
+    statPlayers.textContent = realPlayers.length;
+  }
+
+  if (!container) return;
+
+  if (realPlayers.length === 0) {
+    container.innerHTML = `
+      <div class="host-empty-roster">
+        <p class="empty-headline">No players joined yet</p>
+        <small>Players can scan the TV QR code or join with room code <strong>${escapeHtml(normRoom)}</strong>.</small>
+      </div>
+    `;
+    return;
+  }
+
+  // Sort descending by score
+  const sorted = [...realPlayers].sort((a, b) => {
+    const scoreA = Number(a.score ?? a.cumulative_score ?? 0);
+    const scoreB = Number(b.score ?? b.cumulative_score ?? 0);
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    return (a.nickname || '').localeCompare(b.nickname || '');
+  });
+
+  // Render clean list WITHOUT extra icons next to the player name (as requested by user)
+  container.innerHTML = `
+    <div class="host-players-roster-list">
+      ${sorted.map((p, idx) => {
+        const displayScore = Number(p.score ?? p.cumulative_score ?? 0);
+        const topClass = idx < 3 ? `rank-${idx + 1}` : '';
+        return `
+          <div class="host-player-item ${topClass}">
+            <div class="player-item-left">
+              <span class="player-rank-badge rank-${idx + 1}">#${idx + 1}</span>
+              <div class="player-info-col">
+                <span class="player-name">${escapeHtml(formatPlayerNickname(p.nickname))}</span>
+              </div>
+            </div>
+            <div class="player-row-score">
+              ${displayScore} pts
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+window.renderHostPlayersRoster = renderHostPlayersRoster;
+
 function loadInitialPlayers() {
   refreshHostPlayers();
 }
@@ -920,12 +990,43 @@ window.onLeaderboardCleared = onLeaderboardCleared;
 let deferredPwaInstallPrompt = null;
 
 function initPwaSupport() {
-  // 1. Register Service Worker on HTTPS or localhost
-  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+  const isDevHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  // In local development, unregister any lingering service workers and purge all caches
+  // so code changes, stylesheets, and UI updates reload immediately without stale browser caching!
+  if (isDevHost && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (const reg of regs) {
+        reg.unregister();
+        console.log('[PWA] Unregistered service worker on dev host:', reg.scope);
+      }
+    }).catch(() => {});
+    if (window.caches) {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          caches.delete(key);
+          console.log('[PWA] Cleared dev cache:', key);
+        });
+      }).catch(() => {});
+    }
+  } else if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
     window.addEventListener('load', () => {
       const swPath = window.location.pathname.toLowerCase().includes('/barroomtrivia') ? '/BarRoomTrivia/sw.js' : './sw.js';
       navigator.serviceWorker.register(swPath).then((reg) => {
         console.log('[PWA] Service Worker registered with scope:', reg.scope);
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          }
+        });
       }).catch((err) => {
         console.warn('[PWA] Service Worker registration failed:', err);
       });
@@ -2374,7 +2475,8 @@ function handleIncomingQuestionStart(rawPayload) {
     }
   }
 
-  const isIdleTimer = payload.timer_state === 'idle' || payload.question_phase === 'reading';
+  const isIncomingManual = (payload.game_play_mode === 'Manual' || payload.gamePlayMode === 'Manual' || hostGamePlayMode === 'Manual');
+  const isIdleTimer = payload.timer_state === 'idle' || payload.question_phase === 'reading' || (isIncomingManual && payload.timer_state !== 'running' && (!parsedTargetEpoch || parsedTargetEpoch <= now));
   let remainingSecs = durationSeconds;
   if (isIdleTimer) {
     timerEndsAtGlobalMs = 0;
@@ -2418,6 +2520,7 @@ function handleIncomingQuestionStart(rawPayload) {
     selectedDifficulty: incomingDiff,
     timer_state: payload.timer_state,
     question_phase: payload.question_phase,
+    game_play_mode: payload.game_play_mode || payload.gamePlayMode || (isIncomingManual ? 'Manual' : 'Auto'),
     is_resumed: payload.is_resumed,
   });
 }
@@ -6012,59 +6115,6 @@ window.handlePauseAdTimeout = handlePauseAdTimeout;
 window.clearPauseAdTimeout = clearPauseAdTimeout;
 window.isPauseTimeoutAdActive = () => isPauseTimeoutAdActive;
 
-function renderHostPlayersRoster() {
-  const rosterList = document.getElementById('host-connected-players-list');
-  const countBadge = document.getElementById('host-live-player-badge');
-  const tabBadge = document.getElementById('host-tab-player-count');
-  const statPlayers = document.getElementById('stat-players-count');
-
-  const validPlayers = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
-  const count = validPlayers.length;
-
-  if (countBadge) countBadge.textContent = `${count} Active`;
-  if (tabBadge) tabBadge.textContent = count;
-  if (statPlayers) statPlayers.textContent = count;
-
-  if (!rosterList) return;
-
-  if (count === 0) {
-    rosterList.innerHTML = `
-      <div class="host-empty-roster">
-        <p class="empty-headline">No players joined yet</p>
-        <small>Players can scan the TV QR code or join with room code <strong>${escapeHtml(currentRoomCode)}</strong>.</small>
-      </div>
-    `;
-    return;
-  }
-
-  // Sorted by cumulative score descending
-  const sorted = [...validPlayers].sort((a, b) => {
-    const sA = Number(a.score ?? a.cumulative_score ?? 0);
-    const sB = Number(b.score ?? b.cumulative_score ?? 0);
-    if (sB !== sA) return sB - sA;
-    return (a.nickname || '').localeCompare(b.nickname || '');
-  });
-
-  rosterList.innerHTML = sorted.map((p, idx) => {
-    const score = Number(p.score ?? p.cumulative_score ?? 0);
-    const rankClass = idx === 0 ? 'rank-1' : (idx === 1 ? 'rank-2' : (idx === 2 ? 'rank-3' : ''));
-    
-    return `
-      <div class="host-player-item ${rankClass}">
-        <div class="player-item-left">
-          <span class="player-rank-badge ${rankClass}">#${idx + 1}</span>
-          <div class="player-info-col">
-            <span class="player-name">${escapeHtml(formatPlayerNickname(p.nickname))}</span>
-          </div>
-        </div>
-        <div class="player-item-right">
-          <span class="player-score-tag">${score} pts</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
 function updateHostEngineUI(statusText) {
   if (!statusText || statusText === 'PRE_GAME' || statusText === 'QUESTION_ACTIVE' || statusText === 'ROUND_SUMMARY' || statusText === 'INTER_ROUND' || statusText === 'QUESTION_READING') {
     statusText = isAutomatedEngineRunning ? 'IN PROGRESS' : (currentGameState === 'PAUSED' ? 'PAUSED' : 'NOT STARTED');
@@ -6907,7 +6957,22 @@ function startManualQuestionCountdown() {
   hostEngineState = 'QUESTION_ACTIVE';
   currentGameState = 'QUESTION_ACTIVE';
 
-  broadcastRealtimeEvent('manual_timer_started', {
+  const manualTimerPayload = {
+    room_code: currentRoomCode,
+    timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
+    timerEndsAtMs: timerEndsAtGlobalMs,
+    duration_seconds: durationSeconds,
+    time_limit_seconds: durationSeconds,
+    total_duration: durationSeconds,
+    totalTimerDuration: durationSeconds,
+    question_index: (currentQuestionIndex % 10) + 1,
+    round_number: currentRound,
+    timestamp: Date.now(),
+    sent_at_epoch_ms: Date.now(),
+  };
+  channel.postMessage({ type: 'MANUAL_TIMER_STARTED', payload: manualTimerPayload });
+  broadcastRealtimeEvent('manual_timer_started', manualTimerPayload);
+  /*
     room_code: currentRoomCode,
     timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
     timerEndsAtMs: timerEndsAtGlobalMs,
@@ -6921,6 +6986,7 @@ function startManualQuestionCountdown() {
     sent_at_epoch_ms: Date.now(),
   });
 
+  */
   startCountdown(durationSeconds);
   startHostHeartbeatLoop();
   updateHostManualDock();
@@ -7301,11 +7367,20 @@ function onQuestionStart(payload) {
   // TV Timer & Ready Indicator Management:
   // When "READY" is displayed in reading/manual mode, do NOT display the timer behind it.
   // Once the timer starts, the ready badge will disappear and all you will see is the timer.
-  const isIdle = payload.timer_state === 'idle' || payload.question_phase === 'reading' || (hostGamePlayMode === 'Manual' && hostEngineState === 'QUESTION_READING');
+  const isManualMode = (payload.game_play_mode === 'Manual' || payload.gamePlayMode === 'Manual' || hostGamePlayMode === 'Manual');
+  const isTimerStarted = payload.timer_state === 'running' || (timerEndsAtGlobalMs > Date.now());
+  const isIdle = payload.timer_state === 'idle' || 
+                 payload.question_phase === 'reading' || 
+                 (isManualMode && !isTimerStarted) || 
+                 (hostGamePlayMode === 'Manual' && hostEngineState === 'QUESTION_READING');
 
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  const tvTimerContainer = document.getElementById('tv-timer-container');
   const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
+  const timerLabel = document.querySelector('.timer-text-container .timer-label');
+
   const durSecs = totalTimerDuration || 20;
 
   if (isIdle) {
@@ -7321,15 +7396,24 @@ function onQuestionStart(payload) {
       timerLabel.style.display = '';
     }
 
-    // Do NOT display the timer behind the READY badge!
+    if (tvTimerBlock) tvTimerBlock.classList.add('is-ready-state');
+    if (tvTimerRingColumn) {
+      tvTimerRingColumn.classList.add('hidden');
+      tvTimerRingColumn.style.display = 'none';
+    }
     if (tvTimerContainer) {
       tvTimerContainer.classList.add('hidden');
+      tvTimerContainer.style.display = 'none';
       tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
     }
-    if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
-
-    // Display the professional READY badge prominently
-    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.remove('hidden');
+    if (tvTimerSublabel) {
+      tvTimerSublabel.classList.add('hidden');
+      tvTimerSublabel.style.display = 'none';
+    }
+    if (tvTimerReadyBadge) {
+      tvTimerReadyBadge.classList.remove('hidden');
+      tvTimerReadyBadge.style.display = 'inline-flex';
+    }
 
     if (playerTimerVal) playerTimerVal.textContent = durSecs;
     if (timerProgress) {
@@ -7343,11 +7427,21 @@ function onQuestionStart(payload) {
     }
   } else {
     // Once the timer starts: ready disappears and all you will see is the timer
-    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+    if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+    if (tvTimerRingColumn) {
+      tvTimerRingColumn.classList.remove('hidden');
+      tvTimerRingColumn.style.display = '';
+    }
+    if (tvTimerReadyBadge) {
+      tvTimerReadyBadge.classList.add('hidden');
+      tvTimerReadyBadge.style.display = 'none';
+    }
     if (tvTimerContainer) {
       tvTimerContainer.classList.remove('hidden', 'is-ready-mode', 'has-text-value');
+      tvTimerContainer.style.display = 'flex';
     }
     if (timerLabel) timerLabel.style.display = '';
+    // timer start
     startCountdown(durationSeconds);
   }
   // Silent countdown: do not play sound until last 5 seconds (playSound('question_start') omitted during countdown)
@@ -7415,10 +7509,21 @@ function onQuestionStart(payload) {
 
 function startCountdown(seconds) {
   clearInterval(countdownInterval);
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+  if (tvTimerRingColumn) {
+    tvTimerRingColumn.classList.remove('hidden');
+    tvTimerRingColumn.style.display = '';
+  }
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  if (tvTimerReadyBadge) {
+    tvTimerReadyBadge.classList.add('hidden');
+    tvTimerReadyBadge.style.display = 'none';
+  }
   const tvTimerContainer = document.getElementById('tv-timer-container');
   if (tvTimerContainer) {
+    tvTimerContainer.style.display = 'flex';
     tvTimerContainer.classList.remove('hidden', 'is-ready-mode', 'has-text-value');
   }
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
@@ -7721,8 +7826,22 @@ function onTimerExpired(payload) {
   const timerProgress = document.getElementById('timer-progress');
   const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
 
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+  if (tvTimerRingColumn) {
+    tvTimerRingColumn.classList.remove('hidden');
+    tvTimerRingColumn.style.display = '';
+  }
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  if (tvTimerReadyBadge) {
+    tvTimerReadyBadge.classList.add('hidden');
+    tvTimerReadyBadge.style.display = 'none';
+  }
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  if (tvTimerContainer) {
+    tvTimerContainer.style.display = 'flex';
+  }
 
   if (tvTimerContainer) {
     tvTimerContainer.classList.remove('hidden');
@@ -8102,8 +8221,22 @@ function onRoundWinner(payload) {
   clearPauseAdTimeout();
   hideResultModal();
   hideInterQuestionCountdown();
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+  if (tvTimerRingColumn) {
+    tvTimerRingColumn.classList.remove('hidden');
+    tvTimerRingColumn.style.display = '';
+  }
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  if (tvTimerReadyBadge) {
+    tvTimerReadyBadge.classList.add('hidden');
+    tvTimerReadyBadge.style.display = 'none';
+  }
+  const tvTimerContainer = document.getElementById('tv-timer-container');
+  if (tvTimerContainer) {
+    tvTimerContainer.style.display = 'flex';
+  }
 
   const rawCompleted = Number(payload?.completedRound || payload?.completed_round || payload?.roundNumber || payload?.round_number || 0);
   const rawNext = Number(payload?.nextRound || payload?.next_round || 0);
@@ -8328,8 +8461,6 @@ function onRoundWinner(payload) {
     }
     return `${secs} SECONDS`;
   };
-
-  const isManualModeActive = Boolean(hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
 
   const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
   if (isManualModeActive) {
@@ -8780,13 +8911,18 @@ function initPlayerControls() {
             } else if (endsAt) {
               endsAt = Number(endsAt);
             }
+            if (session.game_play_mode) {
+              hostGamePlayMode = session.game_play_mode;
+            }
             const dur = Math.max(5, Number(session.duration_seconds || session.time_limit_seconds || selectedQuestionDuration || 20));
             const isReadingPhase = session.status === 'active_reading';
             // If question_active timer has already expired in the DB, do NOT fabricate a new deadline or restart the question!
             if (!isReadingPhase && endsAt && !isNaN(endsAt) && endsAt <= now) {
               return;
             }
-            if (!endsAt || isNaN(endsAt)) {
+            if (isReadingPhase) {
+              endsAt = 0;
+            } else if (!endsAt || isNaN(endsAt)) {
               endsAt = now + (dur * 1000);
             }
             if (isReadingPhase || endsAt > now) {
@@ -8822,7 +8958,10 @@ function initPlayerControls() {
                   roundNumber: sessionRound,
                   duration_seconds: dur,
                   totalTimerDuration: dur,
-                  timer_ends_at_epoch_ms: endsAt,
+                  timer_ends_at_epoch_ms: isReadingPhase ? 0 : endsAt,
+                  timer_state: isReadingPhase ? 'idle' : 'running',
+                  question_phase: isReadingPhase ? 'reading' : 'active',
+                  game_play_mode: session.game_play_mode || hostGamePlayMode || 'Manual',
                   timestamp: now,
                   sent_at_epoch_ms: now,
                 });
@@ -9147,10 +9286,21 @@ function onGamePaused(payload) {
   const pausedAt = payload?.paused_at_epoch_ms || payload?.paused_at || payload?.timestamp || Date.now();
   handlePauseAdTimeout(pausedAt);
 
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+  if (tvTimerRingColumn) {
+    tvTimerRingColumn.classList.remove('hidden');
+    tvTimerRingColumn.style.display = '';
+  }
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  if (tvTimerReadyBadge) {
+    tvTimerReadyBadge.classList.add('hidden');
+    tvTimerReadyBadge.style.display = 'none';
+  }
   const tvTimerContainer = document.getElementById('tv-timer-container');
   if (tvTimerContainer) {
+    tvTimerContainer.style.display = 'flex';
     tvTimerContainer.classList.remove('is-ready-mode');
     tvTimerContainer.classList.add('has-text-value');
   }
@@ -9191,17 +9341,29 @@ function onGameResuming(payload) {
       tvLiveGrid.classList.remove('hidden');
       initQrCodes();
     }
+    const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+    if (tvTimerBlock) tvTimerBlock.classList.add('is-ready-state');
+    const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+    if (tvTimerRingColumn) {
+      tvTimerRingColumn.classList.add('hidden');
+      tvTimerRingColumn.style.display = 'none';
+    }
     const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-    if (tvTimerReadyBadge) tvTimerReadyBadge.classList.remove('hidden');
-
+    if (tvTimerReadyBadge) {
+      tvTimerReadyBadge.classList.remove('hidden');
+      tvTimerReadyBadge.style.display = 'inline-flex';
+    }
     const tvTimerContainer = document.getElementById('tv-timer-container');
     if (tvTimerContainer) {
       tvTimerContainer.classList.add('hidden');
+      tvTimerContainer.style.display = 'none';
       tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
     }
     const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
-    if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
-
+    if (tvTimerSublabel) {
+      tvTimerSublabel.classList.add('hidden');
+      tvTimerSublabel.style.display = 'none';
+    }
     const durVal = pausedRemainingQuestionSeconds || totalTimerDuration || 20;
     const tvTimerVal = document.getElementById('tv-timer-val');
     if (tvTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
@@ -9283,10 +9445,23 @@ function onGameReset() {
   hideInterQuestionCountdown();
   clearInterval(preGameCountdownInterval);
   clearPauseAdTimeout();
+  const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
+  if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
+  const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
+  if (tvTimerRingColumn) {
+    tvTimerRingColumn.classList.remove('hidden');
+    tvTimerRingColumn.style.display = '';
+  }
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
+  if (tvTimerReadyBadge) {
+    tvTimerReadyBadge.classList.add('hidden');
+    tvTimerReadyBadge.style.display = 'none';
+  }
   const tvTimerContainer = document.getElementById('tv-timer-container');
-  if (tvTimerContainer) tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+  if (tvTimerContainer) {
+    tvTimerContainer.style.display = 'flex';
+    tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+  }
   const playerTimerVal = document.getElementById('player-timer-val');
   if (playerTimerVal) {
     playerTimerVal.textContent = selectedQuestionDuration || 20;

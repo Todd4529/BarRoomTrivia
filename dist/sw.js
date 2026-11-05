@@ -1,5 +1,5 @@
 // Bar Room Trivia - Progressive Web App Service Worker
-const CACHE_NAME = 'bar-room-trivia-v1.3.0';
+const CACHE_NAME = 'bar-room-trivia-v2.0.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -50,8 +50,18 @@ self.addEventListener('fetch', (event) => {
     return; // Pass through directly to live network
   }
 
-  // 2. Network-first strategy for navigation / HTML so new updates load immediately
-  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+  // 2. Network-first strategy for navigation, HTML, JS, and CSS so code updates load immediately
+  const isCodeOrDocument = (
+    event.request.mode === 'navigate' ||
+    event.request.destination === 'document' ||
+    event.request.destination === 'script' ||
+    event.request.destination === 'style' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css')
+  );
+
+  if (isCodeOrDocument) {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
@@ -68,7 +78,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Stale-While-Revalidate for other static assets (JS, CSS, images, sounds)
+  // 3. Stale-While-Revalidate for images, icons, and fonts
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {

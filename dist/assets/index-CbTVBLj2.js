@@ -110,3 +110,35 @@ Open your browser menu (⋮) and tap "Install App" or "Add to Home screen".`)};n
         <span class="lb-score">${o} pts</span>
       </li>
     `}).join("")}}function V0(){clearInterval(Th);let r=0;Th=setInterval(()=>{const e=document.getElementById("tv-leaderboard-list");if(e)if(Pe.length>4){const t=(Pe.length-4)*52;r+=1.2,r>=t+24&&(r=0),e.style.transform=`translateY(-${r}px)`}else e.style.transform="translateY(0px)"},100)}function Rt(r){if(!r)return"";let e=String(r);const t={"&percnt;":"%","&quot;":'"',"&#039;":"'","&#39;":"'","&apos;":"'","&amp;":"&","&lt;":"<","&gt;":">","&deg;":"°","&plusmn;":"±","&ndash;":"–","&mdash;":"—","&lsquo;":"‘","&rsquo;":"’","&ldquo;":"“","&rdquo;":"”","&hellip;":"…","&sup2;":"²","&sup3;":"³","&frac12;":"½","&frac14;":"¼","&frac34;":"¾","&eacute;":"é","&Eacute;":"É","&aacute;":"á","&iacute;":"í","&oacute;":"ó","&uacute;":"ú","&ntilde;":"ñ","&uuml;":"ü","&ouml;":"ö","&auml;":"ä","&copy;":"©","&reg;":"®","&trade;":"™","&euro;":"€","&pound;":"£","&yen;":"¥","&cent;":"¢"};for(const[n,o]of Object.entries(t))e=e.split(n).join(o);return e=e.replace(/&#(\d+);/g,(n,o)=>{const i=parseInt(o,10);return i&&i>0&&i<=1114111?String.fromCharCode(i):n}),e=e.replace(/&#x([0-9a-fA-F]+);/gi,(n,o)=>{const i=parseInt(o,16);return i&&i>0&&i<=1114111?String.fromCharCode(i):n}),e}function vi(r){return r.replace(/[&<>"']/g,function(e){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[e]})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",Oh):Oh();
+
+/* Bar Room Trivia v2.0 Runtime Extensions */
+(function() {
+  window.clearHostLeaderboard = async function() {
+    var confirmed = window.confirm('Are you sure you want to clear the leaderboard? This will reset all player scores and remove connected players.');
+    if (!confirmed) return;
+
+    var buttons = document.querySelectorAll('#btn-clear-leaderboard, .btn-clear-leaderboard');
+    buttons.forEach(function(b) { b.textContent = 'Clearing...'; b.disabled = true; });
+
+    var normRoom = (window.currentRoomCode || 'TRIV').trim().toUpperCase();
+    if (Array.isArray(window.playersLeaderboard)) {
+      window.playersLeaderboard.length = 0;
+    }
+    if (typeof window.renderLeaderboard === 'function') window.renderLeaderboard();
+    if (typeof window.renderHostPlayersRoster === 'function') window.renderHostPlayersRoster();
+
+    try {
+      if (window.channel) {
+        window.channel.postMessage({ type: 'LEADERBOARD_CLEARED', payload: { room_code: normRoom } });
+      }
+      if (typeof window.broadcastRealtimeEvent === 'function') {
+        window.broadcastRealtimeEvent('leaderboard_cleared', { room_code: normRoom, timestamp: Date.now() });
+      }
+    } catch (_) {}
+
+    buttons.forEach(function(b) { b.textContent = 'Cleared!'; b.disabled = true; });
+    setTimeout(function() {
+      buttons.forEach(function(b) { b.textContent = 'Clear Leaderboard'; b.disabled = false; });
+    }, 2000);
+  };
+})();

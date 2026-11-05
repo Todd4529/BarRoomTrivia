@@ -715,8 +715,14 @@
               </div>
               
               <!-- Countdown Timer Ring for Question Active Phase -->
-              <div class="tv-timer-block">
-                <div id="tv-timer-container" class="timer-ring-wrapper hidden">
+              <div class="tv-timer-block" id="tv-timer-block">
+                <!-- Professional MC Host Ready Indicator Pill -->
+                <div id="tv-timer-ready-badge" class="tv-timer-ready-badge hidden">
+                  <span class="tv-ready-pulse-dot"></span>
+                  <span class="tv-ready-text">READY</span>
+                </div>
+                <div class="tv-timer-ring-column" id="tv-timer-ring-column">
+                  <div id="tv-timer-container" class="timer-ring-wrapper hidden">
                   <svg class="timer-svg" viewBox="0 0 100 100">
                     <circle class="timer-bg" cx="50" cy="50" r="42"></circle>
                     <circle id="timer-progress" class="timer-stroke" cx="50" cy="50" r="42"></circle>
@@ -727,6 +733,7 @@
                   </div>
                 </div>
                 <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
+                </div>
               </div>
             </div>
 
@@ -1298,18 +1305,22 @@
             <div class="host-card players-roster-card">
               <div class="card-title-row">
                 <div class="title-left">
-                  <span class="icon">👥</span>
+
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.refreshHostPlayers ? window.refreshHostPlayers() : (window.loadInitialPlayers && window.loadInitialPlayers())" title="Refresh Live Players Roster">🔄 Refresh</button>
+                <div class="title-right-actions">
+                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.clearHostLeaderboard && window.clearHostLeaderboard()" title="Clear leaderboard and remove all player scores">
+                    Clear Leaderboard
+                  </button>
+                </div>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
 
               <!-- Live Player Roster Container -->
               <div class="host-players-roster" id="host-connected-players-list">
                 <div class="host-empty-roster">
-                  <span class="empty-icon">📱</span>
+
                   <p class="empty-headline">No players joined yet</p>
                   <small>Players can scan the TV QR code or join at this URL with room code <strong>TRIV</strong>.</small>
                 </div>
