@@ -753,7 +753,7 @@ async function refreshHostPlayers() {
   const btnRefresh = document.getElementById('btn-refresh-players');
   if (btnRefresh) {
     btnRefresh.disabled = true;
-    btnRefresh.innerHTML = '<span class="spin-icon">🔄</span> Refreshing...';
+    btnRefresh.innerHTML = '<span class="spin-icon rotating">🔄</span>';
     btnRefresh.classList.add('refreshing');
   }
 
@@ -817,7 +817,7 @@ async function refreshHostPlayers() {
   setTimeout(() => {
     if (btnRefresh) {
       btnRefresh.disabled = false;
-      btnRefresh.innerHTML = '🔄 Refresh';
+      btnRefresh.innerHTML = '<span class="spin-icon">🔄</span>';
       btnRefresh.classList.remove('refreshing');
     }
   }, 600);
@@ -2923,14 +2923,27 @@ function initHostControls() {
       pane.classList.toggle('active', isTarget);
     });
 
+    const statPillPlayers = document.getElementById('stat-pill-players');
+    if (statPillPlayers) {
+      statPillPlayers.classList.toggle('active-tab', tabName === 'players');
+      statPillPlayers.setAttribute('aria-selected', tabName === 'players' ? 'true' : 'false');
+    }
+
     if (tabName === 'players') {
       renderHostPlayersRoster();
       refreshHostPlayers();
     }
   }
+  window.switchHostTab = switchHostTab;
 
   const statPillTimer = document.getElementById('stat-pill-timer');
   const statPillDiff = document.getElementById('stat-pill-diff');
+  const statPillPlayers = document.getElementById('stat-pill-players');
+
+  statPillPlayers?.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchHostTab('players');
+  });
 
   function navigateToSettingsControl(controlId) {
     switchHostTab('settings');

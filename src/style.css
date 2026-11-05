@@ -2100,6 +2100,46 @@ body.result-modal-open .btn-answer.selected {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   text-align: center;
+  font-family: inherit;
+  color: inherit;
+  box-sizing: border-box;
+}
+
+button.metric-pill {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  width: 100%;
+}
+
+.clickable-metric-pill {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.clickable-metric-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 229, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.clickable-metric-pill:active {
+  transform: scale(0.96);
+}
+
+.clickable-metric-pill.active,
+.clickable-metric-pill.active-tab {
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.25), rgba(124, 77, 255, 0.25)) !important;
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4) !important;
+}
+
+.clickable-metric-pill.active-tab strong {
+  color: #fff !important;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
 }
 
 .metric-lbl {
@@ -2119,6 +2159,21 @@ body.result-modal-open .btn-answer.selected {
 
 .metric-pill.highlight strong {
   color: var(--accent-cyan);
+}
+
+.spin-icon {
+  display: inline-block;
+  line-height: 1;
+}
+
+@keyframes spinIconAnim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spin-icon.rotating,
+button.refreshing .spin-icon {
+  animation: spinIconAnim 0.6s linear infinite;
 }
 
 /* 3. SEGMENTED TAB SWITCHER */

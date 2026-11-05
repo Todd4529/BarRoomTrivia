@@ -1118,9 +1118,9 @@
               <span class="metric-lbl">DIFF</span>
               <strong id="stat-difficulty">Standard</strong>
             </div>
-            <div class="metric-pill highlight">
+            <button type="button" class="metric-pill clickable-metric-pill highlight" id="stat-pill-players" style="cursor: pointer;" title="View Connected Players">
               <span class="metric-lbl">PLAYERS</span>
-              <strong id="stat-players-count">0</strong>
+              <strong id="stat-players-count">0</strong></button><div style="display:none">
             </div>
           </div>
         </div>
@@ -1146,7 +1146,7 @@
             </span>
             <span class="tab-lbl">Playlist</span>
           </button>
-          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
+          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false" style="display: none !important;" aria-hidden="true">
             <span class="tab-ico">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1305,7 +1305,7 @@
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.refreshHostPlayers ? window.refreshHostPlayers() : (window.loadInitialPlayers && window.loadInitialPlayers())" title="Refresh Live Players Roster">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="btn-refresh-players" onclick="window.refreshHostPlayers ? window.refreshHostPlayers() : (window.loadInitialPlayers && window.loadInitialPlayers())" title="Refresh Live Players Roster"><span class="spin-icon">🔄</span></button>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
 
