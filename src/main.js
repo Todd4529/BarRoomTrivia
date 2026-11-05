@@ -7834,7 +7834,6 @@ function onTimerExpired(payload) {
     tvTimerReadyBadge.classList.add('hidden');
     tvTimerReadyBadge.style.display = 'none';
   }
-  const tvTimerContainer = document.getElementById('tv-timer-container');
   if (tvTimerContainer) {
     tvTimerContainer.style.display = 'flex';
   }
