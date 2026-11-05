@@ -4162,7 +4162,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             children: [
               QrDisplayWidget(
                 roomCode: _displayRoomCode,
-                showRoomCode: false,
+                showRoomCode: true,
                 compact: true,
               ),
               const SizedBox(height: 12),

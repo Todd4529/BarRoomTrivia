@@ -83,9 +83,22 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     }
   }
 
+  String _formatNickname(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      if (word == word.toUpperCase() && word.length > 3) {
+        return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      }
+      return word[0].toUpperCase() + word.substring(1);
+    }).join(' ');
+  }
+
   Future<void> _joinGame() async {
     final roomCode = _roomCodeController.text.trim().toUpperCase();
-    final nickname = _nicknameController.text.trim();
+    final rawNick = _nicknameController.text.trim();
+    final nickname = _formatNickname(rawNick);
 
     if (roomCode.isEmpty || nickname.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1607,13 +1620,55 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white54, fontSize: 14),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _roomCodeController,
+                readOnly: widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty,
+                textCapitalization: TextCapitalization.characters,
+                style: TextStyle(
+                  color: (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty)
+                      ? AppTheme.neonCyan
+                      : Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  letterSpacing: 2,
+                ),
+                decoration: InputDecoration(
+                  labelText: (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty)
+                      ? 'ROOM CODE (LOCKED VIA QR)'
+                      : 'ROOM CODE',
+                  labelStyle: const TextStyle(color: AppTheme.neonCyan),
+                  prefixIcon: Icon(
+                    (widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty)
+                        ? Icons.lock
+                        : Icons.meeting_room,
+                    color: AppTheme.neonCyan,
+                  ),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _nicknameController,
+                autofocus: widget.initialRoomCode != null && widget.initialRoomCode!.isNotEmpty,
                 maxLength: 15,
+                textCapitalization: TextCapitalization.words,
                 autofillHints: const <String>[],
                 autocorrect: false,
                 enableSuggestions: false,
+                onChanged: (val) {
+                  if (val.isNotEmpty && val[0] != val[0].toUpperCase()) {
+                    final newText = val[0].toUpperCase() + val.substring(1);
+                    _nicknameController.value = _nicknameController.value.copyWith(
+                      text: newText,
+                      selection: TextSelection.collapsed(offset: newText.length),
+                    );
+                  }
+                },
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'NICKNAME',

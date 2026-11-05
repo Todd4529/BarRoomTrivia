@@ -48,42 +48,92 @@ class QrDisplayWidget extends StatelessWidget {
             ),
           ),
           SizedBox(height: compact ? 6 : 12),
-          Container(
-            padding: EdgeInsets.all(compact ? 8 : 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(compact ? 12 : 16),
-            ),
-            child: QrImageView(
-              data: playUrl,
-              version: QrVersions.auto,
-              size: compact ? 130.0 : 180.0,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
-              dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
-            ),
-          ),
-          if (showRoomCode) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'ROOM CODE',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2.0,
-                color: Colors.white54,
+          if (compact && showRoomCode)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: QrImageView(
+                    data: playUrl,
+                    version: QrVersions.auto,
+                    size: 110.0,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'ROOM CODE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.0,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    SelectableText(
+                      roomCode,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 3.0,
+                        color: AppTheme.neonYellow,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else ...[
+            Container(
+              padding: EdgeInsets.all(compact ? 8 : 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(compact ? 12 : 16),
+              ),
+              child: QrImageView(
+                data: playUrl,
+                version: QrVersions.auto,
+                size: compact ? 130.0 : 180.0,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
               ),
             ),
-            const SizedBox(height: 4),
-            SelectableText(
-              roomCode,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 4.0,
-                color: AppTheme.neonYellow,
+            if (showRoomCode) ...[
+              const SizedBox(height: 16),
+              const Text(
+                'ROOM CODE',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 2.0,
+                  color: Colors.white54,
+                ),
               ),
-            ),
+              const SizedBox(height: 4),
+              SelectableText(
+                roomCode,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4.0,
+                  color: AppTheme.neonYellow,
+                ),
+              ),
+            ],
           ],
         ],
       ),

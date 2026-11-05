@@ -767,12 +767,14 @@
             <!-- QR Display Widget -->
             <div class="qr-card">
               <span class="qr-title">SCAN TO PLAY</span>
-              <div class="qr-code-wrapper">
+              <div class="qr-stage-row">
+                <div class="qr-code-wrapper">
                 <canvas id="qr-canvas"></canvas>
               </div>
               <div class="qr-room-info">
                 <span>ROOM CODE</span>
-                <strong id="qr-room-code">TRIV</strong>
+                <strong id="qr-room-code" class="qr-room-code">TRIV</strong>
+              </div>
               </div>
             </div>
 
@@ -925,7 +927,7 @@
 
           <form id="form-player-join" class="join-form">
             <div class="form-group">
-              <label for="input-room-code">ROOM CODE</label>
+              <label for="input-room-code">ROOM CODE <span id="room-code-locked-badge" class="room-locked-badge hidden">🔒 LOCKED (QR SCAN)</span></label>
               <input type="text" id="input-room-code" value="TRIV" placeholder="TRIV" style="text-transform: uppercase;" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
             </div>
             <div class="form-group">

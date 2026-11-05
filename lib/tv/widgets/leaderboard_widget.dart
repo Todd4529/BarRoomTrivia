@@ -79,6 +79,18 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget> {
     super.dispose();
   }
 
+  String _formatNickname(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      if (word == word.toUpperCase() && word.length > 3) {
+        return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      }
+      return word[0].toUpperCase() + word.substring(1);
+    }).join(' ');
+  }
+
   Widget _buildPlayerCard(Player player, int index) {
     final isTop3 = index < 3;
     final rankColors = [
@@ -123,7 +135,7 @@ class _LeaderboardWidgetState extends State<LeaderboardWidget> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              player.nickname.toUpperCase(),
+              _formatNickname(player.nickname),
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,

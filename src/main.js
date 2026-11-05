@@ -1603,7 +1603,10 @@ function switchView(viewName) {
     if ((currentGameState === 'QUESTION_ACTIVE' && currentQuestionData) || currentGameState === 'COUNTDOWN' || currentGameState === 'PRE_GAME' || currentGameState === 'QUESTION_READING') {
       if (tvAdScreen) tvAdScreen.classList.add('hidden');
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-      if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+      if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
       if (btnLive) btnLive.classList.add('active');
       if (btnPromo) btnPromo.classList.remove('active');
       stopTvAdSignageRotation();
@@ -1737,7 +1740,28 @@ function initNavigation() {
   if (roomParam) {
     currentRoomCode = roomParam.toUpperCase().replace(/[^A-Z0-9-]/g, '');
     const roomInput = document.getElementById('input-room-code');
-    if (roomInput) roomInput.value = currentRoomCode;
+    const lockBadge = document.getElementById('room-code-locked-badge');
+    if (roomInput) {
+      roomInput.value = currentRoomCode;
+      roomInput.readOnly = true;
+      roomInput.classList.add('input-locked');
+      roomInput.setAttribute('title', 'Room code locked via QR code scan');
+    }
+    if (lockBadge) lockBadge.classList.remove('hidden');
+    setTimeout(() => {
+      const nickInput = document.getElementById('input-nickname');
+      if (nickInput && document.body.getAttribute('data-view') === 'player') {
+        nickInput.focus();
+      }
+    }, 200);
+  } else {
+    const roomInput = document.getElementById('input-room-code');
+    const lockBadge = document.getElementById('room-code-locked-badge');
+    if (roomInput) {
+      roomInput.readOnly = false;
+      roomInput.classList.remove('input-locked');
+    }
+    if (lockBadge) lockBadge.classList.add('hidden');
   }
 
   const viewParam = urlParams.get('view') || hashParams.get('view');
@@ -1789,7 +1813,7 @@ function initQrCodes() {
 
   const canvasStage = document.getElementById('qr-canvas');
   if (canvasStage) {
-    QRCode.toCanvas(canvasStage, playUrl, { width: 160, margin: 1 }, (err) => {
+    QRCode.toCanvas(canvasStage, playUrl, { width: 110, margin: 1 }, (err) => {
       if (err) console.error('Stage QR Code error:', err);
     });
   }
@@ -1808,7 +1832,7 @@ function initQrCodes() {
     });
   }
 
-  const roomLabels = document.querySelectorAll('.qr-room-code');
+  const roomLabels = document.querySelectorAll('.qr-room-code, #qr-room-code');
   roomLabels.forEach(el => {
     el.textContent = currentRoomCode;
   });
@@ -2037,7 +2061,10 @@ function handleIncomingPreGameCountdown(rawPayload) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
-    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
     if (btnLive) btnLive.classList.add('active');
     if (btnPromo) btnPromo.classList.remove('active');
 
@@ -5027,7 +5054,10 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) tvAdBanner.classList.add('hidden');
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
     if (btnLive) btnLive.classList.add('active');
     if (btnPromo) btnPromo.classList.remove('active');
     return;
@@ -5038,7 +5068,10 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     if (tvAdBanner) tvAdBanner.classList.add('hidden');
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
-    if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+    if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
     if (btnLive) btnLive.classList.add('active');
     if (btnPromo) btnPromo.classList.remove('active');
     return;
@@ -5072,7 +5105,10 @@ function syncTvSignageDisplay(forceRestartRotation = false) {
     stopTvAdSignageRotation();
     const isLiveActive = btnLive?.classList.contains('active');
     if (currentGameState === 'PAUSED' || currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME' || currentGameState === 'COUNTDOWN' || currentGameState === 'QUESTION_READING' || isLiveActive) {
-      if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+      if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
       if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
       if (btnLive) btnLive.classList.add('active');
       if (btnPromo) btnPromo.classList.remove('active');
@@ -5665,7 +5701,7 @@ function renderHostPlayersRoster() {
         <div class="player-item-left">
           <span class="player-rank-badge ${rankClass}">${medal}</span>
           <div class="player-info-col">
-            <span class="player-name">${escapeHtml(p.nickname)}</span>
+            <span class="player-name">${escapeHtml(formatPlayerNickname(p.nickname))}</span>
             ${streakHtml}
           </div>
         </div>
@@ -6769,7 +6805,10 @@ function onQuestionStart(payload) {
   if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
   if (tvAdScreen) tvAdScreen.classList.add('hidden');
   stopTvAdSignageRotation();
-  if (tvLiveGrid) tvLiveGrid.classList.remove('hidden');
+  if (tvLiveGrid) {
+    tvLiveGrid.classList.remove('hidden');
+    initQrCodes();
+  }
 
   triggerMockPlayersSimulation(questionData, totalTimerDuration);
 
@@ -7896,6 +7935,18 @@ function initPlayerControls() {
 
   if (nicknameInput) {
     nicknameInput.value = '';
+    nicknameInput.addEventListener('input', () => {
+      const val = nicknameInput.value;
+      if (val && val.length > 0) {
+        const formatted = val.replace(/\b([a-z])/g, char => char.toUpperCase());
+        if (formatted !== val) {
+          const start = nicknameInput.selectionStart;
+          const end = nicknameInput.selectionEnd;
+          nicknameInput.value = formatted;
+          nicknameInput.setSelectionRange(start, end);
+        }
+      }
+    });
   }
 
   function doJoin() {
@@ -7911,7 +7962,8 @@ function initPlayerControls() {
       alert('This name is reserved for the Host. Please choose a different nickname to play!');
       return;
     }
-    const nickname = rawNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
+    const formattedNick = formatPlayerNickname(rawNick);
+    const nickname = formattedNick || `Player_${Math.floor(Math.random() * 900 + 100)}`;
 
     safeStorage.setItem('bar_trivia_player_nickname', nickname);
     safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
@@ -8272,6 +8324,7 @@ function initPlayerControls() {
 
 function onPlayerJoined(player) {
   if (!player || !player.nickname || isFictitiousPlayer(player.nickname)) return;
+  player.nickname = formatPlayerNickname(player.nickname);
   const initialScore = Number(player.score ?? player.cumulative_score ?? 0);
   const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
   if (!exists) {
@@ -8382,6 +8435,7 @@ function mergeIncomingLeaderboard(list) {
     .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
     .map(p => ({
       ...p,
+      nickname: formatPlayerNickname(p.nickname),
       score: Number(p.score ?? p.cumulative_score ?? 0),
       cumulative_score: Number(p.score ?? p.cumulative_score ?? 0),
     }));
@@ -8634,7 +8688,7 @@ function renderLeaderboard() {
       <li class="lb-item ${topClass}">
         <div style="display:flex; align-items:center;">
           <span class="lb-rank">#${index + 1}</span>
-          <span>${escapeHtml(p.nickname)}</span>
+          <span>${escapeHtml(formatPlayerNickname(p.nickname))}</span>
         </div>
         <span class="lb-score">${displayScore} pts</span>
       </li>
@@ -8728,6 +8782,19 @@ function decodeHtmlEntities(text) {
   });
 
   return str;
+}
+
+function formatPlayerNickname(name) {
+  if (!name) return '';
+  const str = String(name).trim();
+  if (!str) return '';
+  return str.split(/\s+/).map(word => {
+    if (!word) return '';
+    if (word === word.toUpperCase() && word.length > 3) {
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(' ');
 }
 
 function escapeHtml(text) {
