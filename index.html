@@ -869,8 +869,8 @@
 
             <div id="tv-podium-empty" style="display: none; text-align: center; color: rgba(255,255,255,0.7); font-size: 16px; font-weight: 700; padding: 14px 0;">Round complete! No scored players yet.</div>
             <div class="tv-next-round-timer-box" style="padding: 12px 24px; border-radius: 18px; border: 2px solid var(--accent-cyan); background: rgba(0, 229, 255, 0.12); margin-top: 8px;">
-              <span id="tv-winner-timer-label" style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND IN</span>
-              <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">2 MINUTES</strong>
+              <span id="tv-winner-timer-label" style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND</span>
+              <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">WILL START IN 2 MINUTES</strong>
             </div>
           </div>
         </div>
@@ -1124,10 +1124,10 @@
 
             <div class="next-round-countdown-box" style="margin-top: 14px; padding: 12px 18px; background: rgba(0,0,0,0.5); border: 2px solid var(--accent-yellow); border-radius: 14px; text-align: center; box-shadow: 0 0 20px rgba(255, 214, 0, 0.35); width: 100%;">
               <div style="font-size: 13px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1.5px; text-transform: uppercase;">
-                NEXT ROUND STARTING IN.....
+                NEXT ROUND WILL START IN
               </div>
               <div style="font-size: 34px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
-                <span id="player-winner-next-round-timer">2:00</span>
+                <span id="player-winner-next-round-timer">2 MINUTES</span>
               </div>
             </div>
           </div>
@@ -1185,6 +1185,7 @@
         <nav class="host-segmented-tabs" role="tablist">
           <button type="button" class="host-tab-btn active" data-tab="stage" role="tab" aria-selected="true">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="6" width="20" height="12" rx="3"></rect>
                 <path d="M6 12h4m-2-2v4m7-3h.01m3 2h.01"></path>
@@ -1194,6 +1195,7 @@
           </button>
           <button type="button" class="host-tab-btn" data-tab="playlist" role="tab" aria-selected="false">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 18V5l12-2v13"></path>
                 <circle cx="6" cy="18" r="3"></circle>
@@ -1202,19 +1204,23 @@
             </span>
             <span class="tab-lbl">Playlist</span>
           </button>
-          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
-            <span class="tab-ico">
+          <!--
+          </button>
+
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+
+
+
+
               </svg>
             </span>
-            <span class="tab-lbl">Players (<span id="host-tab-player-count">0</span>)</span>
+
           </button>
+          -->
           <button type="button" class="host-tab-btn" data-tab="settings" role="tab" aria-selected="false">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>

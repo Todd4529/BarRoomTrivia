@@ -3221,7 +3221,12 @@ function initHostControls() {
 
   statPillPlayers?.addEventListener('click', (e) => {
     e.preventDefault();
-    switchHostTab('players');
+    const isAlreadyPlayers = document.getElementById('host-pane-players')?.classList.contains('active');
+    if (isAlreadyPlayers) {
+      switchHostTab('stage');
+    } else {
+      switchHostTab('players');
+    }
   });
 
   function navigateToSettingsControl(controlId) {
@@ -8467,7 +8472,7 @@ function onRoundWinner(payload) {
   // Dismiss Top 3 Winners overlay on TV after exactly 20 seconds so ad signage is displayed for remainder of intermission
   if (!wasAlreadyInSummaryForRound || !isTop3CelebrationActive) {
     isTop3CelebrationActive = true;
-    top3CelebrationEpochMs = Date.now() + 20000;
+    top3CelebrationEpochMs = Date.now() + 30000;
     clearTimeout(tvWinnerOverlayTimeout);
     tvWinnerOverlayTimeout = setTimeout(() => {
       isTop3CelebrationActive = false;
@@ -8488,7 +8493,7 @@ function onRoundWinner(payload) {
         hostStageQCounter.textContent = `Sponsor ads displaying on TV. Tap Next Round to launch Round ${nextR}.`;
       }
       updateHostManualModalUI();
-    }, 20000);
+    }, 30000);
   }
 
   syncTvSignageDisplay();
@@ -8512,16 +8517,23 @@ function onRoundWinner(payload) {
     return `${secs} SECONDS`;
   };
 
+  // Static intermission duration text for top 3 display (no countdown during 30s celebration)
+  const staticInterRoundSecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 120);
+  const staticMins = Math.max(1, Math.round(staticInterRoundSecs / 60));
+  const staticTimeText = staticInterRoundSecs < 60
+    ? `${staticInterRoundSecs} SECONDS`
+    : `${staticMins} MINUTE${staticMins > 1 ? 'S' : ''}`;
+
   const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
   if (isManualModeActive) {
-    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '📺 SPONSOR ADS IN';
-    if (tvNextRoundTimer) tvNextRoundTimer.textContent = '20 SECONDS';
+    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '🎙️ WAITING FOR HOST';
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = `ROUND ${nextR} STARTING SOON`;
   } else {
-    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND IN';
-    if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadgeText(remWinnerSecs);
+    if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND';
+    if (tvNextRoundTimer) tvNextRoundTimer.textContent = `WILL START IN ${staticTimeText}`;
   }
   if (playerWinnerTimer) {
-    playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : formatRoundTimer(remWinnerSecs);
+    playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : staticTimeText;
   }
 
   const winnerCountdownBox = document.querySelector('.next-round-countdown-box');
@@ -8541,10 +8553,10 @@ function onRoundWinner(payload) {
     } else {
       winnerCountdownBox.innerHTML = `
         <div style="font-size: 13px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1.5px; text-transform: uppercase;">
-          NEXT ROUND STARTING IN.....
+          NEXT ROUND WILL START IN
         </div>
-        <div style="font-size: 34px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
-          <span id="player-winner-next-round-timer">${formatRoundTimer(remWinnerSecs)}</span>
+        <div style="font-size: 32px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
+          <span id="player-winner-next-round-timer">${staticTimeText}</span>
         </div>
       `;
     }
@@ -8568,9 +8580,9 @@ function onRoundWinner(payload) {
     } else {
       playerQuestionText.innerHTML = `
         <div style="text-align:center; padding: 12px 0;">
-          <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">ROUND ${nextR} STARTING IN.....</div>
-          <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">${formatIntermissionBadgeText(remWinnerSecs)}</div>
-          <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Get Ready for Round ${nextR}!</div>
+          <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">ROUND ${nextR}</div>
+          <div style="font-size:36px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">WILL START IN ${staticTimeText}</div>
+          <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Top 3 Leaders Shown on Screen</div>
         </div>
       `;
     }
@@ -8609,15 +8621,22 @@ function onRoundWinner(payload) {
     const roundTimerText = formatRoundTimer(currentSecs);
 
     if (isShowingTop3) {
-      const top3Rem = Math.max(0, Math.ceil((top3CelebrationEpochMs - nowMs) / 1000));
+      // STATIC TIME DISPLAY DURING 30-SECOND TOP 3 CELEBRATION (NO COUNTDOWN)
       const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
       if (tvWinnerTimerLabel) {
-        tvWinnerTimerLabel.textContent = isManualModeActive ? '📺 SPONSOR ADS IN' : '⏱️ NEXT ROUND IN';
+        tvWinnerTimerLabel.textContent = isManualModeActive ? '🎙️ WAITING FOR HOST' : '⏱️ NEXT ROUND';
       }
       if (tvNextRoundTimer) {
         tvNextRoundTimer.textContent = isManualModeActive 
-          ? (top3Rem > 0 ? `${top3Rem} SECONDS` : 'STARTING ADS...') 
-          : formatIntermissionBadgeText(top3Rem);
+          ? `ROUND ${nextR} STARTING SOON` 
+          : `WILL START IN ${staticTimeText}`;
+      }
+      if (playerWinnerTimer) {
+        playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : staticTimeText;
+      }
+      const cardTimer = document.getElementById('player-card-round-timer');
+      if (cardTimer) {
+        cardTimer.textContent = isManualModeActive ? `ROUND ${nextR} STARTING SOON` : `WILL START IN ${staticTimeText}`;
       }
     } else {
       const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
@@ -8625,12 +8644,12 @@ function onRoundWinner(payload) {
         tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND IN';
       }
       if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
-    }
 
-    if (!isManualModeActive) {
-      if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
-      const cardTimer = document.getElementById('player-card-round-timer');
-      if (cardTimer) cardTimer.textContent = badgeText;
+      if (!isManualModeActive) {
+        if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
+        const cardTimer = document.getElementById('player-card-round-timer');
+        if (cardTimer) cardTimer.textContent = badgeText;
+      }
     }
 
     // Actively display the countdown timer on the TV promo bottom banner and ad signage
@@ -8638,6 +8657,8 @@ function onRoundWinner(payload) {
     if (promoFluctuating) {
       if (isManualModeActive) {
         promoFluctuating.textContent = `ROUND ${nextR} • WAITING FOR HOST TO START`;
+      } else if (isShowingTop3) {
+        promoFluctuating.textContent = `ROUND ${completedR} COMPLETE • NEXT ROUND WILL START IN ${staticTimeText}`;
       } else {
         promoFluctuating.textContent = `NEXT ROUND IN ${badgeText}`;
       }
