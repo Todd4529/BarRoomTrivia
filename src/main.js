@@ -7377,9 +7377,6 @@ function onQuestionStart(payload) {
   const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
   const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
-  const tvTimerContainer = document.getElementById('tv-timer-container');
-  const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
-  const timerLabel = document.querySelector('.timer-text-container .timer-label');
 
   const durSecs = totalTimerDuration || 20;
 
@@ -7420,7 +7417,6 @@ function onQuestionStart(payload) {
       timerProgress.style.strokeDashoffset = '0';
       timerProgress.style.stroke = '#00e676';
     }
-    const hostStageBadge = document.getElementById('host-stage-badge');
     if (hostStageBadge) {
       hostStageBadge.className = 'stage-status-indicator stage-live';
       hostStageBadge.textContent = '🎤 HOST READING QUESTION';
