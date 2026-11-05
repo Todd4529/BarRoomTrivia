@@ -969,6 +969,14 @@ body[data-view="tv"] .tv-viewport {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  min-height: 58px;
+}
+
+/* Guard: When READY badge is active, guarantee that any timer ring or sublabel is completely hidden */
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .tv-timer-ring-column,
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-ring-wrapper,
+.tv-timer-block:has(.tv-timer-ready-badge:not(.hidden)) .timer-sublabel {
+  display: none !important;
 }
 
 .tv-timer-ring-column {
@@ -985,12 +993,16 @@ body[data-view="tv"] .tv-viewport {
   gap: 8px;
   background: linear-gradient(135deg, rgba(0, 230, 118, 0.16), rgba(0, 229, 255, 0.1));
   border: 1.5px solid #00e676;
-  padding: 6px 14px;
-  border-radius: 14px;
-  box-shadow: 0 0 16px rgba(0, 230, 118, 0.35);
+  padding: 8px 16px;
+  border-radius: 16px;
+  box-shadow: 0 0 18px rgba(0, 230, 118, 0.35);
   animation: tvReadyBadgeGlow 2s ease-in-out infinite alternate;
   white-space: nowrap;
   user-select: none;
+}
+
+.tv-timer-ready-badge.hidden {
+  display: none !important;
 }
 
 .tv-ready-pulse-dot {
@@ -4656,42 +4668,55 @@ body.auth-mode .main-container {
   border-radius: 16px;
 }
 
-/* Host Refresh Players Button & Spin Animation */
-#btn-refresh-players {
+/* Host Clear Leaderboard Button & Actions */
+.title-right-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#btn-clear-leaderboard {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   border-radius: 8px;
-  border: 1.5px solid rgba(0, 229, 255, 0.4);
-  background: rgba(0, 229, 255, 0.1);
-  color: #fff;
+  border: 1.5px solid rgba(255, 77, 77, 0.45);
+  background: rgba(255, 77, 77, 0.12);
+  color: #ff6b6b;
   cursor: pointer;
   transition: all 0.2s ease;
+  user-select: none;
 }
 
-#btn-refresh-players:hover:not(:disabled) {
-  background: rgba(0, 229, 255, 0.25);
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+#btn-clear-leaderboard:hover:not(:disabled) {
+  background: rgba(255, 77, 77, 0.28);
+  border-color: #ff4d4d;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(255, 77, 77, 0.4);
   transform: translateY(-1px);
 }
 
-#btn-refresh-players:disabled {
-  opacity: 0.75;
-  cursor: wait;
+#btn-clear-leaderboard:active:not(:disabled) {
+  transform: translateY(0);
 }
 
-#btn-refresh-players.refreshing .spin-icon {
-  display: inline-block;
-  animation: refreshSpin 0.75s linear infinite;
+#btn-clear-leaderboard:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
-@keyframes refreshSpin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+#btn-clear-leaderboard .btn-icon {
+  font-size: 13px;
+}
+
+/* Hide refresh button/spinner on players tab — syncing is fully silent in the background */
+#btn-refresh-players,
+#host-pane-players .spin-icon,
+#host-pane-players .refresh-icon {
+  display: none !important;
 }
 
 /* ==========================================================================

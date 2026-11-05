@@ -751,22 +751,15 @@ function isFictitiousPlayer(nickname) {
 let playersLeaderboard = [];
 
 async function refreshHostPlayers() {
-  const btnRefresh = document.getElementById('btn-refresh-players');
-  if (btnRefresh) {
-    btnRefresh.disabled = true;
-    btnRefresh.innerHTML = '<span class="spin-icon rotating">🔄</span>';
-    btnRefresh.classList.add('refreshing');
-  }
-
   const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
 
-  // 1. Broadcast request state sync so connected player devices immediately re-announce themselves
+  // 1. Broadcast request state sync in background so connected player devices immediately re-announce themselves
   try {
     channel.postMessage({ type: 'REQUEST_STATE_SYNC', payload: { room_code: normRoom } });
     broadcastRealtimeEvent('request_state_sync', { room_code: normRoom });
   } catch (_) {}
 
-  // 2. Fetch fresh roster from Supabase players table
+  // 2. Fetch fresh roster silently in background from Supabase players table
   try {
     if (supabase) {
       let { data, error } = await supabase
@@ -803,10 +796,10 @@ async function refreshHostPlayers() {
       }
     }
   } catch (err) {
-    console.warn('[Leaderboard] Refresh players error:', err);
+    console.warn('[Leaderboard] Background refresh players error:', err);
   }
 
-  // 3. Purge any fictitious players & re-render host roster and leaderboard
+  // 3. Purge any fictitious players & quietly update host roster and leaderboard in background
   playersLeaderboard = playersLeaderboard.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
   renderLeaderboard();
   renderHostPlayersRoster();
@@ -814,14 +807,6 @@ async function refreshHostPlayers() {
 
   const hostPlayersRoom = document.getElementById('host-players-room-code');
   if (hostPlayersRoom) hostPlayersRoom.textContent = normRoom;
-
-  setTimeout(() => {
-    if (btnRefresh) {
-      btnRefresh.disabled = false;
-      btnRefresh.innerHTML = '<span class="spin-icon">🔄</span>';
-      btnRefresh.classList.remove('refreshing');
-    }
-  }, 600);
 }
 
 function loadInitialPlayers() {
@@ -829,6 +814,112 @@ function loadInitialPlayers() {
 }
 window.refreshHostPlayers = refreshHostPlayers;
 window.loadInitialPlayers = loadInitialPlayers;
+
+async function clearHostLeaderboard() {
+  const confirmed = window.confirm('Are you sure you want to clear the leaderboard? This will reset all player scores to 0.');
+  if (!confirmed) return;
+
+  const btnClear = document.getElementById('btn-clear-leaderboard');
+  if (btnClear) {
+    btnClear.disabled = true;
+    btnClear.textContent = 'Clearing...';
+  }
+
+  const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
+
+  // 1. Reset all in-memory leaderboard scores to 0
+  playersLeaderboard.forEach(p => {
+    p.score = 0;
+    p.cumulative_score = 0;
+    p.streak = 0;
+  });
+
+  // 2. Reset active player score if running on this device
+  if (currentPlayer) {
+    currentPlayer.score = 0;
+    currentPlayer.streak = 0;
+    const scoreVal = document.getElementById('player-score-val');
+    if (scoreVal) scoreVal.textContent = '0';
+  }
+
+  // 3. Re-render host roster and TV leaderboard immediately
+  renderLeaderboard();
+  renderHostPlayersRoster();
+
+  // 4. Persist score reset to Supabase players table
+  try {
+    if (supabase) {
+      await supabase
+        .from('players')
+        .update({ cumulative_score: 0, streak: 0 })
+        .eq('room_code', normRoom);
+
+      if (normRoom !== 'TRIV') {
+        await supabase
+          .from('players')
+          .update({ cumulative_score: 0, streak: 0 })
+          .eq('room_code', 'TRIV');
+      }
+    }
+  } catch (err) {
+    console.warn('[Leaderboard] Supabase clear scores error:', err);
+  }
+
+  // 5. Broadcast to all clients (TV displays and player phones)
+  try {
+    channel.postMessage({
+      type: 'LEADERBOARD_UPDATED',
+      payload: {
+        leaderboard: playersLeaderboard,
+        players: playersLeaderboard,
+        room_code: normRoom
+      }
+    });
+    channel.postMessage({
+      type: 'LEADERBOARD_CLEARED',
+      payload: { room_code: normRoom }
+    });
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: normRoom
+    });
+    broadcastRealtimeEvent('leaderboard_cleared', {
+      room_code: normRoom,
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    console.warn('[Leaderboard] Broadcast clear error:', err);
+  }
+
+  // Visual confirmation on button
+  if (btnClear) {
+    btnClear.innerHTML = '<span>✓</span> Cleared!';
+    setTimeout(() => {
+      btnClear.innerHTML = '<span class="btn-icon">🗑️</span> Clear Leaderboard';
+      btnClear.disabled = false;
+    }, 2000);
+  }
+}
+
+function onLeaderboardCleared() {
+  playersLeaderboard.forEach(p => {
+    p.score = 0;
+    p.cumulative_score = 0;
+    p.streak = 0;
+  });
+  if (currentPlayer) {
+    currentPlayer.score = 0;
+    currentPlayer.streak = 0;
+    const scoreVal = document.getElementById('player-score-val');
+    if (scoreVal) scoreVal.textContent = '0';
+  }
+  renderLeaderboard();
+  renderHostPlayersRoster();
+}
+
+window.clearHostLeaderboard = clearHostLeaderboard;
+window.onLeaderboardCleared = onLeaderboardCleared;
 
 // PROGRESSIVE WEB APP (PWA) SUPPORT & INSTALL PROMPTS
 let deferredPwaInstallPrompt = null;
@@ -970,10 +1061,10 @@ function initApp() {
   startLeaderboardAutoScroll();
   renderLeaderboard();
   loadInitialPlayers();
-  // Background sync roster every 5 minutes (or immediately on-demand via host refresh tap)
+  // Background sync roster continuously in background without displaying any refresh spinners
   setInterval(() => {
     loadInitialPlayers();
-  }, 300000);
+  }, 20000);
 }
 
 // HOST AUTHENTICATION LOGIC (Mobile & Web)
@@ -2556,6 +2647,8 @@ function handleRealtimeIncomingEvent(event, data) {
     onPlayerScoreUpdated(payload);
   } else if (normEvent === 'leaderboard_updated') {
     mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
+  } else if (normEvent === 'leaderboard_cleared') {
+    onLeaderboardCleared();
   } else if (normEvent === 'ad_mode_toggled') {
     onAdModeToggled(payload);
   } else if (normEvent === 'ad_slides_updated') {
@@ -2757,6 +2850,8 @@ function initBroadcastChannelListeners() {
       onPlayerScoreUpdated(payload);
     } else if (type === 'LEADERBOARD_UPDATED') {
       mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
+    } else if (type === 'LEADERBOARD_CLEARED') {
+      onLeaderboardCleared();
     } else if (type === 'GAME_PAUSED') {
       onGamePaused(payload);
     } else if (type === 'GAME_RESUMING') {
@@ -3877,6 +3972,12 @@ function initHostControls() {
     e.preventDefault();
     handleManualHostNextQuestionAction();
     updateHostManualModalUI();
+  });
+
+  const btnClearLeaderboard = document.getElementById('btn-clear-leaderboard');
+  btnClearLeaderboard?.addEventListener('click', (e) => {
+    e.preventDefault();
+    clearHostLeaderboard();
   });
 
   const btnRefreshPlayers = document.getElementById('btn-refresh-players');
@@ -7201,12 +7302,14 @@ function onQuestionStart(payload) {
     document.getElementById('opt-d-text').textContent = questionData.options.D;
   }
 
-  // UNHIDE & START TV COUNTDOWN TIMER (If running; in Manual Mode hold at READY)
-  const isIdle = payload.timer_state === 'idle' || payload.question_phase === 'reading';
-  if (tvTimerContainer) tvTimerContainer.classList.remove('hidden');
+  // TV Timer & Ready Indicator Management:
+  // When "READY" is displayed in reading/manual mode, do NOT display the timer behind it.
+  // Once the timer starts, the ready badge will disappear and all you will see is the timer.
+  const isIdle = payload.timer_state === 'idle' || payload.question_phase === 'reading' || (hostGamePlayMode === 'Manual' && hostEngineState === 'QUESTION_READING');
 
   const tvTimerReadyBadge = document.getElementById('tv-timer-ready-badge');
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
+  const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
   const durSecs = totalTimerDuration || 20;
 
   if (isIdle) {
@@ -7216,17 +7319,20 @@ function onQuestionStart(payload) {
     const timerProgress = document.getElementById('timer-progress');
     const playerTimerVal = document.getElementById('player-timer-val');
 
-    // Display clean countdown number in ring and activate professional Ready badge
     if (tvTimerVal) tvTimerVal.textContent = durSecs;
     if (timerLabel) {
       timerLabel.textContent = 'SEC';
       timerLabel.style.display = '';
     }
+
+    // Do NOT display the timer behind the READY badge!
     if (tvTimerContainer) {
-      tvTimerContainer.classList.add('is-ready-mode');
-      tvTimerContainer.classList.remove('has-text-value');
-      tvTimerContainer.classList.remove('hidden');
+      tvTimerContainer.classList.add('hidden');
+      tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
     }
+    if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
+
+    // Display the professional READY badge prominently
     if (tvTimerReadyBadge) tvTimerReadyBadge.classList.remove('hidden');
 
     if (playerTimerVal) playerTimerVal.textContent = durSecs;
@@ -7240,9 +7346,10 @@ function onQuestionStart(payload) {
       hostStageBadge.textContent = '🎤 HOST READING QUESTION';
     }
   } else {
+    // Once the timer starts: ready disappears and all you will see is the timer
     if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
     if (tvTimerContainer) {
-      tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+      tvTimerContainer.classList.remove('hidden', 'is-ready-mode', 'has-text-value');
     }
     if (timerLabel) timerLabel.style.display = '';
     startCountdown(durationSeconds);
@@ -7316,7 +7423,7 @@ function startCountdown(seconds) {
   if (tvTimerReadyBadge) tvTimerReadyBadge.classList.add('hidden');
   const tvTimerContainer = document.getElementById('tv-timer-container');
   if (tvTimerContainer) {
-    tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
+    tvTimerContainer.classList.remove('hidden', 'is-ready-mode', 'has-text-value');
   }
   const timerLabel = document.querySelector('.timer-text-container .timer-label');
   if (timerLabel) {
@@ -9081,10 +9188,11 @@ function onGameResuming(payload) {
 
     const tvTimerContainer = document.getElementById('tv-timer-container');
     if (tvTimerContainer) {
-      tvTimerContainer.classList.remove('hidden');
-      tvTimerContainer.classList.add('is-ready-mode');
-      tvTimerContainer.classList.remove('has-text-value');
+      tvTimerContainer.classList.add('hidden');
+      tvTimerContainer.classList.remove('is-ready-mode', 'has-text-value');
     }
+    const tvTimerSublabel = document.getElementById('tv-timer-sublabel');
+    if (tvTimerSublabel) tvTimerSublabel.classList.add('hidden');
 
     const durVal = pausedRemainingQuestionSeconds || totalTimerDuration || 20;
     const tvTimerVal = document.getElementById('tv-timer-val');
