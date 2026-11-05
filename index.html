@@ -890,13 +890,16 @@
             <div style="display: flex; gap: 12px; margin-bottom: 14px;">
               <button id="btn-tv-exit-yes" class="btn btn-danger" autofocus style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 800; cursor: pointer; background: #ff4d4d; border: 2px solid #ffffff; color: #ffffff; box-shadow: 0 0 20px rgba(255, 77, 77, 0.7);">
                 Yes
+              </button>
   
               <button id="btn-tv-exit-cancel" class="btn btn-outline" style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 700; cursor: pointer;">
                 Cancel
+              </button>
   
             </div>
             <button id="btn-tv-show-host-qr" class="btn btn-block" style="background: var(--accent-yellow); color: #000; font-weight: 900; font-size: 15px; letter-spacing: 1px; padding: 14px; border-radius: 14px; cursor: pointer;">
               📱 HOST CONTROL QR CODE
+            </button>
 
           </div>
         </div>
@@ -1167,11 +1170,17 @@
             </div>
             <button type="button" class="metric-pill clickable-metric-pill highlight" id="stat-pill-players" style="cursor: pointer;" title="View Connected Players">
               <span class="metric-lbl">PLAYERS</span>
-              <strong id="stat-players-count">0</strong></button><div style="display:none">
+              <strong id="stat-players-count">0</strong>
+            </button>
+          </div>
+        </div>
+        <!--
+            </button>
             </div>
           </div>
         </div>
 
+        -->
         <!-- C. SEGMENTED TAB SWITCHER (App Tabs) -->
         <nav class="host-segmented-tabs" role="tablist">
           <button type="button" class="host-tab-btn active" data-tab="stage" role="tab" aria-selected="true">
@@ -1353,10 +1362,10 @@
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
                 <div class="title-right-actions">
-                  <button type="button" class="btn btn-clear-leaderboard btn-xs" id="btn-clear-leaderboard" title="Reset all player scores on leaderboard">
+                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.clearHostLeaderboard && window.clearHostLeaderboard()" title="Clear leaderboard and remove all player scores">
                     Clear Leaderboard
                   </button>
-                  <button type="button" id="btn-refresh-players" style="display: none !important;" aria-hidden="true"></button>
+
                 </div>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
@@ -1633,6 +1642,8 @@
                   </div>
     
 
+                </button>
+
                 <!-- 2. PAUSE / RESUME -->
                 <button type="button" id="btn-manual-modal-pause" class="btn-manual-control btn-manual-pause" title="Pause or Resume Live Game">
                   <span class="manual-control-icon" id="btn-manual-modal-pause-icon">⏸️</span>
@@ -1641,6 +1652,8 @@
                     <span class="manual-control-hint" id="btn-manual-modal-pause-sub">Hold timer</span>
                   </div>
     
+
+                </button>
 
                 <!-- 3. REVEAL ANSWER -->
                 <button type="button" id="btn-manual-modal-reveal" class="btn-manual-control btn-manual-reveal" title="Reveal Correct Answer Immediately">
@@ -1651,6 +1664,8 @@
                   </div>
     
 
+                </button>
+
                 <!-- 4. NEXT QUESTION -->
                 <button type="button" id="btn-manual-modal-next-q" class="btn-manual-control btn-manual-next-q" title="Advance to Next Question">
                   <span class="manual-control-icon" id="btn-manual-modal-next-q-icon">⏭️</span>
@@ -1658,9 +1673,14 @@
                     <span class="manual-control-title" id="btn-manual-modal-next-q-text">Next Question</span>
                     <span class="manual-control-hint" id="btn-manual-modal-next-q-hint">Advance</span>
                   </div>
+                </button>
+              </div>
+              <!--
+                  </div>
     
               </div>
 
+              -->
               <!-- Dedicated Start Game Bottom Button -->
               <div class="manual-bottom-btn-container">
                 <button type="button" id="btn-manual-modal-start-game" class="btn-manual-start-game" title="Start Game">

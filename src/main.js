@@ -770,18 +770,13 @@ async function refreshHostPlayers() {
 
       if (!error && Array.isArray(data)) {
         const realPlayers = data.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
-        for (const p of realPlayers) {
-          const nick = (p.nickname || '').trim();
-          if (!nick) continue;
-          const score = Number(p.cumulative_score ?? p.score ?? 0);
-          const existing = playersLeaderboard.find(x => x.nickname.toLowerCase() === nick.toLowerCase());
-          if (existing) {
-            existing.score = Math.max(Number(existing.score || 0), score);
-            existing.cumulative_score = Math.max(Number(existing.cumulative_score || 0), score);
-            existing.streak = p.streak || existing.streak || 0;
-            existing.is_connected = p.is_connected !== false;
-          } else {
-            playersLeaderboard.push({
+        if (realPlayers.length === 0) {
+          playersLeaderboard = [];
+        } else {
+          playersLeaderboard = realPlayers.map(p => {
+            const nick = (p.nickname || '').trim();
+            const score = Number(p.cumulative_score ?? p.score ?? 0);
+            return {
               id: p.id || nick,
               player_uid: p.player_uid || nick,
               room_code: normRoom,
@@ -790,8 +785,8 @@ async function refreshHostPlayers() {
               cumulative_score: score,
               streak: p.streak || 0,
               is_connected: p.is_connected !== false,
-            });
-          }
+            };
+          });
         }
       }
     }
@@ -816,23 +811,23 @@ window.refreshHostPlayers = refreshHostPlayers;
 window.loadInitialPlayers = loadInitialPlayers;
 
 async function clearHostLeaderboard() {
-  const confirmed = window.confirm('Are you sure you want to clear the leaderboard? This will reset all player scores to 0.');
+  const confirmed = window.confirm('Are you sure you want to clear the leaderboard? This will remove all players and reset all scores.');
   if (!confirmed) return;
 
-  const btnClear = document.getElementById('btn-clear-leaderboard');
-  if (btnClear) {
-    btnClear.disabled = true;
-    btnClear.textContent = 'Clearing...';
-  }
+  const buttonsToUpdate = [
+    document.getElementById('btn-clear-leaderboard'),
+    document.getElementById('btn-clear-leaderboard-bottom')
+  ].filter(Boolean);
+
+  buttonsToUpdate.forEach(b => {
+    b.disabled = true;
+    b.textContent = 'Clearing...';
+  });
 
   const normRoom = (currentRoomCode || 'TRIV').trim().toUpperCase();
 
-  // 1. Reset all in-memory leaderboard scores to 0
-  playersLeaderboard.forEach(p => {
-    p.score = 0;
-    p.cumulative_score = 0;
-    p.streak = 0;
-  });
+  // 1. Completely clear in-memory leaderboard
+  playersLeaderboard = [];
 
   // 2. Reset active player score if running on this device
   if (currentPlayer) {
@@ -842,22 +837,22 @@ async function clearHostLeaderboard() {
     if (scoreVal) scoreVal.textContent = '0';
   }
 
-  // 3. Re-render host roster and TV leaderboard immediately
+  // 3. Re-render host roster and TV leaderboard immediately to empty state
   renderLeaderboard();
   renderHostPlayersRoster();
 
-  // 4. Persist score reset to Supabase players table
+  // 4. Delete players from Supabase players table
   try {
     if (supabase) {
       await supabase
         .from('players')
-        .update({ cumulative_score: 0, streak: 0 })
+        .delete()
         .eq('room_code', normRoom);
 
       if (normRoom !== 'TRIV') {
         await supabase
           .from('players')
-          .update({ cumulative_score: 0, streak: 0 })
+          .delete()
           .eq('room_code', 'TRIV');
       }
     }
@@ -870,8 +865,8 @@ async function clearHostLeaderboard() {
     channel.postMessage({
       type: 'LEADERBOARD_UPDATED',
       payload: {
-        leaderboard: playersLeaderboard,
-        players: playersLeaderboard,
+        leaderboard: [],
+        players: [],
         room_code: normRoom
       }
     });
@@ -880,8 +875,8 @@ async function clearHostLeaderboard() {
       payload: { room_code: normRoom }
     });
     broadcastRealtimeEvent('leaderboard_updated', {
-      players: playersLeaderboard,
-      leaderboard: playersLeaderboard,
+      players: [],
+      leaderboard: [],
       room_code: normRoom
     });
     broadcastRealtimeEvent('leaderboard_cleared', {
@@ -893,11 +888,6 @@ async function clearHostLeaderboard() {
   }
 
   // Visual confirmation on buttons (pure text, no icons)
-  const buttonsToUpdate = [
-    document.getElementById('btn-clear-leaderboard'),
-    document.getElementById('btn-clear-leaderboard-bottom')
-  ].filter(Boolean);
-
   buttonsToUpdate.forEach(b => {
     b.textContent = 'Cleared!';
     b.disabled = true;
@@ -912,11 +902,7 @@ async function clearHostLeaderboard() {
 }
 
 function onLeaderboardCleared() {
-  playersLeaderboard.forEach(p => {
-    p.score = 0;
-    p.cumulative_score = 0;
-    p.streak = 0;
-  });
+  playersLeaderboard = [];
   if (currentPlayer) {
     currentPlayer.score = 0;
     currentPlayer.streak = 0;
@@ -9068,6 +9054,18 @@ function onPlayerScoreUpdated(payload) {
 
 function mergeIncomingLeaderboard(list) {
   if (!Array.isArray(list)) return;
+  if (list.length === 0) {
+    playersLeaderboard = [];
+    if (currentPlayer) {
+      currentPlayer.score = 0;
+      currentPlayer.streak = 0;
+      const scoreVal = document.getElementById('player-score-val');
+      if (scoreVal) scoreVal.textContent = '0';
+    }
+    renderLeaderboard();
+    renderHostPlayersRoster();
+    return;
+  }
   const valid = list
     .filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname))
     .map(p => ({
