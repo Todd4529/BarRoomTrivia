@@ -3108,24 +3108,36 @@ button.refreshing .spin-icon {
   font-size: 14px;
 }
 
-/* GREYED OUT DISABLED STATE FOR START BUTTON */
+/* DISABLED STATE FOR HOST DOCK BUTTONS */
 .btn-dock-primary:disabled,
 .btn-dock-primary.disabled,
-.btn-dock-primary.btn-greyed-out {
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: rgba(255, 255, 255, 0.35) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+.btn-dock-primary.btn-greyed-out,
+.btn-dock-action:disabled,
+.btn-dock-action.disabled,
+.btn-dock-icon:disabled {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.22) !important;
   box-shadow: none !important;
   cursor: not-allowed !important;
-  opacity: 0.5 !important;
+  opacity: 1 !important;
   pointer-events: none !important;
 }
 
 .btn-dock-primary:disabled svg,
 .btn-dock-primary.disabled svg,
-.btn-dock-primary.btn-greyed-out svg {
-  opacity: 0.35 !important;
+.btn-dock-primary.btn-greyed-out svg,
+.btn-dock-action:disabled svg,
+.btn-dock-action.disabled svg,
+.btn-dock-icon:disabled svg {
+  opacity: 0.8 !important;
   fill: currentColor !important;
+}
+
+.btn-dock-action:disabled .btn-dock-text,
+.btn-dock-primary:disabled .btn-dock-text {
+  color: #cbd5e1 !important;
+  font-weight: 800 !important;
 }
 
 /* BUTTON ACTIVE PRESS (Native Haptic Feel) */
@@ -4226,13 +4238,14 @@ body.auth-mode .main-container {
 /* Lower Right QR Code on Every Ad */
 .tv-ad-qr-corner {
   position: absolute;
-  bottom: 24px;
-  right: 28px;
+  bottom: calc(max(0px, (100vh - (100vw * 9 / 16)) / 2) + min(100vh, 100vw * 9 / 16) * 0.1481);
+  transform: translateY(50%);
+  right: calc(max(0px, (100vw - (100vh * 16 / 9)) / 2) + min(100vw, 100vh * 16 / 9) * 0.0417 + 18px);
   z-index: 100;
   background: rgba(14, 18, 30, 0.94);
   border: 2px solid var(--accent-cyan);
   border-radius: 18px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   display: flex !important;
   align-items: center;
   gap: 12px;
@@ -4910,11 +4923,41 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-control:disabled {
-  opacity: 0.38;
+  opacity: 1 !important;
   cursor: not-allowed;
-  filter: grayscale(0.5);
+  filter: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow: none !important;
   transform: none !important;
+}
+
+.btn-manual-control:disabled .manual-control-icon {
+  opacity: 0.85;
+  filter: none;
+}
+
+.btn-manual-control:disabled .manual-control-title {
+  color: #ffffff !important;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  opacity: 1 !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.btn-manual-control:disabled .manual-control-hint {
+  color: #ffd600 !important;
+  opacity: 1 !important;
+  font-weight: 800;
+  font-size: 9.5px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-top: 3px;
+  letter-spacing: 0.4px;
+  border: 1px solid rgba(255, 214, 0, 0.35);
+  text-transform: uppercase;
 }
 
 .manual-control-icon {
@@ -4939,7 +4982,7 @@ body.auth-mode .main-container {
 .manual-control-hint {
   font-size: 9px;
   font-weight: 600;
-  opacity: 0.75;
+  opacity: 0.85;
   letter-spacing: 0.2px;
 }
 
@@ -4962,10 +5005,26 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-start.is-running {
-  background: rgba(0, 230, 118, 0.25);
-  border-color: var(--neon-green);
-  color: var(--neon-green);
+  background: rgba(0, 230, 118, 0.25) !important;
+  border: 1.5px solid var(--neon-green) !important;
+  color: var(--neon-green) !important;
   animation: pulse-border 1.5s infinite;
+}
+
+.btn-manual-start.is-running .manual-control-title {
+  color: #00e676 !important;
+}
+
+.btn-manual-start.is-running .manual-control-hint {
+  color: #000 !important;
+  background: #00e676 !important;
+  border-color: #00e676 !important;
+  font-weight: 800 !important;
+}
+
+.btn-manual-start:disabled:not(.is-running) {
+  background: rgba(0, 230, 118, 0.05) !important;
+  border-color: rgba(0, 230, 118, 0.3) !important;
 }
 
 /* 2. Pause / Resume Button */
@@ -4973,6 +5032,11 @@ body.auth-mode .main-container {
   background: rgba(255, 214, 0, 0.12);
   border-color: #ffd600;
   color: #fff;
+}
+
+.btn-manual-pause:disabled:not(.is-resuming) {
+  background: rgba(255, 214, 0, 0.05) !important;
+  border-color: rgba(255, 214, 0, 0.3) !important;
 }
 
 .btn-manual-pause:not(:disabled):hover {
@@ -5000,6 +5064,11 @@ body.auth-mode .main-container {
   color: #fff;
 }
 
+.btn-manual-reveal:disabled:not(.is-revealed) {
+  background: rgba(255, 171, 0, 0.05) !important;
+  border-color: rgba(255, 171, 0, 0.3) !important;
+}
+
 .btn-manual-reveal:not(:disabled) {
   background: #ffab00;
   color: #000;
@@ -5018,9 +5087,20 @@ body.auth-mode .main-container {
 }
 
 .btn-manual-reveal.is-revealed {
-  background: rgba(0, 229, 255, 0.15);
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
+  background: rgba(0, 229, 255, 0.15) !important;
+  border: 1.5px solid var(--neon-cyan) !important;
+  color: var(--neon-cyan) !important;
+}
+
+.btn-manual-reveal.is-revealed .manual-control-title {
+  color: var(--neon-cyan) !important;
+}
+
+.btn-manual-reveal.is-revealed .manual-control-hint {
+  color: #000 !important;
+  background: var(--neon-cyan) !important;
+  border-color: var(--neon-cyan) !important;
+  font-weight: 800 !important;
 }
 
 /* 4. Next Question Button in Action Deck */
@@ -5028,6 +5108,11 @@ body.auth-mode .main-container {
   background: rgba(0, 229, 255, 0.1);
   border-color: rgba(0, 229, 255, 0.35);
   color: #fff;
+}
+
+.btn-manual-control.btn-manual-next-q:disabled:not(.is-active):not(.is-ready) {
+  background: rgba(0, 229, 255, 0.05) !important;
+  border-color: rgba(0, 229, 255, 0.3) !important;
 }
 
 .btn-manual-control.btn-manual-next-q:not(:disabled):hover {
@@ -5135,9 +5220,12 @@ body.auth-mode .main-container {
 
 .btn-manual-start-game:disabled,
 .btn-manual-start-game.is-disabled {
-  opacity: 0.35;
+  opacity: 1 !important;
   cursor: not-allowed;
-  filter: grayscale(0.7);
+  filter: none !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 2px solid rgba(255, 255, 255, 0.22) !important;
+  color: #e2e8f0 !important;
   box-shadow: none !important;
   transform: none !important;
 }
@@ -5292,6 +5380,34 @@ body.auth-mode .main-container {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
   color: #fff;
+}
+
+.btn-dock-manual:disabled {
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.btn-dock-timer:disabled {
+  background: rgba(0, 230, 118, 0.12) !important;
+  border: 1.5px solid rgba(0, 230, 118, 0.35) !important;
+  color: #00e676 !important;
+  font-weight: 800 !important;
+}
+
+.btn-dock-reveal:disabled {
+  background: rgba(255, 171, 0, 0.12) !important;
+  border: 1.5px solid rgba(255, 171, 0, 0.35) !important;
+  color: #ffd600 !important;
+  font-weight: 800 !important;
+}
+
+.btn-dock-next:disabled {
+  background: rgba(0, 229, 255, 0.1) !important;
+  border: 1.5px solid rgba(0, 229, 255, 0.3) !important;
+  color: #80f0ff !important;
+  font-weight: 800 !important;
 }
 
 @keyframes glow-pulse {

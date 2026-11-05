@@ -4932,11 +4932,6 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     ctx.font = "800 32px 'Outfit', 'Inter', sans-serif";
     ctx.fillText('Amazon Fire TV', badgeX + 105, amzBadgeY + 74);
 
-    roundRect(badgeX + 370, amzBadgeY + 44, 90, 30, 8, 'rgba(255, 153, 0, 0.2)', '#FF9900', 1);
-    ctx.fillStyle = '#FF9900';
-    ctx.font = "800 13px 'Outfit', sans-serif";
-    ctx.fillText('Appstore', badgeX + 382, amzBadgeY + 64);
-
     // Search instructions
     ctx.font = "700 17px 'Outfit', 'Inter', sans-serif";
     ctx.fillStyle = '#00e5ff';
@@ -6389,7 +6384,12 @@ function updateHostManualModalUI() {
       btnStartTimer.disabled = true;
       btnStartTimer.classList.remove('is-active', 'is-running');
       if (btnStartTimerText) btnStartTimerText.textContent = 'Start Timer';
-      if (btnStartTimerHint) btnStartTimerHint.textContent = isAutomatedEngineRunning ? 'Disabled' : 'Game lobby';
+      let timerHint = 'Game lobby';
+      if (currentGameState === 'PAUSED') timerHint = 'Game paused';
+      else if (hostEngineState === 'QUESTION_REVIEW') timerHint = 'Answer review';
+      else if (hostEngineState === 'ROUND_SUMMARY') timerHint = 'Intermission';
+      else if (isAutomatedEngineRunning) timerHint = 'Waiting stage';
+      if (btnStartTimerHint) btnStartTimerHint.textContent = timerHint;
     } else if (hostEngineState === 'QUESTION_ACTIVE') {
       btnStartTimer.disabled = true;
       btnStartTimer.classList.add('is-running');
@@ -6415,7 +6415,7 @@ function updateHostManualModalUI() {
       btnPause.classList.remove('is-resuming');
       if (btnPauseIcon) btnPauseIcon.textContent = '⏸️';
       if (btnPauseText) btnPauseText.textContent = 'Pause';
-      if (btnPauseSub) btnPauseSub.textContent = 'Hold timer';
+      if (btnPauseSub) btnPauseSub.textContent = !isAutomatedEngineRunning ? 'Game lobby' : 'Hold timer';
     }
     btnPause.disabled = !isAutomatedEngineRunning && currentGameState !== 'PAUSED';
   }
@@ -6439,7 +6439,11 @@ function updateHostManualModalUI() {
       btnReveal.classList.remove('is-revealed');
       if (btnRevealIcon) btnRevealIcon.textContent = '💡';
       if (btnRevealText) btnRevealText.textContent = 'Reveal Answer';
-      if (btnRevealHint) btnRevealHint.textContent = 'Inactive';
+      let revHint = 'Game lobby';
+      if (currentGameState === 'PAUSED') revHint = 'Game paused';
+      else if (hostEngineState === 'ROUND_SUMMARY') revHint = 'Intermission';
+      else if (isAutomatedEngineRunning) revHint = 'Awaiting question';
+      if (btnRevealHint) btnRevealHint.textContent = revHint;
     }
   }
 
@@ -6464,7 +6468,10 @@ function updateHostManualModalUI() {
       btnNextQ.disabled = true;
       btnNextQ.classList.remove('is-active', 'is-ready');
       if (btnNextQText) btnNextQText.textContent = 'Next Question';
-      if (btnNextQHint) btnNextQHint.textContent = 'Inactive';
+      let nextHint = 'Game lobby';
+      if (currentGameState === 'PAUSED') nextHint = 'Game paused';
+      else if (isAutomatedEngineRunning) nextHint = 'Timer running';
+      if (btnNextQHint) btnNextQHint.textContent = nextHint;
     }
   }
 
@@ -6535,7 +6542,7 @@ function updateHostManualDock() {
     if (btnDockTimerText) {
       btnDockTimerText.textContent = (hostEngineState === 'QUESTION_ACTIVE') ? `${remainingTimerSeconds || 20}s` : 'Start Timer';
     }
-    btnDockTimer.style.opacity = canStart ? '1.0' : ((hostEngineState === 'QUESTION_ACTIVE') ? '1.0' : '0.5');
+    btnDockTimer.style.opacity = '1.0';
   }
 
   // Update Dock Reveal Button
@@ -6546,7 +6553,7 @@ function updateHostManualDock() {
     if (btnDockRevealText) {
       btnDockRevealText.textContent = isReview ? 'Revealed' : 'Reveal';
     }
-    btnDockReveal.style.opacity = canReveal ? '1.0' : (isReview ? '0.85' : '0.5');
+    btnDockReveal.style.opacity = '1.0';
   }
 
   // Update Dock Next Question Button
