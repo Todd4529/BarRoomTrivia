@@ -2234,6 +2234,21 @@ function handleIncomingQuestionStart(rawPayload) {
     return;
   }
   if (isSameQuestion && playerChoiceSubmitted !== null) {
+    if (payload.is_resumed) {
+      const isIdleOnResume = payload.timer_state === 'idle' || payload.question_phase === 'reading';
+      currentGameState = isIdleOnResume ? 'QUESTION_READING' : 'QUESTION_ACTIVE';
+      const playerTimerVal = document.getElementById('player-timer-val');
+      if (playerTimerVal) {
+        playerTimerVal.textContent = isIdleOnResume ? 'READY' : (durationSeconds || '20');
+      }
+      const playerStatusBadge = document.getElementById('player-status-badge');
+      if (playerStatusBadge) {
+        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.innerHTML = `<span id="status-icon">✓</span> ANSWER SUBMITTED`;
+      }
+      const qNumInRound = Number(payload.question_number_in_round || payload.questionNumberInRound) || (((currentQuestionIndex % 10) + 1));
+      updatePlayerHeaderCard(roundNum, qNumInRound);
+    }
     return;
   }
   if (isSameQuestion && !isUiWaiting && (isCurrentQuestionScored || currentGameState === 'QUESTION_REVIEW')) {
@@ -2294,10 +2309,12 @@ function handleIncomingQuestionStart(rawPayload) {
 
   currentQuestionData = questionData;
   currentGameState = isIdleTimer ? 'QUESTION_READING' : 'QUESTION_ACTIVE';
-  playerChoiceSubmitted = null;
-  isCurrentQuestionScored = false;
-  lastScoredQuestionKey = null;
-  currentQuestionAnswers = {};
+  if (!payload.is_resumed) {
+    playerChoiceSubmitted = null;
+    isCurrentQuestionScored = false;
+    lastScoredQuestionKey = null;
+    currentQuestionAnswers = {};
+  }
 
   isAutomatedEngineRunning = true;
   updateHostEngineUI('IN PROGRESS');
@@ -2724,6 +2741,8 @@ function initBroadcastChannelListeners() {
       onStateSyncResponse(payload);
     } else if (type === 'QUESTION_START') {
       handleIncomingQuestionStart(payload);
+    } else if (type === 'MANUAL_TIMER_STARTED') {
+      handleIncomingManualTimerStarted(payload);
     } else if (type === 'TIMER_EXPIRED') {
       onTimerExpired(payload);
     } else if (type === 'ROUND_SUMMARY') {
@@ -3358,12 +3377,183 @@ function initHostControls() {
     updateHostEngineUI('IN PROGRESS');
     updateHostManualDock();
 
-    const resumeSecs = 10;
-    const startsAtMs = Date.now() + (resumeSecs * 1000);
     const remainingSecs = pausedRemainingQuestionSeconds || selectedQuestionDuration || 20;
-
     currentRound = pausedRound || currentRound || 1;
     currentQuestionIndex = pausedQuestionIndex !== undefined ? pausedQuestionIndex : currentQuestionIndex;
+
+    // IN MC HOST / MANUAL MODE:
+    // Resume IMMEDIATELY without a 10-second countdown delay.
+    // The question returns to the screen with the countdown timer IDLE ('READY') until host clicks 'Start Timer'.
+    if (hostGamePlayMode === 'Manual') {
+      stopTvAdSignageRotation();
+      const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+      if (tvAdScreen) tvAdScreen.classList.add('hidden');
+      const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+      if (tvAdBanner) tvAdBanner.classList.add('hidden');
+      const tvLiveGrid = document.getElementById('tv-live-grid');
+      if (tvLiveGrid) {
+        tvLiveGrid.classList.remove('hidden');
+        initQrCodes();
+      }
+
+      onGameResuming({
+        immediate: true,
+        game_play_mode: 'Manual',
+        round_number: currentRound,
+        question_index: currentQuestionIndex,
+        remaining_question_seconds: remainingSecs
+      });
+
+      channel.postMessage({
+        type: 'GAME_RESUMING',
+        payload: {
+          roomCode: currentRoomCode,
+          immediate: true,
+          game_play_mode: 'Manual',
+          roundNumber: currentRound,
+          questionIndex: currentQuestionIndex,
+          remaining_question_seconds: remainingSecs
+        }
+      });
+      broadcastRealtimeEvent('game_resuming', {
+        room_code: currentRoomCode,
+        immediate: true,
+        game_play_mode: 'Manual',
+        round_number: currentRound,
+        roundNumber: currentRound,
+        question_index: currentQuestionIndex,
+        questionIndex: currentQuestionIndex,
+        remaining_question_seconds: remainingSecs
+      });
+
+      if (pausedHostEngineState === 'QUESTION_REVIEW') {
+        hostEngineState = 'QUESTION_REVIEW';
+        currentGameState = 'QUESTION_REVIEW';
+        hostTargetEpochMs = 0;
+        startHostHeartbeatLoop();
+        const question = pausedQuestionData || currentQuestionData;
+        const expiredPayload = {
+          correctOption: question?.correct,
+          correct_option: question?.correct,
+          correctText: `${question?.correct}) ${question?.options?.[question?.correct]}`,
+          questionIndex: currentQuestionIndex,
+          roundNumber: currentRound,
+          questionNumberInRound: ((currentQuestionIndex % 10) + 1),
+          question_id: question?.id,
+          id: question?.id,
+          timestamp: Date.now(),
+          game_play_mode: 'Manual',
+          is_resumed: true,
+        };
+        broadcastRealtimeEvent('timer_expired', expiredPayload);
+        onTimerExpired(expiredPayload);
+        updateHostManualDock();
+        updateHostManualModalUI();
+        syncTvSignageDisplay();
+        return;
+      }
+
+      if (pausedHostEngineState === 'ROUND_SUMMARY') {
+        hostEngineState = 'ROUND_SUMMARY';
+        currentGameState = 'ROUND_SUMMARY';
+        hostTargetEpochMs = 0;
+        startHostHeartbeatLoop();
+        updateHostManualDock();
+        updateHostManualModalUI();
+        syncTvSignageDisplay();
+        return;
+      }
+
+      // Resume question in READING phase with timer IDLE (not engaged until host clicks 'Start Timer')
+      const question = pausedQuestionData || currentQuestionData;
+      const questionInRound = (currentQuestionIndex % 10) + 1;
+      timerEndsAtGlobalMs = 0;
+      hostTargetEpochMs = 0;
+      remainingTimerSeconds = 20;
+      hostEngineState = 'QUESTION_READING';
+      currentGameState = 'QUESTION_READING';
+      startHostHeartbeatLoop();
+
+      const activeGenre = question?.category || question?.genre || activeRoundGenre || 'General Trivia';
+      const payload = {
+        questionIndex: currentQuestionIndex,
+        roundNumber: currentRound,
+        questionNumberInRound: questionInRound,
+        questionData: question,
+        difficulty: selectedDifficulty,
+        durationSeconds: 20,
+        time_limit_seconds: 20,
+        total_duration: 20,
+        totalTimerDuration: 20,
+        timerEndsAtMs: null,
+        timer_ends_at_epoch_ms: null,
+        question_index: questionInRound,
+        cumulative_question_index: currentQuestionIndex + 1,
+        question_number_in_round: questionInRound,
+        total_questions: 10,
+        total_questions_in_round: 10,
+        current_round: currentRound,
+        round_number: currentRound,
+        genre: activeGenre,
+        category: activeGenre,
+        question_text: question?.text || '',
+        option_a: question?.options?.A || '',
+        option_b: question?.options?.B || '',
+        option_c: question?.options?.C || '',
+        option_d: question?.options?.D || '',
+        options: question?.options || {},
+        correct_option: question?.correct || '',
+        id: question?.id,
+        question_id: question?.id,
+        game_play_mode: 'Manual',
+        question_phase: 'reading',
+        timer_state: 'idle',
+        is_resumed: true,
+        timestamp: Date.now(),
+        sent_at_epoch_ms: Date.now(),
+      };
+
+      channel.postMessage({ type: 'QUESTION_START', payload });
+      broadcastRealtimeEvent('question_start', payload);
+      onQuestionStart(payload);
+      updateHostManualDock();
+      updateHostManualModalUI();
+      syncTvSignageDisplay();
+
+      try {
+        supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          status: 'active_reading',
+          current_question_index: currentQuestionIndex + 1,
+          current_round: currentRound,
+          round_number: currentRound,
+          duration_seconds: 20,
+          timer_ends_at: null,
+          genre: activeGenre,
+          question_data: {
+            id: question?.id,
+            question_id: question?.id,
+            category: activeGenre,
+            genre: activeGenre,
+            difficulty: selectedDifficulty,
+            text: question?.text,
+            question_text: question?.text,
+            options: question?.options,
+            correct: question?.correct,
+            correct_option: question?.correct,
+            round_number: currentRound,
+            roundNumber: currentRound,
+            question_number_in_round: questionInRound,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'room_code' }).catch(() => {});
+      } catch (_) {}
+
+      return;
+    }
+
+    const resumeSecs = 10;
+    const startsAtMs = Date.now() + (resumeSecs * 1000);
 
     onGameResuming({
       starts_at_epoch_ms: startsAtMs,
@@ -3408,51 +3598,6 @@ function initHostControls() {
     clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
       if (!isAutomatedEngineRunning) return;
-
-      if (hostGamePlayMode === 'Manual' && pausedHostEngineState === 'QUESTION_READING') {
-        const question = pausedQuestionData || currentQuestionData;
-        const questionInRound = (currentQuestionIndex % 10) + 1;
-        timerEndsAtGlobalMs = 0;
-        hostTargetEpochMs = 0;
-        remainingTimerSeconds = 20;
-        hostEngineState = 'QUESTION_READING';
-        currentGameState = 'QUESTION_READING';
-        startHostHeartbeatLoop();
-
-        const activeGenre = question?.category || activeRoundGenre || 'General Trivia';
-        const payload = {
-          questionIndex: currentQuestionIndex,
-          roundNumber: currentRound,
-          questionNumberInRound: questionInRound,
-          questionData: question,
-          difficulty: selectedDifficulty,
-          durationSeconds: 20,
-          timerEndsAtMs: null,
-          timer_ends_at_epoch_ms: null,
-          question_index: questionInRound,
-          cumulative_question_index: currentQuestionIndex + 1,
-          question_number_in_round: questionInRound,
-          total_questions: 10,
-          total_questions_in_round: 10,
-          current_round: currentRound,
-          round_number: currentRound,
-          genre: activeGenre,
-          category: activeGenre,
-          question_text: question?.text || '',
-          options: question?.options || {},
-          correct_option: question?.correct || '',
-          game_play_mode: 'Manual',
-          question_phase: 'reading',
-          timer_state: 'idle',
-        };
-
-        broadcastRealtimeEvent('question_start', payload);
-        onQuestionStart(payload);
-        updateHostManualDock();
-        updateHostManualModalUI();
-        syncTvSignageDisplay();
-        return;
-      }
 
       if (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedHostEngineState === 'QUESTION_READING' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData)) || (pausedQuestionData || currentQuestionData)) {
         const question = pausedQuestionData || currentQuestionData;
@@ -6428,7 +6573,7 @@ function updateHostManualModalUI() {
       btnPause.classList.add('is-resuming');
       if (btnPauseIcon) btnPauseIcon.textContent = '▶️';
       if (btnPauseText) btnPauseText.textContent = 'Resume';
-      if (btnPauseSub) btnPauseSub.textContent = `Resume live game (${pausedRemainingQuestionSeconds || 10}s)`;
+      if (btnPauseSub) btnPauseSub.textContent = (hostGamePlayMode === 'Manual') ? 'Resume immediately' : `Resume live game (${pausedRemainingQuestionSeconds || 10}s)`;
     } else {
       btnPause.classList.remove('is-resuming');
       if (btnPauseIcon) btnPauseIcon.textContent = '⏸️';
@@ -7025,11 +7170,13 @@ function onQuestionStart(payload) {
   // Silent countdown: do not play sound until last 5 seconds (playSound('question_start') omitted during countdown)
 
   // Reset player answer choice state and dismiss previous result modal for new question
-  playerChoiceSubmitted = null;
-  isCurrentQuestionScored = false;
-  hideResultModal();
-  hideWinnerModals();
-  hideInterQuestionCountdown();
+  if (!payload.is_resumed) {
+    playerChoiceSubmitted = null;
+    isCurrentQuestionScored = false;
+    hideResultModal();
+    hideWinnerModals();
+    hideInterQuestionCountdown();
+  }
 
   // Update Player Phone Display & Difficulty Pill
   try {
@@ -7058,7 +7205,10 @@ function onQuestionStart(payload) {
     if (pOptD) pOptD.textContent = decodeHtmlEntities(questionData.options.D);
 
     if (playerStatusBadge) {
-      if (isIdle) {
+      if (payload.is_resumed && playerChoiceSubmitted !== null) {
+        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.innerHTML = `<span id="status-icon">✓</span> ANSWER SUBMITTED`;
+      } else if (isIdle) {
         playerStatusBadge.className = 'status-badge status-active';
         playerStatusBadge.innerHTML = `<span id="status-icon">🎤</span> HOST READING QUESTION`;
       } else {
@@ -7067,12 +7217,14 @@ function onQuestionStart(payload) {
       }
     }
 
-    answerBtns.forEach(btn => {
-      btn.disabled = false;
-      btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
-      const existingBadge = btn.querySelector('.player-correct-badge');
-      if (existingBadge) existingBadge.remove();
-    });
+    if (!payload.is_resumed || playerChoiceSubmitted === null) {
+      answerBtns.forEach(btn => {
+        btn.disabled = false;
+        btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+        const existingBadge = btn.querySelector('.player-correct-badge');
+        if (existingBadge) existingBadge.remove();
+      });
+    }
   } catch (playerErr) {
     console.warn('[onQuestionStart] Player display update non-fatal error:', playerErr);
   }
@@ -8735,6 +8887,38 @@ function onGameResuming(payload) {
   }
   if (payload?.remaining_question_seconds) {
     pausedRemainingQuestionSeconds = Number(payload.remaining_question_seconds);
+  }
+
+  // In MC Host / Manual mode or when immediate resume is requested:
+  // Immediately resume on TV and Player phones without showing a countdown timer!
+  const isManual = (payload?.game_play_mode === 'Manual' || hostGamePlayMode === 'Manual' || payload?.immediate);
+  if (isManual) {
+    clearInterval(countdownInterval);
+    const tvAdScreen = document.getElementById('tv-ad-signage-screen');
+    if (tvAdScreen) tvAdScreen.classList.add('hidden');
+    const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
+    if (tvAdBanner) tvAdBanner.classList.add('hidden');
+    stopTvAdSignageRotation();
+    const tvLiveGrid = document.getElementById('tv-live-grid');
+    if (tvLiveGrid) {
+      tvLiveGrid.classList.remove('hidden');
+      initQrCodes();
+    }
+    const tvTimerVal = document.getElementById('tv-timer-val');
+    if (tvTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
+      tvTimerVal.textContent = 'READY';
+    }
+    const playerTimerVal = document.getElementById('player-timer-val');
+    if (playerTimerVal && currentGameState !== 'QUESTION_ACTIVE') {
+      playerTimerVal.textContent = '20';
+    }
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    if (playerStatusBadge && currentGameState !== 'QUESTION_ACTIVE') {
+      playerStatusBadge.className = 'status-badge status-active';
+      playerStatusBadge.innerHTML = `<span id="status-icon">🎤</span> HOST READING QUESTION`;
+    }
+    updatePlayerHeaderCard(currentRound, null, '🎤 Host Reading');
+    return;
   }
 
   const rawStarts = payload?.starts_at_epoch_ms || payload?.starts_at;
