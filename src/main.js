@@ -3701,8 +3701,18 @@ function initHostControls() {
   });
   btnManualModalStartGame?.addEventListener('click', (e) => {
     e.preventDefault();
-    const btnStart = document.getElementById('btn-start-auto');
-    if (btnStart) btnStart.click();
+    const isGameActive = isAutomatedEngineRunning || (currentGameState !== 'LOBBY' && currentGameState !== 'EXITED');
+    if (isGameActive) {
+      const btnReset = document.getElementById('btn-reset-game');
+      if (btnReset) {
+        btnReset.click();
+      }
+    } else {
+      const btnStart = document.getElementById('btn-start-auto');
+      if (btnStart) {
+        btnStart.click();
+      }
+    }
     updateHostManualModalUI();
   });
   btnDockStartTimer?.addEventListener('click', (e) => {
@@ -5834,6 +5844,7 @@ function updateHostEngineUI(statusText) {
   }
 
   renderHostPlayersRoster();
+  updateHostManualModalUI();
 }
 
 // AUTOMATED GAME LOOP LOGIC
@@ -6459,20 +6470,21 @@ function updateHostManualModalUI() {
 
   // 5. DEDICATED BOTTOM START GAME BUTTON
   if (btnStartGameModal) {
-    if (!isAutomatedEngineRunning && currentGameState !== 'PAUSED') {
+    if (btnStartGameModal.parentElement) {
+      btnStartGameModal.parentElement.style.display = 'block';
+    }
+    const isGameActive = isAutomatedEngineRunning || (currentGameState !== 'LOBBY' && currentGameState !== 'EXITED');
+    if (!isGameActive) {
       btnStartGameModal.disabled = false;
-      btnStartGameModal.textContent = 'Start Game (Manual Mode) 🚀';
-      btnStartGameModal.classList.remove('is-disabled');
-      if (btnStartGameModal.parentElement) {
-        btnStartGameModal.parentElement.style.display = 'block';
-      }
+      btnStartGameModal.innerHTML = '<span id="btn-manual-modal-start-game-text">▶ Start Game</span>';
+      btnStartGameModal.setAttribute('title', 'Start Game');
+      btnStartGameModal.classList.remove('is-disabled', 'btn-mode-reset');
     } else {
-      btnStartGameModal.disabled = true;
-      btnStartGameModal.textContent = 'Game In Progress';
-      btnStartGameModal.classList.add('is-disabled');
-      if (btnStartGameModal.parentElement) {
-        btnStartGameModal.parentElement.style.display = 'none';
-      }
+      btnStartGameModal.disabled = false;
+      btnStartGameModal.innerHTML = '<span id="btn-manual-modal-start-game-text">🛑 Stop / Reset Game</span>';
+      btnStartGameModal.setAttribute('title', 'Stop or Reset Game');
+      btnStartGameModal.classList.remove('is-disabled');
+      btnStartGameModal.classList.add('btn-mode-reset');
     }
   }
 }
