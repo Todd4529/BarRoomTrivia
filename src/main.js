@@ -2218,6 +2218,7 @@ function handleIncomingQuestionStart(rawPayload) {
   const playerQElem = document.getElementById('player-question-text');
   const isUiWaiting = !playerQElem ||
     playerQElem.textContent.includes('Waiting for next question') ||
+    playerQElem.textContent.toLowerCase().includes('waiting for host') ||
     playerQElem.textContent.includes('Get ready') ||
     playerQElem.textContent.includes('STARTING IN') ||
     playerQElem.textContent.includes('NEXT ROUND') ||
@@ -2416,7 +2417,8 @@ function handleRealtimeIncomingEvent(event, data) {
       next_round_starts_at_epoch_ms: startsAtEpoch,
       roundNumber: completedR,
       completedRound: completedR,
-      nextRound: nextR
+      nextRound: nextR,
+      game_play_mode: payload?.game_play_mode || hostGamePlayMode
     });
   } else if (normEvent === 'game_paused') {
     onGamePaused(payload);
@@ -2509,6 +2511,7 @@ function handleRealtimeIncomingEvent(event, data) {
           duration_seconds: rem,
           starts_at_epoch_ms: hostTargetEpochMs,
           next_round_starts_at_epoch_ms: hostTargetEpochMs,
+          game_play_mode: hostGamePlayMode,
           room_code: currentRoomCode
         });
       }
@@ -5224,7 +5227,20 @@ function displayAdSlide(index) {
   const img = document.getElementById('tv-ad-slide-img');
   const backdrop = document.getElementById('tv-ad-slide-backdrop');
   const counterText = document.getElementById('tv-ad-slide-counter-text');
+  const qrCorner = document.getElementById('tv-ad-qr-corner');
   const slideUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
+
+  // Hide the floating 'Scan to Play' QR code on custom uploaded ads; show it only on official built-in ads
+  const isCustomSlide = Boolean(slide && !slide.isSystemPermanent && slide.type !== 'system' && !String(slide.id || '').startsWith(OFFICIAL_SYSTEM_AD_ID));
+  if (qrCorner) {
+    if (isCustomSlide) {
+      qrCorner.classList.add('hidden');
+      qrCorner.style.setProperty('display', 'none', 'important');
+    } else {
+      qrCorner.classList.remove('hidden');
+      qrCorner.style.removeProperty('display');
+    }
+  }
 
   if (backdrop && slideUrl) {
     backdrop.style.backgroundImage = `url("${slideUrl}")`;
@@ -6203,7 +6219,9 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       duration_seconds: interRoundSecs,
       starts_at_epoch_ms: hostTargetEpochMs,
       next_round_starts_at_epoch_ms: hostTargetEpochMs,
+      game_play_mode: hostGamePlayMode,
     });
+    winnerPayload.game_play_mode = hostGamePlayMode;
     onRoundWinner(winnerPayload);
     updateHostManualDock();
 
@@ -7174,8 +7192,21 @@ function updateTimerUI() {
 
 let playerReviewInterval = null;
 
-function startPlayerReviewCountdown(seconds, targetEpochMs, isLastQ = false) {
+function startPlayerReviewCountdown(seconds, targetEpochMs, isLastQ = false, isManual = false) {
   clearInterval(playerReviewInterval);
+  const isManualModeActive = Boolean(isManual || hostGamePlayMode === 'Manual');
+
+  if (isManualModeActive) {
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    if (playerStatusBadge) {
+      playerStatusBadge.className = 'status-badge status-active';
+      playerStatusBadge.innerHTML = isLastQ
+        ? `<span id="status-icon">🎙️</span> <span id="status-text">WAITING FOR HOST FOR ROUND RESULTS...</span>`
+        : `<span id="status-icon">🎙️</span> <span id="status-text">WAITING FOR HOST FOR NEXT QUESTION...</span>`;
+    }
+    return;
+  }
+
   const targetEpoch = targetEpochMs || (Date.now() + (seconds * 1000));
 
   const updateBadge = () => {
@@ -7299,7 +7330,8 @@ function onTimerExpired(payload) {
     hostTimerSecs.textContent = `${reviewSeconds}s`;
   }
 
-  startPlayerReviewCountdown(reviewSeconds, nextEpoch, isLastQ);
+  const isManualModeActive = (hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
+  startPlayerReviewCountdown(reviewSeconds, nextEpoch, isLastQ, isManualModeActive);
 
   answerBtns.forEach(btn => {
     btn.disabled = true;
@@ -7353,7 +7385,6 @@ function onTimerExpired(payload) {
     }
   }
 
-  const isManualModeActive = (hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
   const totalReviewDuration = isLastQ ? 20.0 : 15.0;
 
   if (tvNextQBanner) {
@@ -7473,14 +7504,14 @@ function onTimerExpired(payload) {
       } catch (_) {}
 
       const randomQuote = getRandomItem(funnyCorrectQuotes);
-      showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ);
+      showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ, isManualModeActive);
       confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
     } else {
       if (currentPlayer) {
         currentPlayer.streak = 0;
       }
       const randomQuote = getRandomItem(funnyWrongQuotes);
-      showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ);
+      showResultModal(false, "0 PTS", correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ, isManualModeActive);
     }
 
     // Do NOT set playerChoiceSubmitted = null here! Keep choice locked in during review phase.
@@ -7492,7 +7523,7 @@ function getRandomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 15, targetEpochMs = null, isLastQ = false) {
+function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, countdownSeconds = 15, targetEpochMs = null, isLastQ = false, isManual = false) {
   const overlay = document.getElementById('result-modal-overlay');
   const card = document.getElementById('result-modal-box');
   const icon = document.getElementById('result-modal-icon');
@@ -7503,6 +7534,8 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
   const modalTimerVal = document.getElementById('modal-next-q-timer');
 
   if (!overlay || !card) return;
+
+  const isManualModeActive = Boolean(isManual || hostGamePlayMode === 'Manual');
 
   document.body.classList.add('result-modal-open');
 
@@ -7531,62 +7564,76 @@ function showResultModal(isCorrect, pointsText, correctTextStr, funnyQuote, coun
 
   const pill = document.querySelector('.next-q-countdown-pill');
   if (pill) {
-    if (isLastQ) {
+    if (isManualModeActive) {
+      pill.innerHTML = isLastQ
+        ? `🎙️ Waiting for host for round results...`
+        : `🎙️ Waiting for host for next question...`;
+    } else if (isLastQ) {
       pill.innerHTML = `⏱️ Round Results in <strong id="modal-next-q-timer">${countdownSeconds}</strong>s...`;
     } else {
       pill.innerHTML = `⏳ Next Question in <strong id="modal-next-q-timer">${countdownSeconds}</strong>s...`;
     }
   }
 
-  const now = Date.now();
-  let targetEpoch = targetEpochMs;
-  if (!targetEpoch || (targetEpoch - now) <= 5000) {
-    targetEpoch = now + Math.max(10, Math.round(countdownSeconds * 1000));
-  }
-
-  const updateModalCountdown = () => {
-    const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
-    const activeTimer = document.getElementById('modal-next-q-timer');
-    if (activeTimer) activeTimer.textContent = rem;
-    if (rem <= (isLastQ ? 0 : 5)) {
-      clearInterval(modalCountdownInterval);
+  if (isManualModeActive) {
+    clearInterval(modalCountdownInterval);
+    // After 6 seconds, transition smoothly to the dedicated waiting screen
+    modalCountdownInterval = setTimeout(() => {
       hideResultModal();
       if (!isLastQ) {
-        showInterQuestionCountdown(targetEpoch);
+        showInterQuestionCountdown(null, true);
       }
+    }, 6000);
+  } else {
+    const now = Date.now();
+    let targetEpoch = targetEpochMs;
+    if (!targetEpoch || (targetEpoch - now) <= 5000) {
+      targetEpoch = now + Math.max(10, Math.round(countdownSeconds * 1000));
     }
-  };
 
-  updateModalCountdown();
-  clearInterval(modalCountdownInterval);
-  modalCountdownInterval = setInterval(updateModalCountdown, 500);
+    const updateModalCountdown = () => {
+      const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
+      const activeTimer = document.getElementById('modal-next-q-timer');
+      if (activeTimer) activeTimer.textContent = rem;
+      if (rem <= (isLastQ ? 0 : 5)) {
+        clearInterval(modalCountdownInterval);
+        hideResultModal();
+        if (!isLastQ) {
+          showInterQuestionCountdown(targetEpoch, false);
+        }
+      }
+    };
+
+    updateModalCountdown();
+    clearInterval(modalCountdownInterval);
+    modalCountdownInterval = setInterval(updateModalCountdown, 500);
+  }
 
   overlay.classList.remove('hidden');
   // Tap-to-dismiss transitions to dedicated countdown screen (or hides if round ending)
   overlay.onclick = () => {
     clearInterval(modalCountdownInterval);
+    clearTimeout(modalCountdownInterval);
     hideResultModal();
     if (!isLastQ) {
-      showInterQuestionCountdown(targetEpoch);
+      showInterQuestionCountdown(targetEpochMs, isManualModeActive);
     }
   };
 }
 
 let playerInterQuestionInterval = null;
 
-function showInterQuestionCountdown(targetEpochMs) {
+function showInterQuestionCountdown(targetEpochMs, isManual = false) {
   hideResultModal();
   clearInterval(playerInterQuestionInterval);
 
-  const now = Date.now();
-  let targetEpoch = targetEpochMs;
-  if (!targetEpoch || (targetEpoch - now) <= 0) {
-    targetEpoch = now + 5000;
-  }
+  const isManualModeActive = Boolean(isManual || hostGamePlayMode === 'Manual');
 
   const interQScreen = document.getElementById('player-inter-question-screen');
   const timerVal = document.getElementById('player-inter-q-timer');
   const subtextVal = document.getElementById('player-inter-q-subtext');
+  const iconEl = interQScreen?.querySelector('.inter-q-icon');
+  const labelEl = interQScreen?.querySelector('.inter-q-label');
   const qCard = document.querySelector('.player-question-card');
   const btnGrid = document.querySelector('.button-grid-2x2');
 
@@ -7604,15 +7651,41 @@ function showInterQuestionCountdown(targetEpochMs) {
     interQScreen.style.display = 'flex';
   }
 
+  const qNumInRound = ((currentQuestionIndex % 10) + 1);
+  const nextQNum = qNumInRound < 10 ? qNumInRound + 1 : 1;
+  const isLastQ = qNumInRound >= 10;
+
+  if (isManualModeActive) {
+    if (iconEl) iconEl.textContent = '🎙️';
+    if (labelEl) labelEl.textContent = 'WAITING FOR HOST';
+    if (timerVal) {
+      timerVal.classList.add('is-manual');
+      timerVal.textContent = isLastQ ? 'ROUND RESULTS SOON' : 'NEXT QUESTION SOON';
+    }
+    if (subtextVal) {
+      subtextVal.textContent = isLastQ
+        ? `Round ${currentRound} Complete • Host will reveal round results shortly`
+        : `Round ${currentRound} • Waiting for host for Question ${nextQNum} of 10...`;
+    }
+    return;
+  }
+
+  if (iconEl) iconEl.textContent = '⏱️';
+  if (labelEl) labelEl.textContent = 'NEXT QUESTION IN';
+  if (timerVal) timerVal.classList.remove('is-manual');
+
+  const now = Date.now();
+  let targetEpoch = targetEpochMs;
+  if (!targetEpoch || (targetEpoch - now) <= 0) {
+    targetEpoch = now + 5000;
+  }
+
   const updateCountdown = () => {
     const rem = Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000));
     if (timerVal) {
       timerVal.textContent = rem > 0 ? `${rem} SECS` : '0 SECS';
     }
     if (subtextVal) {
-      const qNumInRound = ((currentQuestionIndex % 10) + 1);
-      const nextQNum = qNumInRound < 10 ? qNumInRound + 1 : 1;
-      const isLastQ = qNumInRound >= 10;
       subtextVal.textContent = rem > 0 
         ? (isLastQ 
             ? `Round ${currentRound} Final Question Complete • Preparing Results...` 
@@ -7639,8 +7712,14 @@ function showInterQuestionCountdown(targetEpochMs) {
 function hideInterQuestionCountdown() {
   clearInterval(playerInterQuestionInterval);
   const interQScreen = document.getElementById('player-inter-question-screen');
+  const timerVal = document.getElementById('player-inter-q-timer');
+  const labelEl = interQScreen?.querySelector('.inter-q-label');
+  const iconEl = interQScreen?.querySelector('.inter-q-icon');
   const qCard = document.querySelector('.player-question-card');
   const btnGrid = document.querySelector('.button-grid-2x2');
+  if (timerVal) timerVal.classList.remove('is-manual');
+  if (iconEl) iconEl.textContent = '⏱️';
+  if (labelEl) labelEl.textContent = 'NEXT QUESTION IN';
   if (interQScreen) {
     interQScreen.classList.add('hidden');
     interQScreen.style.display = 'none';
@@ -7874,27 +7953,75 @@ function onRoundWinner(payload) {
     return `${secs} SECONDS`;
   };
 
+  const isManualModeActive = Boolean(hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
+
   if (tvNextRoundTimer) tvNextRoundTimer.textContent = formatIntermissionBadgeText(remWinnerSecs);
-  if (playerWinnerTimer) playerWinnerTimer.textContent = formatRoundTimer(remWinnerSecs);
+  if (playerWinnerTimer) {
+    playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : formatRoundTimer(remWinnerSecs);
+  }
+
+  const winnerCountdownBox = document.querySelector('.next-round-countdown-box');
+  if (winnerCountdownBox) {
+    if (isManualModeActive) {
+      winnerCountdownBox.innerHTML = `
+        <div style="font-size: 13px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1.5px; text-transform: uppercase;">
+          🎙️ WAITING FOR HOST
+        </div>
+        <div style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1px; margin-top: 6px;">
+          ROUND ${nextR} STARTING SOON
+        </div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px; font-weight: 600;">
+          Your live host will launch the next round
+        </div>
+      `;
+    } else {
+      winnerCountdownBox.innerHTML = `
+        <div style="font-size: 13px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1.5px; text-transform: uppercase;">
+          NEXT ROUND STARTING IN.....
+        </div>
+        <div style="font-size: 34px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
+          <span id="player-winner-next-round-timer">${formatRoundTimer(remWinnerSecs)}</span>
+        </div>
+      `;
+    }
+  }
 
   // Also display NEXT ROUND STARTING IN..... directly on the player question card
   const playerQuestionText = document.getElementById('player-question-text');
   const playerCategoryPill = document.getElementById('player-category-pill');
   const statusText = document.getElementById('status-text');
+  const playerStatusBadge = document.getElementById('player-status-badge');
+
   if (playerQuestionText) {
-    playerQuestionText.innerHTML = `
-      <div style="text-align:center; padding: 12px 0;">
-        <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">ROUND ${nextR} STARTING IN.....</div>
-        <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">${formatIntermissionBadgeText(remWinnerSecs)}</div>
-        <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Get Ready for Round ${nextR}!</div>
-      </div>
-    `;
+    if (isManualModeActive) {
+      playerQuestionText.innerHTML = `
+        <div style="text-align:center; padding: 12px 0;">
+          <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">🎙️ WAITING FOR HOST</div>
+          <div style="font-size:26px; font-weight:900; color:#fff; letter-spacing:1px;" id="player-card-round-timer">ROUND ${nextR} STARTING SOON</div>
+          <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Host will launch Round ${nextR} shortly</div>
+        </div>
+      `;
+    } else {
+      playerQuestionText.innerHTML = `
+        <div style="text-align:center; padding: 12px 0;">
+          <div style="font-size:13px; font-weight:900; color:var(--accent-yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">ROUND ${nextR} STARTING IN.....</div>
+          <div style="font-size:42px; font-weight:900; color:#fff; letter-spacing:2px;" id="player-card-round-timer">${formatIntermissionBadgeText(remWinnerSecs)}</div>
+          <div style="font-size:13px; color:rgba(255,255,255,0.7); margin-top:8px; font-weight:600;">Round ${completedR} Complete • Get Ready for Round ${nextR}!</div>
+        </div>
+      `;
+    }
   }
   if (playerCategoryPill) {
     playerCategoryPill.textContent = `ROUND ${completedR} COMPLETE`;
   }
   if (statusText) {
-    statusText.textContent = 'INTERMISSION';
+    statusText.textContent = isManualModeActive ? 'WAITING FOR HOST' : 'INTERMISSION';
+  }
+  if (playerStatusBadge) {
+    playerStatusBadge.className = 'status-badge status-active';
+    playerStatusBadge.innerHTML = isManualModeActive
+      ? `<span id="status-icon">🎙️</span> <span id="status-text">WAITING FOR HOST FOR ROUND ${nextR}...</span>`
+      : `<span id="status-icon">🏆</span> <span id="status-text">ROUND INTERMISSION</span>`;
   }
 
   currentQuestionData = null;
@@ -7916,9 +8043,11 @@ function onRoundWinner(payload) {
     const roundTimerText = formatRoundTimer(currentSecs);
 
     if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
-    if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
-    const cardTimer = document.getElementById('player-card-round-timer');
-    if (cardTimer) cardTimer.textContent = badgeText;
+    if (!isManualModeActive) {
+      if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
+      const cardTimer = document.getElementById('player-card-round-timer');
+      if (cardTimer) cardTimer.textContent = badgeText;
+    }
 
     // Actively display the countdown timer on the TV promo bottom banner and ad signage
     const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
@@ -7940,19 +8069,23 @@ function onRoundWinner(payload) {
         currentGameState = 'COUNTDOWN';
       }
       if (tvNextRoundTimer) tvNextRoundTimer.textContent = 'STARTING NOW';
-      if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
-      if (cardTimer) cardTimer.textContent = 'STARTING NOW';
+      if (!isManualModeActive) {
+        if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
+        if (cardTimer) cardTimer.textContent = 'STARTING NOW';
+      }
       if (promoFluctuating) promoFluctuating.textContent = 'STARTING NEXT ROUND...';
       if (tvAdTimer) tvAdTimer.textContent = 'STARTING NOW';
 
-      // Immediately request state sync from host / TV display
-      broadcastRealtimeEvent('request_state_sync', {
-        room_code: currentRoomCode,
-        client: 'player',
-        timestamp: Date.now()
-      });
-      if (typeof triggerActiveSessionSync === 'function') {
-        triggerActiveSessionSync();
+      if (!isManualModeActive) {
+        // Immediately request state sync from host / TV display
+        broadcastRealtimeEvent('request_state_sync', {
+          room_code: currentRoomCode,
+          client: 'player',
+          timestamp: Date.now()
+        });
+        if (typeof triggerActiveSessionSync === 'function') {
+          triggerActiveSessionSync();
+        }
       }
     }
   }, 1000);
@@ -8246,6 +8379,7 @@ function initPlayerControls() {
               const playerQElem = document.getElementById('player-question-text');
               const isUiWaiting = !playerQElem ||
                 playerQElem.textContent.includes('Waiting for next question') ||
+                playerQElem.textContent.toLowerCase().includes('waiting for host') ||
                 playerQElem.textContent.includes('Get ready') ||
                 playerQElem.textContent.includes('STARTING IN') ||
                 playerQElem.textContent.includes('NEXT ROUND') ||

@@ -4252,11 +4252,16 @@ body.auth-mode .main-container {
   border: 2px solid var(--accent-cyan);
   border-radius: 18px;
   padding: 8px 14px;
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(0, 229, 255, 0.3);
   backdrop-filter: blur(8px);
+  transition: opacity 0.2s ease;
+}
+
+.tv-ad-qr-corner.hidden {
+  display: none !important;
 }
 
 .tv-ad-qr-frame {
@@ -4477,6 +4482,12 @@ body.auth-mode .main-container {
   letter-spacing: 1.5px;
   margin-bottom: 12px;
   text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+}
+
+.inter-q-timer-val.is-manual {
+  font-size: clamp(20px, 5.5vw, 26px);
+  letter-spacing: 1px;
+  line-height: 1.25;
 }
 
 .inter-q-subtext {
