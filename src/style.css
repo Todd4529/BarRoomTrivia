@@ -343,14 +343,23 @@ body[data-view="tv"] .tv-viewport {
   position: relative;
 }
 
-/* TOP HEADER: PERFECTLY CENTERED BEER ICON & BAR ROOMSS TRIVIA ONLY */
+/* TOP HEADER: PERFECTLY CENTERED LOGO & BAR ROOMS TRIVIA */
 .tv-header-centered {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   width: 100%;
   padding-bottom: 12px;
   position: relative;
+  min-height: 48px;
+}
+
+.tv-back-btn {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
 }
 
 .tv-mode-toggle {
@@ -484,7 +493,7 @@ body[data-view="tv"] .tv-viewport {
   justify-content: center;
   gap: 16px;
   font-family: var(--font-heading);
-  font-size: 34px;
+  font-size: 24px;
   font-weight: 900;
   letter-spacing: 2px;
 }
