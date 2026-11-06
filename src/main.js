@@ -8271,6 +8271,9 @@ function hideResultModal() {
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 let interRoundTargetEpochMs = 0;
 let activeInterRoundCompletedNum = 0;
+let isTop3CelebrationActive = false;
+let top3CelebrationEpochMs = 0;
+let hasTop3CelebrationCompletedForRound = 0;
 
 function onRoundWinner(payload) {
   clearPauseAdTimeout();
@@ -8321,12 +8324,27 @@ function onRoundWinner(payload) {
     top3 = payload.top_3_winners;
   } else if (Array.isArray(payload?.top3_winners) && payload.top3_winners.length > 0) {
     top3 = payload.top3_winners;
-  } else {
+  } else if (Array.isArray(playersLeaderboard) && playersLeaderboard.length > 0) {
     top3 = playersLeaderboard.slice(0, 3);
   }
 
   // Filter out any fictitious players, strictly preserving all real players even with score 0
   top3 = top3.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname));
+
+  // If top3 is empty after filtering payload, fallback to sorting and filtering playersLeaderboard
+  if (top3.length === 0 && Array.isArray(playersLeaderboard) && playersLeaderboard.length > 0) {
+    const sorted = [...playersLeaderboard].sort((a, b) => (Number(b.score ?? b.cumulative_score ?? 0)) - (Number(a.score ?? a.cumulative_score ?? 0)));
+    top3 = sorted.filter(p => p && p.nickname && !isFictitiousPlayer(p.nickname)).slice(0, 3);
+  }
+
+  // If still empty and currentPlayer is in the game, include currentPlayer
+  if (top3.length === 0 && currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+    top3 = [{
+      nickname: currentPlayer.nickname,
+      score: Number(currentPlayer.score || 0),
+      cumulative_score: Number(currentPlayer.score || 0)
+    }];
+  }
 
   const tvWinnerOverlay = document.getElementById('tv-winner-modal-overlay');
   const playerWinnerOverlay = document.getElementById('player-winner-modal-overlay');
@@ -8334,12 +8352,15 @@ function onRoundWinner(payload) {
   const tvPodium1 = document.getElementById('tv-podium-1');
   const tvPodium2 = document.getElementById('tv-podium-2');
   const tvPodium3 = document.getElementById('tv-podium-3');
+  const tvPodiumEmpty = document.getElementById('tv-podium-empty');
 
   const playerPodium1 = document.getElementById('player-podium-1');
   const playerPodium2 = document.getElementById('player-podium-2');
   const playerPodium3 = document.getElementById('player-podium-3');
 
   if (top3.length > 0) {
+    if (tvPodiumEmpty) tvPodiumEmpty.style.display = 'none';
+
     const winner1 = top3[0];
     const winner2 = top3[1];
     const winner3 = top3[2];
@@ -8351,9 +8372,11 @@ function onRoundWinner(payload) {
     const tvW3Name = document.getElementById('tv-w3-name');
     const tvW3Score = document.getElementById('tv-w3-score');
 
-    if (tvPodium1) tvPodium1.style.display = 'flex';
-    if (tvW1Name) tvW1Name.textContent = (winner1.nickname || '').toUpperCase();
-    if (tvW1Score) tvW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
+    if (tvPodium1) {
+      tvPodium1.style.display = 'flex';
+      if (tvW1Name) tvW1Name.textContent = (winner1.nickname || '').toUpperCase();
+      if (tvW1Score) tvW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
+    }
 
     if (tvPodium2) {
       if (winner2) {
@@ -8382,9 +8405,11 @@ function onRoundWinner(payload) {
     const pW3Name = document.getElementById('player-w3-name');
     const pW3Score = document.getElementById('player-w3-score');
 
-    if (playerPodium1) playerPodium1.style.display = 'flex';
-    if (pW1Name) pW1Name.textContent = (winner1.nickname || '').toUpperCase();
-    if (pW1Score) pW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
+    if (playerPodium1) {
+      playerPodium1.style.display = 'flex';
+      if (pW1Name) pW1Name.textContent = (winner1.nickname || '').toUpperCase();
+      if (pW1Score) pW1Score.textContent = `${Number(winner1.score ?? winner1.cumulative_score ?? 0)} PTS`;
+    }
 
     if (playerPodium2) {
       if (winner2) {
@@ -8405,19 +8430,18 @@ function onRoundWinner(payload) {
         playerPodium3.style.display = 'none';
       }
     }
-  }
 
-  if (top3.length > 0 && currentPlayer && currentPlayer.nickname) {
-    const myWinner = top3.find(w => w && w.nickname && w.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
-    if (myWinner) {
-      const topScore = Math.max(Number(currentPlayer.score || 0), Number(myWinner.score ?? myWinner.cumulative_score ?? 0));
-      currentPlayer.score = topScore;
-      const scoreVal = document.getElementById('player-score-val');
-      if (scoreVal) scoreVal.textContent = topScore;
+    if (currentPlayer && currentPlayer.nickname) {
+      const myWinner = top3.find(w => w && w.nickname && w.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
+      if (myWinner) {
+        const topScore = Math.max(Number(currentPlayer.score || 0), Number(myWinner.score ?? myWinner.cumulative_score ?? 0));
+        currentPlayer.score = topScore;
+        const scoreVal = document.getElementById('player-score-val');
+        if (scoreVal) scoreVal.textContent = topScore;
+      }
     }
   } else {
     // If no players are registered yet, show placeholder rather than showing fictitious names
-    const tvPodiumEmpty = document.getElementById('tv-podium-empty');
     if (tvPodiumEmpty) tvPodiumEmpty.style.display = 'block';
     if (tvPodium1) tvPodium1.style.display = 'none';
     if (tvPodium2) tvPodium2.style.display = 'none';
@@ -8427,113 +8451,34 @@ function onRoundWinner(payload) {
     if (playerPodium3) playerPodium3.style.display = 'none';
   }
 
-  const tvPodiumEmpty = document.getElementById('tv-podium-empty');
-  if (top3.length > 0 && tvPodiumEmpty) {
-    tvPodiumEmpty.style.display = 'none';
-  }
-
   const tvNextRoundTimer = document.getElementById('tv-winner-next-round-timer');
   const playerWinnerTimer = document.getElementById('player-winner-next-round-timer') || document.getElementById('player-winner-next-timer');
-
-  if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
-  if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
-
-  const wasAlreadyInSummaryForRound = (currentGameState === 'ROUND_SUMMARY' && activeInterRoundCompletedNum === completedR);
-  currentGameState = 'ROUND_SUMMARY';
-  activeInterRoundCompletedNum = completedR;
-
-  let remWinnerSecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 120);
-  let targetEpoch = payload?.starts_at_epoch_ms || payload?.next_round_starts_at_epoch_ms;
-  if (!targetEpoch && payload?.starts_at) {
-    const parsed = typeof payload.starts_at === 'string' ? Date.parse(payload.starts_at) : Number(payload.starts_at);
-    if (!isNaN(parsed)) targetEpoch = parsed;
-  }
-  if (!targetEpoch && payload?.timer_ends_at) {
-    const parsed = typeof payload.timer_ends_at === 'string' ? Date.parse(payload.timer_ends_at) : Number(payload.timer_ends_at);
-    if (!isNaN(parsed)) targetEpoch = parsed;
-  }
-  if (targetEpoch && targetEpoch > Date.now()) {
-    interRoundTargetEpochMs = targetEpoch;
-  } else if (wasAlreadyInSummaryForRound && interRoundTargetEpochMs > Date.now()) {
-    targetEpoch = interRoundTargetEpochMs;
-  } else if (remWinnerSecs > 0) {
-    targetEpoch = Date.now() + remWinnerSecs * 1000;
-    interRoundTargetEpochMs = targetEpoch;
-  }
-  if (interRoundTargetEpochMs > Date.now()) {
-    const diff = Math.ceil((interRoundTargetEpochMs - Date.now()) / 1000);
-    if (diff > 0) {
-      remWinnerSecs = diff;
-    }
-  }
+  const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
 
   const isManualModeActive = Boolean(hostGamePlayMode === 'Manual' || payload?.game_play_mode === 'Manual');
 
-  // Dismiss Top 3 Winners overlay on TV after exactly 20 seconds so ad signage is displayed for remainder of intermission
-  if (!wasAlreadyInSummaryForRound || !isTop3CelebrationActive) {
-    isTop3CelebrationActive = true;
-    top3CelebrationEpochMs = Date.now() + 30000;
-    clearTimeout(tvWinnerOverlayTimeout);
-    tvWinnerOverlayTimeout = setTimeout(() => {
-      isTop3CelebrationActive = false;
-      top3CelebrationEpochMs = 0;
-      if (tvWinnerOverlay) {
-        tvWinnerOverlay.classList.add('hidden');
-      }
-      if (playerWinnerOverlay) {
-        playerWinnerOverlay.classList.add('hidden');
-      }
-      syncTvSignageDisplay(true);
-      const hostStageBadge = document.getElementById('host-stage-badge');
-      const hostStageQCounter = document.getElementById('host-stage-q-counter');
-      if (hostStageBadge && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
-        hostStageBadge.textContent = '📺 SPONSOR ADS RUNNING';
-      }
-      if (hostStageQCounter && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
-        hostStageQCounter.textContent = `Sponsor ads displaying on TV. Tap Next Round to launch Round ${nextR}.`;
-      }
-      updateHostManualModalUI();
-    }, 30000);
-  }
-
-  syncTvSignageDisplay();
-
-  const formatRoundTimer = (s) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const formatIntermissionBadgeText = (s) => {
-    if (s <= 0) return 'STARTING NOW';
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    if (mins >= 1 && secs === 0) {
-      return `${mins} MINUTE${mins > 1 ? 'S' : ''}`;
-    }
-    if (mins >= 1) {
-      return `${mins} MIN ${secs} SEC`;
-    }
-    return `${secs} SECONDS`;
-  };
-
-  // Static intermission duration text for top 3 display (no countdown during 30s celebration)
+  // Compute static intermission duration text
   const staticInterRoundSecs = Number(payload?.delaySeconds || payload?.delay_seconds || payload?.duration_seconds || selectedInterRoundDuration || 120);
   const staticMins = Math.max(1, Math.round(staticInterRoundSecs / 60));
   const staticTimeText = staticInterRoundSecs < 60
     ? `${staticInterRoundSecs} SECONDS`
     : `${staticMins} MINUTE${staticMins > 1 ? 'S' : ''}`;
 
-  const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
+  // Reset player sticker card timer so it doesn't show old question numbers
+  const playerTimerVal = document.getElementById('player-timer-val');
+  if (playerTimerVal) {
+    playerTimerVal.textContent = '—';
+  }
+
+  // STATIC TIME DISPLAY UNDER TOP 3 LEADERBOARD (NO COUNTDOWN TIMER)
   if (isManualModeActive) {
     if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '🎙️ WAITING FOR HOST';
     if (tvNextRoundTimer) tvNextRoundTimer.textContent = `ROUND ${nextR} STARTING SOON`;
+    if (playerWinnerTimer) playerWinnerTimer.textContent = 'WAIT';
   } else {
     if (tvWinnerTimerLabel) tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND';
     if (tvNextRoundTimer) tvNextRoundTimer.textContent = `WILL START IN ${staticTimeText}`;
-  }
-  if (playerWinnerTimer) {
-    playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : staticTimeText;
+    if (playerWinnerTimer) playerWinnerTimer.textContent = staticTimeText;
   }
 
   const winnerCountdownBox = document.querySelector('.next-round-countdown-box');
@@ -8562,7 +8507,7 @@ function onRoundWinner(payload) {
     }
   }
 
-  // Also display NEXT ROUND STARTING IN..... directly on the player question card
+  // Display static intermission duration on player question card
   const playerQuestionText = document.getElementById('player-question-text');
   const playerCategoryPill = document.getElementById('player-category-pill');
   const statusText = document.getElementById('status-text');
@@ -8597,7 +8542,63 @@ function onRoundWinner(payload) {
     playerStatusBadge.className = 'status-badge status-active';
     playerStatusBadge.innerHTML = isManualModeActive
       ? `<span id="status-icon">🎙️</span> <span id="status-text">WAITING FOR HOST FOR ROUND ${nextR}...</span>`
-      : `<span id="status-icon">🏆</span> <span id="status-text">ROUND INTERMISSION</span>`;
+      : `<span id="status-icon">🏆</span> <span id="status-text">ROUND INTERMISSION • NEXT IN ${staticTimeText}</span>`;
+  }
+
+  currentGameState = 'ROUND_SUMMARY';
+  activeInterRoundCompletedNum = completedR;
+
+  let remWinnerSecs = staticInterRoundSecs;
+  let targetEpoch = payload?.starts_at_epoch_ms || payload?.next_round_starts_at_epoch_ms;
+  if (!targetEpoch && payload?.starts_at) {
+    const parsed = typeof payload.starts_at === 'string' ? Date.parse(payload.starts_at) : Number(payload.starts_at);
+    if (!isNaN(parsed)) targetEpoch = parsed;
+  }
+  if (!targetEpoch && payload?.timer_ends_at) {
+    const parsed = typeof payload.timer_ends_at === 'string' ? Date.parse(payload.timer_ends_at) : Number(payload.timer_ends_at);
+    if (!isNaN(parsed)) targetEpoch = parsed;
+  }
+  if (targetEpoch && targetEpoch > Date.now()) {
+    interRoundTargetEpochMs = targetEpoch;
+  } else if (remWinnerSecs > 0) {
+    interRoundTargetEpochMs = Date.now() + remWinnerSecs * 1000;
+  }
+
+  // 30-SECOND TOP 3 CELEBRATION, THEN AUTOMATICALLY GO TO AD SLIDES
+  const alreadyCompletedForThisRound = (hasTop3CelebrationCompletedForRound === completedR);
+
+  if (!alreadyCompletedForThisRound) {
+    if (tvWinnerOverlay) tvWinnerOverlay.classList.remove('hidden');
+    if (playerWinnerOverlay) playerWinnerOverlay.classList.remove('hidden');
+
+    if (!isTop3CelebrationActive || top3CelebrationEpochMs <= Date.now()) {
+      isTop3CelebrationActive = true;
+      top3CelebrationEpochMs = Date.now() + 30000;
+      clearTimeout(tvWinnerOverlayTimeout);
+      tvWinnerOverlayTimeout = setTimeout(() => {
+        isTop3CelebrationActive = false;
+        top3CelebrationEpochMs = 0;
+        hasTop3CelebrationCompletedForRound = completedR;
+        if (tvWinnerOverlay) tvWinnerOverlay.classList.add('hidden');
+        if (playerWinnerOverlay) playerWinnerOverlay.classList.add('hidden');
+        syncTvSignageDisplay(true);
+
+        const hostStageBadge = document.getElementById('host-stage-badge');
+        const hostStageQCounter = document.getElementById('host-stage-q-counter');
+        if (hostStageBadge && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
+          hostStageBadge.textContent = '📺 SPONSOR ADS RUNNING';
+        }
+        if (hostStageQCounter && (hostEngineState === 'ROUND_SUMMARY' || currentGameState === 'ROUND_SUMMARY')) {
+          hostStageQCounter.textContent = `Sponsor ads displaying on TV. Round ${nextR} will start in ${staticTimeText}.`;
+        }
+        updateHostManualModalUI();
+      }, 30000);
+    }
+  } else {
+    // 30s celebration already finished: ensure overlays stay hidden and sponsor ads continue
+    if (tvWinnerOverlay) tvWinnerOverlay.classList.add('hidden');
+    if (playerWinnerOverlay) playerWinnerOverlay.classList.add('hidden');
+    syncTvSignageDisplay(true);
   }
 
   currentQuestionData = null;
@@ -8612,69 +8613,50 @@ function onRoundWinner(payload) {
     btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
   });
 
+  // NO COUNTDOWN TICKING UNDER TOP 3 OR INTERMISSION BANNERS
   clearInterval(winnerCountdownInterval);
   winnerCountdownInterval = setInterval(() => {
     const nowMs = Date.now();
-    const isShowingTop3 = isTop3CelebrationActive && (nowMs < top3CelebrationEpochMs);
     const currentSecs = interRoundTargetEpochMs ? Math.max(0, Math.ceil((interRoundTargetEpochMs - nowMs) / 1000)) : Math.max(0, --remWinnerSecs);
-    const badgeText = formatIntermissionBadgeText(currentSecs);
-    const roundTimerText = formatRoundTimer(currentSecs);
 
-    if (isShowingTop3) {
-      // STATIC TIME DISPLAY DURING 30-SECOND TOP 3 CELEBRATION (NO COUNTDOWN)
-      const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
-      if (tvWinnerTimerLabel) {
-        tvWinnerTimerLabel.textContent = isManualModeActive ? '🎙️ WAITING FOR HOST' : '⏱️ NEXT ROUND';
-      }
-      if (tvNextRoundTimer) {
-        tvNextRoundTimer.textContent = isManualModeActive 
-          ? `ROUND ${nextR} STARTING SOON` 
-          : `WILL START IN ${staticTimeText}`;
-      }
-      if (playerWinnerTimer) {
-        playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : staticTimeText;
-      }
-      const cardTimer = document.getElementById('player-card-round-timer');
-      if (cardTimer) {
-        cardTimer.textContent = isManualModeActive ? `ROUND ${nextR} STARTING SOON` : `WILL START IN ${staticTimeText}`;
-      }
-    } else {
-      const tvWinnerTimerLabel = document.getElementById('tv-winner-timer-label') || document.querySelector('.tv-next-round-timer-box span');
-      if (tvWinnerTimerLabel) {
-        tvWinnerTimerLabel.textContent = '⏱️ NEXT ROUND IN';
-      }
-      if (tvNextRoundTimer) tvNextRoundTimer.textContent = badgeText;
-
-      if (!isManualModeActive) {
-        if (playerWinnerTimer) playerWinnerTimer.textContent = roundTimerText;
-        const cardTimer = document.getElementById('player-card-round-timer');
-        if (cardTimer) cardTimer.textContent = badgeText;
-      }
+    // Keep top 3 next round timer labels strictly static (no countdown)
+    if (tvWinnerTimerLabel) {
+      tvWinnerTimerLabel.textContent = isManualModeActive ? '🎙️ WAITING FOR HOST' : '⏱️ NEXT ROUND';
+    }
+    if (tvNextRoundTimer) {
+      tvNextRoundTimer.textContent = isManualModeActive 
+        ? `ROUND ${nextR} STARTING SOON` 
+        : `WILL START IN ${staticTimeText}`;
+    }
+    if (playerWinnerTimer) {
+      playerWinnerTimer.textContent = isManualModeActive ? 'WAIT' : staticTimeText;
+    }
+    const cardTimer = document.getElementById('player-card-round-timer');
+    if (cardTimer) {
+      cardTimer.textContent = isManualModeActive ? `ROUND ${nextR} STARTING SOON` : `WILL START IN ${staticTimeText}`;
     }
 
-    // Actively display the countdown timer on the TV promo bottom banner and ad signage
+    // Static display on TV promo banner and ad signage (no ticking seconds)
     const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
     if (promoFluctuating) {
       if (isManualModeActive) {
         promoFluctuating.textContent = `ROUND ${nextR} • WAITING FOR HOST TO START`;
-      } else if (isShowingTop3) {
-        promoFluctuating.textContent = `ROUND ${completedR} COMPLETE • NEXT ROUND WILL START IN ${staticTimeText}`;
       } else {
-        promoFluctuating.textContent = `NEXT ROUND IN ${badgeText}`;
+        promoFluctuating.textContent = `ROUND ${completedR} COMPLETE • NEXT ROUND WILL START IN ${staticTimeText}`;
       }
       promoFluctuating.style.color = 'var(--accent-yellow)';
     }
 
     const tvAdBanner = document.getElementById('tv-ad-intermission-banner');
     const tvAdTimer = document.getElementById('tv-ad-round-timer');
-    if (tvAdBanner && !isShowingTop3) {
+    if (tvAdBanner && !isTop3CelebrationActive) {
       tvAdBanner.classList.remove('hidden');
       if (isManualModeActive) {
         tvAdBanner.innerHTML = `<span>🎙️ ROUND ${nextR}</span> <strong id="tv-ad-round-timer" style="color: #fff; font-weight: 900;">WAITING FOR HOST</strong>`;
       } else {
-        if (tvAdTimer) tvAdTimer.textContent = badgeText;
+        if (tvAdTimer) tvAdTimer.textContent = `WILL START IN ${staticTimeText}`;
       }
-    } else if (tvAdBanner && isShowingTop3) {
+    } else if (tvAdBanner && isTop3CelebrationActive) {
       tvAdBanner.classList.add('hidden');
     }
 
@@ -8685,24 +8667,16 @@ function onRoundWinner(payload) {
       if (currentGameState === 'ROUND_SUMMARY') {
         currentGameState = 'COUNTDOWN';
       }
-      if (tvNextRoundTimer) tvNextRoundTimer.textContent = 'STARTING NOW';
-      if (!isManualModeActive) {
-        if (playerWinnerTimer) playerWinnerTimer.textContent = '0:00';
-        if (cardTimer) cardTimer.textContent = 'STARTING NOW';
-      }
       if (promoFluctuating) promoFluctuating.textContent = 'STARTING NEXT ROUND...';
-      if (tvAdTimer) tvAdTimer.textContent = 'STARTING NOW';
 
-      if (!isManualModeActive) {
-        // Immediately request state sync from host / TV display
-        broadcastRealtimeEvent('request_state_sync', {
-          room_code: currentRoomCode,
-          client: 'player',
-          timestamp: Date.now()
-        });
-        if (typeof triggerActiveSessionSync === 'function') {
-          triggerActiveSessionSync();
-        }
+      // Immediately request state sync from host / TV display
+      broadcastRealtimeEvent('request_state_sync', {
+        room_code: currentRoomCode,
+        client: 'player',
+        timestamp: Date.now()
+      });
+      if (typeof triggerActiveSessionSync === 'function') {
+        triggerActiveSessionSync();
       }
     }
   }, 1000);
@@ -8731,6 +8705,8 @@ function hideWinnerModals() {
   if (tvPodiumEmpty) tvPodiumEmpty.style.display = 'none';
   if (currentGameState !== 'ROUND_SUMMARY') {
     clearInterval(winnerCountdownInterval);
+    hasTop3CelebrationCompletedForRound = 0;
+    activeInterRoundCompletedNum = 0;
     const promoFluctuating = document.getElementById('promo-fluctuating-text') || document.querySelector('.promo-cta-box-centered .fluctuating-text');
     if (promoFluctuating) {
       promoFluctuating.textContent = 'WAITING FOR HOST TO START GAME';
