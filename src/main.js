@@ -8271,8 +8271,6 @@ function hideResultModal() {
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
 let interRoundTargetEpochMs = 0;
 let activeInterRoundCompletedNum = 0;
-let isTop3CelebrationActive = false;
-let top3CelebrationEpochMs = 0;
 let hasTop3CelebrationCompletedForRound = 0;
 
 function onRoundWinner(payload) {
