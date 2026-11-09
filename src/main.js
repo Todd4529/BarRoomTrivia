@@ -4499,8 +4499,19 @@ const idbAdStorage = {
               db.createObjectStore('ad_slides', { keyPath: 'key' });
             }
           };
-          request.onsuccess = () => resolve(request.result);
+          request.onsuccess = () => {
+            const db = request.result;
+            db.onversionchange = () => {
+              try { db.close(); } catch (_) {}
+              this.dbPromise = null;
+            };
+            resolve(db);
+          };
           request.onerror = () => resolve(null);
+          request.onblocked = () => {
+            console.warn('[idbAdStorage] IndexedDB upgrade blocked by another connection');
+            resolve(null);
+          };
         } catch (e) {
           resolve(null);
         }
@@ -5426,19 +5437,19 @@ function getOfficialBarRoomsTriviaAdSlide() {
 }
 
 function getAllActiveAdSlides() {
-  const officialSlides = getOfficialBarRoomsTriviaAdSlides();
+  const officialSlides = getOfficialBarRoomsTriviaAdSlides() || [];
   const validCustomSlides = (customAdSlides || []).filter(s => s && (s.dataUrl || s.data_url || s.url || s.image_url));
+  // If no custom slides have been uploaded by the host, display official default slides
   if (!validCustomSlides || validCustomSlides.length === 0) {
     return officialSlides;
   }
-  // Rotate custom slides first, alternating with official default slides
-  const result = [];
-  const maxPairs = Math.max(officialSlides.length, validCustomSlides.length);
-  for (let i = 0; i < maxPairs; i++) {
-    result.push(validCustomSlides[i % validCustomSlides.length]);
-    result.push(officialSlides[i % officialSlides.length]);
+  // When host has uploaded custom ads, display ALL custom ads!
+  // Append 1 official promo slide at the end of the custom cycle so the host's ads are never diluted or repeatedly duplicated.
+  const officialPromo = officialSlides[0];
+  if (officialPromo && validCustomSlides.length > 0) {
+    return [...validCustomSlides, officialPromo];
   }
-  return result;
+  return validCustomSlides;
 }
 
 function handlePauseAdTimeout(pausedAt) {
@@ -5654,31 +5665,32 @@ function stopTvAdSignageRotation() {
     clearInterval(adProgressBarInterval);
     adProgressBarInterval = null;
   }
+  if (typeof adTransitionTimeout !== 'undefined' && adTransitionTimeout) {
+    clearTimeout(adTransitionTimeout);
+    adTransitionTimeout = null;
+  }
 }
 
-function displayAdSlide(index) {
+let currentAdLayer = 0;
+let adTransitionTimeout = null;
+
+function displayAdSlide(index, immediate = false) {
   const allSlides = getAllActiveAdSlides();
   if (!allSlides || allSlides.length === 0) return;
   const safeIndex = index % allSlides.length;
   const slide = allSlides[safeIndex];
   if (!slide) return;
 
-  const img = document.getElementById('tv-ad-slide-img');
-  const backdrop = document.getElementById('tv-ad-slide-backdrop');
-  const counterText = document.getElementById('tv-ad-slide-counter-text');
-  const qrCorner = document.getElementById('tv-ad-qr-corner');
   let slideUrl = slide.dataUrl || slide.data_url || slide.url || slide.image_url || '';
-
-  // Fallback: If slide URL is missing or invalid, fallback to official built-in slide
   if (!slideUrl) {
     const fallbackSlide = getOfficialBarRoomsTriviaAdSlide();
-    if (fallbackSlide) {
-      slideUrl = fallbackSlide.dataUrl || '';
-    }
+    if (fallbackSlide) slideUrl = fallbackSlide.dataUrl || '';
   }
 
-  // Hide the floating 'Scan to Play' QR code on custom uploaded ads; show it only on official built-in ads
+  const qrCorner = document.getElementById('tv-ad-qr-corner');
+  const counterText = document.getElementById('tv-ad-slide-counter-text');
   const isCustomSlide = Boolean(slide && !slide.isSystemPermanent && slide.type !== 'system' && !String(slide.id || '').startsWith(OFFICIAL_SYSTEM_AD_ID));
+
   if (qrCorner) {
     if (isCustomSlide) {
       qrCorner.classList.add('hidden');
@@ -5689,57 +5701,103 @@ function displayAdSlide(index) {
     }
   }
 
-  if (backdrop && slideUrl) {
-    backdrop.style.backgroundImage = `url("${slideUrl}")`;
-  }
-
-  if (img && slideUrl) {
-    // Add image error fallback to guarantee an ad slide never appears blank
-    img.onerror = () => {
-      const fallback = getOfficialBarRoomsTriviaAdSlide();
-      if (fallback && fallback.dataUrl && img.src !== fallback.dataUrl) {
-        img.src = fallback.dataUrl;
-        if (backdrop) backdrop.style.backgroundImage = `url("${fallback.dataUrl}")`;
-      }
-    };
-
-    const allTransformClasses = [
-      'fading',
-      'transform-slide-out', 'transform-slide-in',
-      'transform-3d-out', 'transform-3d-in',
-      'transform-zoom-out', 'transform-zoom-in',
-      'transform-rise-out', 'transform-rise-in'
-    ];
-    // Prevent flickering if the image is already displaying this exact slide
-    if (img.src === slideUrl || (img.src.endsWith(slideUrl) && slideUrl.length > 20)) {
-      img.classList.remove(...allTransformClasses);
-    } else if (!img.src || img.src === window.location.href || img.src.endsWith('/') || img.classList.contains('fading')) {
-      img.src = slideUrl;
-      img.classList.remove(...allTransformClasses);
-    } else {
-      // Dynamic Transformation Animation in between ad slides
-      const transformTypes = ['slide', '3d', 'zoom', 'rise'];
-      const currentTransform = transformTypes[safeIndex % transformTypes.length];
-      const outClass = `transform-${currentTransform}-out`;
-      const inClass = `transform-${currentTransform}-in`;
-
-      img.classList.add('fading');
-      img.classList.add(outClass);
-      setTimeout(() => {
-        img.src = slideUrl;
-        img.classList.remove('fading');
-        img.classList.remove(outClass);
-        img.classList.add(inClass);
-        // Force repaint so browser smoothly animates into active transform
-        void img.offsetWidth;
-        img.classList.remove(inClass);
-      }, 300);
-    }
-  }
-
   if (counterText) {
     const prefix = currentGameState === 'PAUSED' ? 'GAME PAUSED • ' : '';
     counterText.textContent = `${prefix}AD ${safeIndex + 1} OF ${allSlides.length}`.toUpperCase();
+  }
+
+  const layer0 = document.getElementById('tv-ad-layer-0');
+  const layer1 = document.getElementById('tv-ad-layer-1');
+
+  // Fallback for legacy DOM if dual-layer elements not present
+  if (!layer0 || !layer1) {
+    const legacyImg = document.getElementById('tv-ad-slide-img');
+    const legacyBackdrop = document.getElementById('tv-ad-slide-backdrop');
+    if (legacyImg && slideUrl) legacyImg.src = slideUrl;
+    if (legacyBackdrop && slideUrl) legacyBackdrop.style.backgroundImage = `url("${slideUrl}")`;
+    return;
+  }
+
+  const activeLayer = currentAdLayer === 0 ? layer0 : layer1;
+  const nextLayer = currentAdLayer === 0 ? layer1 : layer0;
+  const nextImg = nextLayer.querySelector('.tv-ad-slide-img');
+  const nextBackdrop = nextLayer.querySelector('.tv-ad-slide-backdrop');
+  const activeImg = activeLayer.querySelector('.tv-ad-slide-img');
+
+  // If active layer is already displaying this exact slide and is fully visible, nothing to do
+  if (activeLayer.classList.contains('active') && activeImg && activeImg.src === slideUrl && !activeLayer.classList.contains('transitioning-out')) {
+    return;
+  }
+
+  // Clear any in-flight transition timeout
+  if (adTransitionTimeout) {
+    clearTimeout(adTransitionTimeout);
+    adTransitionTimeout = null;
+  }
+
+  const allTransformClasses = [
+    'transitioning-in', 'transitioning-out',
+    'transform-slide-out', 'transform-slide-in',
+    'transform-3d-out', 'transform-3d-in',
+    'transform-zoom-out', 'transform-zoom-in',
+    'transform-rise-out', 'transform-rise-in'
+  ];
+
+  // If immediate mode requested (e.g. first slide on mode switch), display without waiting for animation
+  if (immediate || !activeImg || !activeImg.src || activeImg.src === window.location.href || activeImg.src.endsWith('/')) {
+    if (nextImg) nextImg.src = slideUrl;
+    if (nextBackdrop) nextBackdrop.style.backgroundImage = `url("${slideUrl}")`;
+    nextLayer.classList.remove(...allTransformClasses);
+    nextLayer.classList.add('active');
+    activeLayer.classList.remove(...allTransformClasses, 'active');
+    currentAdLayer = currentAdLayer === 0 ? 1 : 0;
+    return;
+  }
+
+  // Pre-decode incoming image to guarantee zero blank frames or texture tearing
+  const preloader = new Image();
+  preloader.onload = () => {
+    executeTransition();
+  };
+  preloader.onerror = () => {
+    const fallback = getOfficialBarRoomsTriviaAdSlide();
+    if (fallback && fallback.dataUrl && slideUrl !== fallback.dataUrl) {
+      slideUrl = fallback.dataUrl;
+      executeTransition();
+    }
+  };
+  preloader.src = slideUrl;
+
+  function executeTransition() {
+    if (nextImg) nextImg.src = slideUrl;
+    if (nextBackdrop) nextBackdrop.style.backgroundImage = `url("${slideUrl}")`;
+
+    const transformTypes = ['zoom', 'slide', '3d', 'rise'];
+    const currentTransform = transformTypes[safeIndex % transformTypes.length];
+    const outClass = `transform-${currentTransform}-out`;
+    const inClass = `transform-${currentTransform}-in`;
+
+    // Position incoming layer at initial offset
+    nextLayer.classList.remove(...allTransformClasses, 'active');
+    nextLayer.classList.add(inClass);
+
+    // Force layout reflow so the browser registers the starting transform
+    void nextLayer.offsetWidth;
+
+    // Start silky smooth synchronized crossfade transition
+    activeLayer.classList.remove(...allTransformClasses, 'active');
+    activeLayer.classList.add('transitioning-out', outClass);
+
+    nextLayer.classList.remove(inClass);
+    nextLayer.classList.add('active', 'transitioning-in');
+
+    currentAdLayer = currentAdLayer === 0 ? 1 : 0;
+
+    adTransitionTimeout = setTimeout(() => {
+      activeLayer.classList.remove(...allTransformClasses, 'active');
+      nextLayer.classList.remove('transitioning-in');
+      adTransitionTimeout = null;
+    }, 850);
   }
 }
 
@@ -5958,9 +6016,11 @@ async function onAdSlidesUpdated(payload) {
   if (slidesChanged) {
     renderHostAdGallery();
     stopTvAdSignageRotation();
+    currentAdSlideIndex = 0;
+    displayAdSlide(0, true);
     startTvAdSignageRotation();
   }
-  syncTvSignageDisplay();
+  syncTvSignageDisplay(true);
 }
 
 // 9. Host Settings UI Listeners Initialization
@@ -6032,7 +6092,7 @@ function initHostAdSettings() {
           if (uploadStatus) uploadStatus.textContent = `📄 Rendering PDF: ${file.name}...`;
           const pdfSlides = await renderPdfFileToSlides(file);
           newSlides.push(...pdfSlides);
-        } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name)) {
+        } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg|jfif)$/i.test(file.name)) {
           if (uploadStatus) uploadStatus.textContent = `🖼️ Processing image: ${file.name}...`;
           const imgSlides = await renderImageFileToSlide(file);
           newSlides.push(...imgSlides);
@@ -6058,18 +6118,14 @@ function initHostAdSettings() {
 
         // Jump directly to the newly uploaded custom ad so it displays immediately!
         const allSlides = getAllActiveAdSlides();
-        const firstNewCustomIdx = Math.max(0, customAdSlides.length - newSlides.length);
-        const officialSlides = getOfficialBarRoomsTriviaAdSlides();
-        const targetIdx = firstNewCustomIdx < officialSlides.length
-          ? (firstNewCustomIdx * 2 + 1)
-          : (officialSlides.length + firstNewCustomIdx);
-        currentAdSlideIndex = (allSlides.length > 0 && targetIdx < allSlides.length)
-          ? targetIdx
-          : 0;
+        const newSlideId = newSlides[0]?.id;
+        const targetIdx = allSlides.findIndex(s => s.id === newSlideId);
+        currentAdSlideIndex = (targetIdx !== -1) ? targetIdx : 0;
+        broadcastAdSlidesUpdated();
         stopTvAdSignageRotation();
-        displayAdSlide(currentAdSlideIndex);
+        displayAdSlide(currentAdSlideIndex, true);
         startTvAdSignageRotation();
-        syncTvSignageDisplay();
+        syncTvSignageDisplay(true);
 
         if (uploadStatus) {
           uploadStatus.textContent = `✅ Successfully added ${newSlides.length} custom slide(s)!`;
@@ -6147,9 +6203,9 @@ async function loadAdSlidesAndInit() {
   if (customAdSlides && customAdSlides.length > 0) {
     currentAdSlideIndex = 0;
     broadcastAdSlidesUpdated();
-    displayAdSlide(0);
+    displayAdSlide(0, true);
   }
-  syncTvSignageDisplay();
+  syncTvSignageDisplay(true);
 }
 
 // Expose Ad mode helpers globally for testing and console inspection

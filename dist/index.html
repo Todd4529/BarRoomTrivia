@@ -138,8 +138,8 @@
   <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png?v=3">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=3">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=3">
-  <script type="module" crossorigin src="/assets/index-CbTVBLj2.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CAO5y1HT.css">
+  <script type="module" crossorigin src="/assets/index-B01lCL3n.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C8n85rf9.css">
 </head>
 <body class="dark-theme" data-view="auth">
   <!-- Global App Bar -->
@@ -502,7 +502,14 @@
               </div>
             </div>
             <div class="store-badge">
-              <span class="badge-icon">🤖</span>
+              <span class="badge-icon" style="display:inline-flex; align-items:center; justify-content:center;">
+                <svg viewBox="0 0 512 512" width="28" height="28" style="display:block;">
+                  <path fill="#00e5ff" d="M32.5 15.1c-4.2 4.6-6.5 11.4-6.5 19.9v442c0 8.5 2.3 15.3 6.5 19.9l1.1 1.1 247.3-247.3v-5.7L33.6 14l-1.1 1.1z"/>
+                  <path fill="#ffd600" d="M363.3 358.5l-82.4-82.4v-5.7l82.4-82.4 1.8 1 97.6 55.4c27.9 15.8 27.9 41.8 0 57.7l-97.6 55.4-1.8 1z"/>
+                  <path fill="#ff007a" d="M280.9 270.4L33.6 517.7c9.3 9.9 24.6 11.1 41.9 1.4l289.6-164.5-84.2-84.2z"/>
+                  <path fill="#00e676" d="M280.9 241.6l84.2-84.2L75.5 -7.1C58.2 -16.8 42.9 -15.6 33.6 -5.7L280.9 241.6z"/>
+                </svg>
+              </span>
               <div class="badge-text">
                 <span class="badge-sub">Available on</span>
                 <strong class="badge-main">Google Play Store</strong>
@@ -544,6 +551,7 @@
               ⚡ QUICK CONNECT AS HOST
             </button>
 
+
             <div class="auth-separator">
               <span>OR ENTER CREDENTIALS</span>
             </div>
@@ -561,12 +569,14 @@
             <button type="submit" id="btn-submit-auth" class="btn btn-secondary btn-block" onclick="window.handleHostAuthSubmit && window.handleHostAuthSubmit(event)" style="cursor: pointer; pointer-events: auto;">
               SIGN IN & CONNECT TV
             </button>
+
           </form>
 
           <div class="auth-mode-switch">
             <button type="button" id="btn-toggle-sign-mode" class="btn-text-link">
               Don't have an account? <strong>Sign Up</strong>
             </button>
+
           </div>
         </div>
       </div>
@@ -577,18 +587,19 @@
       <div class="tv-viewport 16-9" style="position: relative;">
         <!-- TOP HEADER: CENTERED BEER ICON & BAR ROOMS TRIVIA ONLY WITH TV MODE TOGGLE -->
         <div class="tv-header tv-header-centered">
+          <button id="btn-tv-back" class="tv-back-btn" title="Exit / Host Controls Recovery" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); border-radius: 10px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">← MENU</button>
           <div class="tv-brand">
-            <button id="btn-tv-back" class="tv-back-btn" title="Exit / Host Controls Recovery" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); border-radius: 10px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; margin-right: 14px; display: inline-flex; align-items: center; gap: 6px;">
-              ← MENU
-            </button>
+
+
+
             <div id="tv-custom-logo-container" class="custom-logo-wrapper hidden">
               <img id="tv-custom-logo-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Bar Logo" class="tv-logo-img">
             </div>
-            <span id="tv-brand-icon" class="brand-icon">🍻</span>
+            <img src="/assets/app_logo-DX-tSPXe.png" alt="Bar Rooms Trivia" class="tv-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';" style="width: 32px; height: 32px; border-radius: 8px; object-fit: cover;">
             <span id="tv-bar-name" class="brand-name">BAR ROOMS TRIVIA</span>
           </div>
 
-          <div class="tv-mode-toggle">
+          <div class="tv-mode-toggle" style="display: none !important;">
             <button id="btn-tv-toggle-promo" class="tv-toggle-btn active">📣 Promo Ads</button>
             <button id="btn-tv-toggle-live" class="tv-toggle-btn">🎯 Live Stage</button>
           </div>
@@ -616,9 +627,19 @@
 
             <!-- SLIDE 2: WHAT IS BAR ROOMS TRIVIA? -->
             <div class="promo-slide" data-slide="2">
+              <div class="promo-logo-box">
+                <span class="big-icon">🍻</span>
+              </div>
+
               <div class="promo-badge">🍻 WHAT IS BAR ROOMS TRIVIA?</div>
               
-              <h1 class="promo-title-centered title-no-wrap">REAL-TIME TRIVIA BUILT FOR BARS</h1>
+              <h1 class="promo-title-centered">REAL-TIME TRIVIA BUILT FOR BARS</h1>
+              
+              <div class="promo-steps-row">
+                <div class="p-step"><span class="step-num">⚡</span> Live Phone Buzzers</div>
+                <div class="p-step"><span class="step-num">🎯</span> 30+ Trivia Genres</div>
+                <div class="p-step"><span class="step-num">🏆</span> Instant TV Standings</div>
+              </div>
               
               <p class="promo-para">Compete against everyone in the venue right from your mobile phone!</p>
               
@@ -627,6 +648,10 @@
 
             <!-- SLIDE 3: 3 EASY STEPS TO PLAY -->
             <div class="promo-slide" data-slide="3">
+              <div class="promo-logo-box">
+                <span class="big-icon">📱</span>
+              </div>
+
               <div class="promo-badge">📱 EASY TO PLAY</div>
               
               <h1 class="promo-title-centered">JOIN THE GAME IN SECONDS</h1>
@@ -642,6 +667,10 @@
 
             <!-- SLIDE 4: LEADERBOARD COMPETITION -->
             <div class="promo-slide" data-slide="4">
+              <div class="promo-logo-box">
+                <span class="big-icon">🏆</span>
+              </div>
+
               <div class="promo-badge">🏆 REAL-TIME COMPETITION</div>
               
               <h1 class="promo-title-centered">CLIMB THE LIVE LEADERBOARD</h1>
@@ -682,14 +711,36 @@
 
         <!-- FULLSCREEN VENUE AD / SPONSOR SIGNAGE SCREEN (DISPLAY MODE) -->
         <div id="tv-ad-signage-screen" class="tv-ad-signage-screen hidden">
-          <div class="tv-ad-slide-wrapper">
-            <div id="tv-ad-slide-backdrop" class="tv-ad-slide-backdrop"></div>
-            <img id="tv-ad-slide-img" class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+          <div class="tv-ad-slide-wrapper" id="tv-ad-slide-wrapper">
+            <!-- Dual Slide Layers for Silky Smooth Crossfade & Transformations -->
+            <div id="tv-ad-layer-0" class="tv-ad-layer active">
+              <div class="tv-ad-slide-backdrop"></div>
+              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+            </div>
+            <div id="tv-ad-layer-1" class="tv-ad-layer">
+              <div class="tv-ad-slide-backdrop"></div>
+              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+            </div>
+            <!-- Backward compatibility elements for DOM queries -->
+            <div id="tv-ad-slide-backdrop" class="tv-ad-slide-backdrop" style="display: none;"></div>
+            <img id="tv-ad-slide-img" class="tv-ad-slide-img" style="display: none;" src="" alt="">
           </div>
 
           <!-- Slide Counter Pill -->
           <div class="tv-ad-slide-counter">
             <span id="tv-ad-slide-counter-text">Ad 1 of 1</span>
+          </div>
+
+          <!-- Permanent Floating Join QR Code in Lower Right Corner of Every Ad -->
+          <div id="tv-ad-qr-corner" class="tv-ad-qr-corner">
+            <div class="tv-ad-qr-frame">
+              <canvas id="tv-ad-qr-canvas"></canvas>
+            </div>
+            <div class="tv-ad-qr-info">
+              <span class="tv-ad-qr-scan-lbl">SCAN TO PLAY</span>
+              <span class="tv-ad-qr-room-lbl">ROOM CODE</span>
+              <strong id="tv-ad-qr-room-code" class="tv-ad-qr-room-code qr-room-code">TRIV</strong>
+            </div>
           </div>
 
           <!-- Bottom Rotation Progress Indicator -->
@@ -732,7 +783,7 @@
                     <span class="timer-label">SEC</span>
                   </div>
                 </div>
-                <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
+                  <span id="tv-timer-sublabel" class="timer-sublabel hidden">Next question</span>
                 </div>
               </div>
             </div>
@@ -771,12 +822,14 @@
             <!-- QR Display Widget -->
             <div class="qr-card">
               <span class="qr-title">SCAN TO PLAY</span>
-              <div class="qr-code-wrapper">
+              <div class="qr-stage-row">
+                <div class="qr-code-wrapper">
                 <canvas id="qr-canvas"></canvas>
               </div>
               <div class="qr-room-info">
                 <span>ROOM CODE</span>
-                <strong id="qr-room-code">TRIV</strong>
+                <strong id="qr-room-code" class="qr-room-code">TRIV</strong>
+              </div>
               </div>
             </div>
 
@@ -825,9 +878,10 @@
               </div>
             </div>
 
+            <div id="tv-podium-empty" style="display: none; text-align: center; color: rgba(255,255,255,0.7); font-size: 16px; font-weight: 700; padding: 14px 0;">Round complete! No scored players yet.</div>
             <div class="tv-next-round-timer-box" style="padding: 12px 24px; border-radius: 18px; border: 2px solid var(--accent-cyan); background: rgba(0, 229, 255, 0.12); margin-top: 8px;">
-              <span style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND IN</span>
-              <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">2 MINUTES</strong>
+              <span id="tv-winner-timer-label" style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent-cyan); text-transform: uppercase;">⏱️ NEXT ROUND</span>
+              <strong id="tv-winner-next-round-timer" style="font-size: 26px; font-weight: 900; color: #fff; letter-spacing: 1.5px;">WILL START IN 2 MINUTES</strong>
             </div>
           </div>
         </div>
@@ -848,13 +902,16 @@
               <button id="btn-tv-exit-yes" class="btn btn-danger" autofocus style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 800; cursor: pointer; background: #ff4d4d; border: 2px solid #ffffff; color: #ffffff; box-shadow: 0 0 20px rgba(255, 77, 77, 0.7);">
                 Yes
               </button>
+  
               <button id="btn-tv-exit-cancel" class="btn btn-outline" style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 700; cursor: pointer;">
                 Cancel
               </button>
+  
             </div>
             <button id="btn-tv-show-host-qr" class="btn btn-block" style="background: var(--accent-yellow); color: #000; font-weight: 900; font-size: 15px; letter-spacing: 1px; padding: 14px; border-radius: 14px; cursor: pointer;">
               📱 HOST CONTROL QR CODE
             </button>
+
           </div>
         </div>
 
@@ -881,7 +938,7 @@
             </div>
             <button id="btn-tv-close-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               BACK TO TV DISPLAY
-            </button>
+
           </div>
 
           <!-- NO ACTIVE GAME CARD -->
@@ -897,7 +954,7 @@
             </div>
             <button id="btn-tv-close-empty-host-qr" class="btn btn-primary btn-block" style="border-radius: 14px; font-weight: 900; letter-spacing: 1px; padding: 14px; cursor: pointer;">
               RETURN TO TV DISPLAY
-            </button>
+
           </div>
         </div>
 
@@ -912,7 +969,7 @@
             </p>
             <button id="btn-reopen-app" class="btn btn-secondary btn-block" style="border-radius: 14px; font-weight: 800; letter-spacing: 0.5px; padding: 14px; cursor: pointer;">
               🔄 Re-open Bar Rooms Trivia
-            </button>
+
           </div>
         </div>
       </div>
@@ -929,7 +986,7 @@
 
           <form id="form-player-join" class="join-form">
             <div class="form-group">
-              <label for="input-room-code">ROOM CODE</label>
+              <label for="input-room-code">ROOM CODE <span id="room-code-locked-badge" class="room-locked-badge hidden">🔒 LOCKED (QR SCAN)</span></label>
               <input type="text" id="input-room-code" value="TRIV" placeholder="TRIV" style="text-transform: uppercase;" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
             </div>
             <div class="form-group">
@@ -938,7 +995,7 @@
             </div>
             <button type="submit" id="btn-player-join" class="btn btn-primary btn-block">
               ENTER GAME
-            </button>
+
           </form>
         </div>
       </div>
@@ -1078,10 +1135,10 @@
 
             <div class="next-round-countdown-box" style="margin-top: 14px; padding: 12px 18px; background: rgba(0,0,0,0.5); border: 2px solid var(--accent-yellow); border-radius: 14px; text-align: center; box-shadow: 0 0 20px rgba(255, 214, 0, 0.35); width: 100%;">
               <div style="font-size: 13px; font-weight: 900; color: var(--accent-yellow); letter-spacing: 1.5px; text-transform: uppercase;">
-                NEXT ROUND STARTING IN.....
+                NEXT ROUND WILL START IN
               </div>
               <div style="font-size: 34px; font-weight: 900; color: #fff; letter-spacing: 2px; margin-top: 4px;">
-                <span id="player-winner-next-round-timer">2:00</span>
+                <span id="player-winner-next-round-timer">2 MINUTES</span>
               </div>
             </div>
           </div>
@@ -1122,17 +1179,24 @@
               <span class="metric-lbl">DIFF</span>
               <strong id="stat-difficulty">Standard</strong>
             </div>
-            <div class="metric-pill highlight">
+            <button type="button" class="metric-pill clickable-metric-pill highlight" id="stat-pill-players" style="cursor: pointer;" title="View Connected Players">
               <span class="metric-lbl">PLAYERS</span>
               <strong id="stat-players-count">0</strong>
+            </button>
+          </div>
+        </div>
+        <!--
+            </button>
             </div>
           </div>
         </div>
 
+        -->
         <!-- C. SEGMENTED TAB SWITCHER (App Tabs) -->
         <nav class="host-segmented-tabs" role="tablist">
           <button type="button" class="host-tab-btn active" data-tab="stage" role="tab" aria-selected="true">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="6" width="20" height="12" rx="3"></rect>
                 <path d="M6 12h4m-2-2v4m7-3h.01m3 2h.01"></path>
@@ -1142,6 +1206,7 @@
           </button>
           <button type="button" class="host-tab-btn" data-tab="playlist" role="tab" aria-selected="false">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 18V5l12-2v13"></path>
                 <circle cx="6" cy="18" r="3"></circle>
@@ -1150,19 +1215,23 @@
             </span>
             <span class="tab-lbl">Playlist</span>
           </button>
-          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
-            <span class="tab-ico">
+          <!--
+          </button>
+
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+
+
+
+
               </svg>
             </span>
-            <span class="tab-lbl">Players (<span id="host-tab-player-count">0</span>)</span>
+
           </button>
+          -->
           <button type="button" class="host-tab-btn" data-tab="settings" role="tab" aria-selected="false">
             <span class="tab-ico">
+
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -1305,14 +1374,15 @@
             <div class="host-card players-roster-card">
               <div class="card-title-row">
                 <div class="title-left">
-
+                  
                   <h4>LIVE CONNECTED PLAYERS</h4>
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
                 <div class="title-right-actions">
-                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.clearHostLeaderboard && window.clearHostLeaderboard()" title="Clear leaderboard and remove all player scores">
+                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.openClearLeaderboardModal ? window.openClearLeaderboardModal() : (window.clearHostLeaderboard && window.clearHostLeaderboard())" title="Clear leaderboard and remove all player scores">
                     Clear Leaderboard
                   </button>
+
                 </div>
               </div>
               <p class="section-hint">Real-time standings for players who joined room <strong id="host-players-room-code">TRIV</strong>:</p>
@@ -1320,9 +1390,10 @@
               <!-- Live Player Roster Container -->
               <div class="host-players-roster" id="host-connected-players-list">
                 <div class="host-empty-roster">
-
+                  
                   <p class="empty-headline">No players joined yet</p>
                   <small>Players can scan the TV QR code or join at this URL with room code <strong>TRIV</strong>.</small>
+
                 </div>
               </div>
             </div>
@@ -1369,7 +1440,7 @@
                 <div class="timer-chips" id="timer-chips-container">
                   <button type="button" class="timer-chip" data-timer="10">10s</button>
                   <button type="button" class="timer-chip" data-timer="15">15s</button>
-                  <button type="button" class="timer-chip active" data-timer="20">20s (Default)</button>
+                  <button type="button" class="timer-chip active" data-timer="20">20s</button>
                   <button type="button" class="timer-chip" data-timer="30">30s</button>
                   <button type="button" class="timer-chip" data-timer="45">45s</button>
                   <button type="button" class="timer-chip" data-timer="60">60s</button>
@@ -1387,7 +1458,7 @@
                 </div>
                 <div class="inter-round-chips" id="inter-round-chips-container">
                   <button type="button" class="inter-round-chip" data-round-dur="30">30s</button>
-                  <button type="button" class="inter-round-chip active" data-round-dur="60">1 Min (Default)</button>
+                  <button type="button" class="inter-round-chip active" data-round-dur="60">1 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="120">2 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="180">3 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="240">4 Min</button>
@@ -1443,11 +1514,13 @@
                   <div class="ad-config-row">
                     <label class="ad-field-label">Ad Display Duration:</label>
                     <div class="ad-duration-chips" id="ad-duration-chips">
+                      <button type="button" class="ad-dur-chip" data-dur="10">10 sec</button>
+                      <button type="button" class="ad-dur-chip active" data-dur="20">20 sec</button>
                       <button type="button" class="ad-dur-chip" data-dur="30">30 sec</button>
-                      <button type="button" class="ad-dur-chip active" data-dur="60">1 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="120">2 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="180">3 min</button>
-                      <button type="button" class="ad-dur-chip" data-dur="240">4 min</button>
+                      <button type="button" class="ad-dur-chip" data-dur="60">60 sec</button>
+
+
+
                     </div>
                   </div>
                 </div>
@@ -1480,20 +1553,20 @@
             <div class="manual-dock-grid">
               <button type="button" id="btn-open-manual-modal" class="btn-dock-manual btn-dock-console" title="Open Full Host MC Console">
                 <span class="btn-icon">🎙️</span>
-                <span>MC CONSOLE</span>
-              </button>
+                <span>MC CONSOLE</span></button>
+  
               <button type="button" id="btn-dock-start-timer" class="btn-dock-manual btn-dock-timer" title="Start Question Countdown">
                 <span class="btn-icon">⏱️</span>
-                <span id="btn-dock-start-timer-text">Start Timer</span>
-              </button>
+                <span id="btn-dock-start-timer-text">Start Timer</span></button>
+  
               <button type="button" id="btn-dock-reveal" class="btn-dock-manual btn-dock-reveal" title="Reveal Correct Answer">
                 <span class="btn-icon">💡</span>
-                <span id="btn-dock-reveal-text">Reveal</span>
-              </button>
+                <span id="btn-dock-reveal-text">Reveal</span></button>
+  
               <button type="button" id="btn-dock-next-q" class="btn-dock-manual btn-dock-next" title="Next Question">
                 <span class="btn-icon">⏭️</span>
-                <span id="btn-dock-next-text">Next</span>
-              </button>
+                <span id="btn-dock-next-text">Next</span></button>
+  
             </div>
           </div>
 
@@ -1504,16 +1577,16 @@
                   <path d="M8 5v14l11-7z"/>
                 </svg>
               </span>
-              <span class="btn-dock-text" id="btn-start-auto-text">Start Game</span>
-            </button>
+              <span class="btn-dock-text" id="btn-start-auto-text">Start Game</span></button>
+
             <button type="button" id="btn-pause-auto" class="btn btn-warning btn-dock-action" disabled title="Pause Game">
               <span class="btn-dock-icon-wrapper">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                   <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                 </svg>
               </span>
-              <span class="btn-dock-text" id="btn-pause-auto-text">Pause</span>
-            </button>
+              <span class="btn-dock-text" id="btn-pause-auto-text">Pause</span></button>
+
             <button type="button" id="btn-reset-game" class="btn btn-danger btn-dock-icon" title="Reset Game & Room">
               <span class="btn-dock-icon-wrapper">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1521,8 +1594,8 @@
                   <path d="M3 3v5h5"/>
                 </svg>
               </span>
-              <span class="btn-dock-text" id="btn-reset-text">Reset</span>
-            </button>
+              <span class="btn-dock-text" id="btn-reset-text">Reset</span></button>
+
           </div>
         </div>
 
@@ -1541,8 +1614,8 @@
                 </div>
               </div>
               <button type="button" class="btn-manual-modal-close" id="btn-close-manual-modal" title="Minimize Host Console" aria-label="Close">
-                ✕
-              </button>
+                ✕</button>
+  
             </div>
 
             <!-- Status Indicator Bar -->
@@ -1584,6 +1657,8 @@
                     <span class="manual-control-title" id="btn-manual-modal-start-timer-text">Start Timer</span>
                     <span class="manual-control-hint" id="btn-manual-modal-start-timer-hint">Start countdown</span>
                   </div>
+    
+
                 </button>
 
                 <!-- 2. PAUSE / RESUME -->
@@ -1593,6 +1668,8 @@
                     <span class="manual-control-title" id="btn-manual-modal-pause-text">Pause</span>
                     <span class="manual-control-hint" id="btn-manual-modal-pause-sub">Hold timer</span>
                   </div>
+    
+
                 </button>
 
                 <!-- 3. REVEAL ANSWER -->
@@ -1602,6 +1679,8 @@
                     <span class="manual-control-title" id="btn-manual-modal-reveal-text">Reveal Answer</span>
                     <span class="manual-control-hint" id="btn-manual-modal-reveal-hint">Show correct</span>
                   </div>
+    
+
                 </button>
 
                 <!-- 4. NEXT QUESTION -->
@@ -1613,12 +1692,17 @@
                   </div>
                 </button>
               </div>
+              <!--
+                  </div>
+    
+              </div>
 
+              -->
               <!-- Dedicated Start Game Bottom Button -->
               <div class="manual-bottom-btn-container">
                 <button type="button" id="btn-manual-modal-start-game" class="btn-manual-start-game" title="Start Game">
-                  Start Game
-                </button>
+                  <span id="btn-manual-modal-start-game-text">▶ Start Game</span></button>
+    
               </div>
             </div>
 
@@ -1628,6 +1712,28 @@
       </div>
     </section>
   </main>
-
+
+  <!-- G. DEDICATED CLEAR LEADERBOARD CONFIRMATION MODAL -->
+  <div id="clear-leaderboard-modal-overlay" class="clear-leaderboard-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="clear-lb-modal-title">
+    <div class="clear-leaderboard-modal-backdrop" id="clear-lb-modal-backdrop"></div>
+    <div class="clear-leaderboard-modal-card">
+      <div class="clear-lb-icon-wrap">
+        <span class="clear-lb-icon">🗑️</span>
+      </div>
+      <h3 id="clear-lb-modal-title" class="clear-lb-title">Clear Leaderboard?</h3>
+      <p class="clear-lb-desc">
+        Are you sure you want to clear the leaderboard? This will remove all connected players and reset all scores back to zero.
+      </p>
+      <div class="clear-lb-btn-row">
+        <button type="button" id="btn-cancel-clear-lb" class="btn-clear-lb-cancel">
+          Cancel
+        </button>
+        <button type="button" id="btn-confirm-clear-lb" class="btn-clear-lb-confirm">
+          Yes, Clear Leaderboard
+        </button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

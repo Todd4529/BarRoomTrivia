@@ -710,9 +710,19 @@
 
         <!-- FULLSCREEN VENUE AD / SPONSOR SIGNAGE SCREEN (DISPLAY MODE) -->
         <div id="tv-ad-signage-screen" class="tv-ad-signage-screen hidden">
-          <div class="tv-ad-slide-wrapper">
-            <div id="tv-ad-slide-backdrop" class="tv-ad-slide-backdrop"></div>
-            <img id="tv-ad-slide-img" class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+          <div class="tv-ad-slide-wrapper" id="tv-ad-slide-wrapper">
+            <!-- Dual Slide Layers for Silky Smooth Crossfade & Transformations -->
+            <div id="tv-ad-layer-0" class="tv-ad-layer active">
+              <div class="tv-ad-slide-backdrop"></div>
+              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+            </div>
+            <div id="tv-ad-layer-1" class="tv-ad-layer">
+              <div class="tv-ad-slide-backdrop"></div>
+              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+            </div>
+            <!-- Backward compatibility elements for DOM queries -->
+            <div id="tv-ad-slide-backdrop" class="tv-ad-slide-backdrop" style="display: none;"></div>
+            <img id="tv-ad-slide-img" class="tv-ad-slide-img" style="display: none;" src="" alt="">
           </div>
 
           <!-- Slide Counter Pill -->
