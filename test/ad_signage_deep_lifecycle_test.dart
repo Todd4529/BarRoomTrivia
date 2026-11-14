@@ -155,7 +155,8 @@ void main() {
     });
 
     test('Active game states (QUESTION_ACTIVE, PRE_GAME) strictly hide ad signage', () {
-      expect(jsContent.contains("if (currentGameState === 'QUESTION_ACTIVE' || currentGameState === 'PRE_GAME') {"), isTrue);
+      expect(jsContent.contains("currentGameState === 'QUESTION_ACTIVE'"), isTrue);
+      expect(jsContent.contains("if (isGameRunning && !isPaused && !isIntermission)"), isTrue);
       expect(jsContent.contains("if (tvAdScreen) tvAdScreen.classList.add('hidden');"), isTrue);
       expect(jsContent.contains("stopTvAdSignageRotation();"), isTrue);
     });
@@ -187,10 +188,12 @@ void main() {
       expect(jsContent.contains("adProgressBarInterval = setInterval("), isTrue);
     });
 
-    test('Ad slide display uses fading crossfade transition', () {
-      expect(jsContent.contains("img.classList.add('fading');"), isTrue);
-      expect(jsContent.contains("img.src = slide.dataUrl;"), isTrue);
-      expect(jsContent.contains("img.classList.remove('fading');"), isTrue);
+    test('Ad slide display uses dual-layer crossfade transition', () {
+      expect(jsContent.contains("tv-ad-layer-0"), isTrue);
+      expect(jsContent.contains("tv-ad-layer-1"), isTrue);
+      expect(jsContent.contains("transitioning-out"), isTrue);
+      expect(jsContent.contains("transitioning-in"), isTrue);
+      expect(jsContent.contains("slideUrl"), isTrue);
     });
   });
 
@@ -337,10 +340,9 @@ void main() {
       expect(onUpdatedBody.contains("safeStorage.removeItem('bar_trivia_custom_ad_slides')"), isTrue);
     });
 
-    test('Uploading multiple custom ads calculates the exact interleaved index for the newly added slide', () {
+    test('getAllActiveAdSlides returns custom slides plus official promo when custom slides exist', () {
       final mainJsContent = File('src/main.js').readAsStringSync();
-      expect(mainJsContent.contains('const firstNewCustomIdx = Math.max(0, customAdSlides.length - newSlides.length);'), isTrue);
-      expect(mainJsContent.contains('(firstNewCustomIdx * 2 + 1)'), isTrue);
+      expect(mainJsContent.contains('return [...validCustomSlides, officialPromo];'), isTrue);
     });
 
     test('HostDashboardView uses active session roomCode when broadcasting Ad Signage Mode toggle', () {

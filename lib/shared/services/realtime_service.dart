@@ -406,7 +406,7 @@ class RealtimeService {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': norm,
         'status': 'pre_game_countdown',
-        'starts_at': startsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String() : null,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String(),
         if (roundNumber != null) 'current_round': roundNumber,
         if (roundNumber != null) 'round_number': roundNumber,
         if (genre != null) 'genre': genre,
@@ -710,7 +710,7 @@ class RealtimeService {
         if (roundNumber != null) 'current_round': roundNumber,
         if (questionIndex != null) 'current_question_index': questionIndex,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
   }
 
@@ -751,12 +751,12 @@ class RealtimeService {
       await SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': roomCode.toUpperCase(),
         'status': 'resuming',
-        'starts_at': startsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String() : null,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String(),
         'remaining_question_seconds': remainingQuestionSeconds,
         if (roundNumber != null) 'current_round': roundNumber,
         if (questionIndex != null) 'current_question_index': questionIndex,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
   }
 
@@ -924,8 +924,8 @@ class RealtimeService {
         'current_round': upR,
         'round_number': upR,
         'duration_seconds': delay,
-        'starts_at': nextRoundStartsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String() : null,
-        'timer_ends_at': nextRoundStartsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String() : null,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String(),
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}

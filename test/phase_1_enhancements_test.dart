@@ -207,12 +207,12 @@ void main() {
           reason: 'Flutter player controller must track _isInterRoundPhase state');
 
       // Web Player View
-      expect(indexHtml.contains('NEXT ROUND STARTING IN.....'), isTrue,
-          reason: 'index.html player winner overlay must contain NEXT ROUND STARTING IN.....');
+      expect(indexHtml.contains('NEXT ROUND WILL START IN'), isTrue,
+          reason: 'index.html player winner overlay must contain NEXT ROUND WILL START IN');
       expect(indexHtml.contains('id="player-winner-next-round-timer"'), isTrue,
           reason: 'index.html must contain player-winner-next-round-timer countdown element');
-      expect(mainJs.contains('NEXT ROUND STARTING IN.....'), isTrue,
-          reason: 'src/main.js must update player card with NEXT ROUND STARTING IN.....');
+      expect(mainJs.contains('NEXT ROUND WILL START IN'), isTrue,
+          reason: 'src/main.js must update player card with NEXT ROUND WILL START IN');
     });
   });
 }

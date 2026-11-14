@@ -459,7 +459,11 @@ class TriviaRepository {
   }
 
   /// Fetch a non-repeating question matching the queued genres (or random if auto/mixed)
-  static Question getQuestionForGenres(List<String> queuedGenres, int questionIndex) {
+  static Question getQuestionForGenres(
+    List<String> queuedGenres,
+    int questionIndex, {
+    String difficulty = 'Mixed',
+  }) {
     // Filter out 'Auto Select' or 'Random (Mixed)'
     final validGenres = queuedGenres.where((g) => g != 'Auto Select' && g != 'Random (Mixed)').toList();
 
@@ -554,11 +558,37 @@ class TriviaRepository {
     final rawOptions = [seed.optionA, seed.optionB, seed.optionC, seed.optionD];
     final rawWrongs = rawOptions.where((opt) => opt != correctText).toList();
 
-    // If any wrong answer still matches an answer from the immediately preceding question, replace it
+    // If any wrong answer still matches an answer from the immediately preceding question,
+    // swap in an authentic non-overlapping wrong option from another question in the deck.
     if (_lastServedWrongs.isNotEmpty) {
+      final candidateDistractors = <String>[];
+      final usedLower = <String>{
+        correctText.trim().toLowerCase(),
+        ...rawWrongs.map((w) => w.trim().toLowerCase()),
+        ..._lastServedWrongs,
+      };
+      for (final other in deck) {
+        if (other.id == seed.id) continue;
+        final otherCorrect = other.correctOption.toUpperCase() == 'B'
+            ? other.optionB
+            : other.correctOption.toUpperCase() == 'C'
+                ? other.optionC
+                : other.correctOption.toUpperCase() == 'D'
+                    ? other.optionD
+                    : other.optionA;
+        for (final opt in [other.optionA, other.optionB, other.optionC, other.optionD]) {
+          final normOpt = opt.trim();
+          final normLower = normOpt.toLowerCase();
+          if (normOpt.isNotEmpty && normLower != otherCorrect.trim().toLowerCase() && !usedLower.contains(normLower)) {
+            candidateDistractors.add(normOpt);
+            usedLower.add(normLower);
+          }
+        }
+      }
+      int candIdx = 0;
       for (int i = 0; i < rawWrongs.length; i++) {
-        if (_lastServedWrongs.contains(rawWrongs[i].trim().toLowerCase())) {
-          rawWrongs[i] = '${seed.category} Choice ${questionIndex * 3 + i + 1}';
+        if (_lastServedWrongs.contains(rawWrongs[i].trim().toLowerCase()) && candIdx < candidateDistractors.length) {
+          rawWrongs[i] = candidateDistractors[candIdx++];
         }
       }
     }
@@ -573,10 +603,14 @@ class TriviaRepository {
     if (finalOptions[2] == correctText) correctOptLetter = 'C';
     if (finalOptions[3] == correctText) correctOptLetter = 'D';
 
+    final resolvedDifficulty = (difficulty.trim().isNotEmpty && difficulty != 'Mixed')
+        ? difficulty.trim()
+        : seed.difficulty;
+
     return Question(
       id: '${seed.id}-round-$questionIndex',
       category: seed.category,
-      difficulty: seed.difficulty,
+      difficulty: resolvedDifficulty,
       questionText: seed.questionText,
       optionA: finalOptions[0],
       optionB: finalOptions[1],

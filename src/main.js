@@ -244,6 +244,7 @@ function updateTvAudioUI() {
   if (banner) banner.classList.add('hidden');
   return;
 
+  const ctx = audioCtx;
   const isSuspended = !ctx || (ctx.state === 'suspended');
   if (isSuspended) {
     if (btnTvSound) {
@@ -430,7 +431,7 @@ function playSound(type) {
 
       if (type === 'tick') {
         // Authentic mechanical ticking clock sound (escapement click + acoustic body + gear catch)
-        const remaining = typeof param === 'number' ? param : 5;
+        const remaining = typeof arguments[1] === 'number' ? arguments[1] : 5;
         const isTick = (remaining % 2 !== 0); // Alternate Tick / Tock like a clock pendulum
         const baseFreq = isTick ? 1450 : 920;
 
@@ -6618,25 +6619,30 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
       const roundWinner = validPlayers[0];
       const currentWinnerScore = Number(roundWinner.score ?? roundWinner.cumulative_score ?? 0);
       if (currentWinnerScore > 0) {
-        roundWinner.score = currentWinnerScore + 20;
-        roundWinner.cumulative_score = roundWinner.score;
+        const tiedWinners = validPlayers.filter(
+          p => Number(p.score ?? p.cumulative_score ?? 0) === currentWinnerScore
+        );
+        for (const winner of tiedWinners) {
+          winner.score = currentWinnerScore + 20;
+          winner.cumulative_score = winner.score;
+          broadcastRealtimeEvent('player_score_updated', {
+            room_code: currentRoomCode,
+            nickname: winner.nickname,
+            score: winner.score,
+            cumulative_score: winner.score,
+            points_earned: 20,
+          });
+
+          if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === winner.nickname.toLowerCase()) {
+            currentPlayer.score = winner.score;
+            const scoreVal = document.getElementById('player-score-val');
+            if (scoreVal) scoreVal.textContent = currentPlayer.score;
+          }
+        }
         renderLeaderboard();
         broadcastRealtimeEvent('leaderboard_updated', {
           players: playersLeaderboard,
         });
-        broadcastRealtimeEvent('player_score_updated', {
-          room_code: currentRoomCode,
-          nickname: roundWinner.nickname,
-          score: roundWinner.score,
-          cumulative_score: roundWinner.score,
-          points_earned: 20,
-        });
-
-        if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === roundWinner.nickname.toLowerCase()) {
-          currentPlayer.score = roundWinner.score;
-          const scoreVal = document.getElementById('player-score-val');
-          if (scoreVal) scoreVal.textContent = currentPlayer.score;
-        }
       }
 
       top3 = validPlayers.slice(0, 3);

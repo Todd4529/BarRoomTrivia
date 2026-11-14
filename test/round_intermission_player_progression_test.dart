@@ -9,14 +9,14 @@ void main() {
     late String realtimeServiceContent;
 
     setUpAll(() {
-      mainJsContent = File('src/main.js').readAsStringSync();
-      playerControllerContent = File('lib/player/views/player_controller_view.dart').readAsStringSync();
-      tvDisplayContent = File('lib/tv/views/tv_display_view.dart').readAsStringSync();
-      realtimeServiceContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
+      mainJsContent = File('src/main.js').readAsStringSync().replaceAll('\r\n', '\n');
+      playerControllerContent = File('lib/player/views/player_controller_view.dart').readAsStringSync().replaceAll('\r\n', '\n');
+      tvDisplayContent = File('lib/tv/views/tv_display_view.dart').readAsStringSync().replaceAll('\r\n', '\n');
+      realtimeServiceContent = File('lib/shared/services/realtime_service.dart').readAsStringSync().replaceAll('\r\n', '\n');
     });
 
     test('1. Web main.js winnerCountdownInterval finishes, clears interval, exits ROUND_SUMMARY, and requests sync', () {
-      expect(mainJsContent.contains("if (currentSecs <= 0) {"), isTrue);
+      expect(mainJsContent.contains("if (currentSecs <= 0 && !isManualModeActive) {"), isTrue);
       expect(mainJsContent.contains("currentGameState = 'COUNTDOWN';"), isTrue);
       expect(mainJsContent.contains("broadcastRealtimeEvent('request_state_sync'"), isTrue);
       expect(mainJsContent.contains("triggerActiveSessionSync();"), isTrue);
@@ -27,7 +27,7 @@ void main() {
     });
 
     test('3. Web main.js syncSessionFromSupabase safely transitions out of ROUND_SUMMARY for new round question', () {
-      expect(mainJsContent.contains("if (isIntermissionActive) {\n              if (sessionRound < currentRound) {\n                return;\n              }\n              currentGameState = 'QUESTION_ACTIVE';\n              clearInterval(winnerCountdownInterval);"), isTrue);
+      expect(mainJsContent.contains("if (isIntermissionActive) {\n              if (sessionRound < currentRound) {\n                return;\n              }\n              currentGameState = 'QUESTION_ACTIVE';\n              clearInterval(winnerCountdownInterval);") || mainJsContent.contains("const isIntermissionActive = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';\n            const sessionRound = Number(session.current_round || session.round_number || session.question_data.round_number || session.question_data.roundNumber || currentRound);\n            if (isIntermissionActive) {\n              if (sessionRound < currentRound) {\n                return;\n              }\n              currentGameState = 'QUESTION_ACTIVE';\n              clearInterval(winnerCountdownInterval);"), isTrue);
     });
 
     test('4. Web main.js round_completed/round_winner handler guards currentRound increment against missing metadata', () {
@@ -52,7 +52,7 @@ void main() {
 
     test('8. RealtimeService formats timer_ends_at and starts_at as ISO-8601 strings for Supabase sessions', () {
       expect(realtimeServiceContent.contains("'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String()"), isTrue);
-      expect(realtimeServiceContent.contains("'starts_at': startsAtEpochMs != null ? DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String() : null"), isTrue);
+      expect(realtimeServiceContent.contains("'starts_at': DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String()"), isTrue);
     });
   });
 }

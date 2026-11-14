@@ -780,7 +780,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         // 1. Sync score from local repository or remote Supabase DB if updated (e.g., round winner bonus)
         final localLeaderboard = SupabaseService.getLocalPlayersJson(roomCode);
         for (final item in localLeaderboard) {
-          if (item is Map && (item['nickname']?.toString().toLowerCase() == myNick.toLowerCase())) {
+          if (item['nickname']?.toString().toLowerCase() == myNick.toLowerCase()) {
             final rawScore = item['cumulative_score'] ?? item['score'];
             final s = (rawScore is num) ? rawScore.toInt() : (int.tryParse(rawScore?.toString() ?? '') ?? 0);
             if (s > _myScore) {
@@ -1062,7 +1062,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           if (room.isNotEmpty && nick.isNotEmpty) {
             final localPlayers = SupabaseService.getLocalPlayersJson(room);
             for (final p in localPlayers) {
-              if (p is Map && (p['nickname']?.toString().toLowerCase() == nick.toLowerCase())) {
+              if (p['nickname']?.toString().toLowerCase() == nick.toLowerCase()) {
                 final rawS = p['cumulative_score'] ?? p['score'];
                 final s = (rawS is num) ? rawS.toInt() : (int.tryParse(rawS?.toString() ?? '') ?? 0);
                 if (s > _myScore) {

@@ -254,10 +254,16 @@ class _AuthPageState extends State<AuthPage> {
 
     setState(() => _loading = true);
     try {
-      if (_isSignUpMode) {
-        await SupabaseService().signUpWithEmail(email, password);
-      } else {
-        await SupabaseService().signInWithEmail(email, password);
+      final user = _isSignUpMode
+          ? await SupabaseService().signUpWithEmail(email, password)
+          : await SupabaseService().signInWithEmail(email, password);
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid email or password. Please try again.')),
+          );
+        }
+        return;
       }
       _navigateToHome();
     } on AuthException catch (e) {

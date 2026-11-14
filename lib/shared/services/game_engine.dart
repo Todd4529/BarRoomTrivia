@@ -25,6 +25,7 @@ class GameEngineManager {
   int currentRound = 1;
   int interRoundDurationSeconds = 120;
   List<String> selectedGenres = [];
+  String selectedDifficulty = 'Standard';
   String gamePlayMode = 'Auto'; // 'Auto' (default) or 'Manual'
 
   Question? activeQuestion;
@@ -94,7 +95,7 @@ class GameEngineManager {
         'round_number': currentRound,
         'genre': selectedGenres.isNotEmpty ? selectedGenres.first : 'General Trivia',
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
 
     _preGameTimer?.cancel();
@@ -123,7 +124,11 @@ class GameEngineManager {
     isReviewPhase = false;
     isRoundCompletedWaitingForNext = false;
 
-    final question = TriviaRepository.getQuestionForGenres(selectedGenres, currentQuestionIndex);
+    final question = TriviaRepository.getQuestionForGenres(
+      selectedGenres,
+      currentQuestionIndex,
+      difficulty: selectedDifficulty,
+    );
     activeQuestion = question;
     remainingQuestionSeconds = gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds;
 
@@ -152,7 +157,7 @@ class GameEngineManager {
             'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
           },
           'updated_at': DateTime.now().toIso8601String(),
-        });
+        }, onConflict: 'room_code');
       } catch (_) {}
 
       _realtimeService.broadcastQuestion(
@@ -196,7 +201,7 @@ class GameEngineManager {
           'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
         },
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
 
     _realtimeService.broadcastQuestion(
@@ -321,7 +326,7 @@ class GameEngineManager {
         'round_number': currentRound,
         'starts_at': nextRoundStartsAtEpochMs,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
 
     _realtimeService.broadcastRoundCompleted(
@@ -413,7 +418,7 @@ class GameEngineManager {
         'remaining_question_seconds': remainingQuestionSeconds,
         'current_round': currentRound,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
 
     _realtimeService.broadcastGamePaused(
@@ -438,7 +443,7 @@ class GameEngineManager {
         'status': 'question_active',
         'current_round': currentRound,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'room_code');
     } catch (_) {}
 
     _realtimeService.broadcastGameResuming(

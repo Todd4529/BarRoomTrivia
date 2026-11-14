@@ -112,7 +112,7 @@ class SupabaseService {
       'pintsizedgenius', 'whiskeywisdom', 'barstooleinstein', 'ciderseeker',
       'taverntactician', 'player 1', 'player 2', 'champion', 'runner up', 'third place'
     ];
-    return banned.any((b) => lower == b || lower.contains(b));
+    return banned.any((b) => lower == b);
   }
 
   static List<Player> mergeLocalPlayers(String roomCode, List<Player> incoming) {
@@ -143,9 +143,6 @@ class SupabaseService {
       }
     }
     list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    if (normRoom != 'TRIV') {
-      _localPlayersMap['TRIV'] = List<Player>.from(list);
-    }
     return List<Player>.from(list);
   }
 
@@ -204,9 +201,6 @@ class SupabaseService {
       ));
     }
     list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    if (normRoom != 'TRIV') {
-      _localPlayersMap['TRIV'] = List<Player>.from(list);
-    }
   }
 
   static void clearLocalPlayers([String? roomCode]) {
@@ -243,9 +237,6 @@ class SupabaseService {
       ));
     }
     list.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    if (normRoom != 'TRIV') {
-      _localPlayersMap['TRIV'] = List<Player>.from(list);
-    }
   }
 
   static void seedMockPlayers({required String roomCode, int count = 15}) {
@@ -415,9 +406,6 @@ class SupabaseService {
       ));
     }
     players.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-    if (normRoom != 'TRIV') {
-      _localPlayersMap['TRIV'] = List<Player>.from(players);
-    }
 
     // 1. Instantly broadcast leaderboard update across all channels
     RealtimeService().broadcastLeaderboardUpdated(
@@ -512,14 +500,26 @@ class SupabaseService {
       final validPlayers = list.where((p) => !isMockNickname(p.nickname)).toList();
       if (validPlayers.isNotEmpty) {
         validPlayers.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-        final winner = validPlayers.first;
-        // Strictly only award round bonus if the winner actually scored points (> 0)
-        if (winner.cumulativeScore > 0) {
-          updatePlayerScoreDirectly(
-            roomCode: normRoom,
-            nickname: winner.nickname,
-            score: winner.cumulativeScore + bonusPoints,
-          );
+        final topScore = validPlayers.first.cumulativeScore;
+        // Strictly only award round bonus if top score is actually positive (> 0)
+        if (topScore > 0) {
+          for (final winner in validPlayers.where((p) => p.cumulativeScore == topScore)) {
+            final updatedScore = winner.cumulativeScore + bonusPoints;
+            updatePlayerScoreDirectly(
+              roomCode: normRoom,
+              nickname: winner.nickname,
+              score: updatedScore,
+            );
+            try {
+              SupabaseConfig.client
+                  .from('players')
+                  .update({'cumulative_score': updatedScore})
+                  .eq('room_code', normRoom)
+                  .ilike('nickname', winner.nickname)
+                  .then((_) {})
+                  .catchError((_) {});
+            } catch (_) {}
+          }
         }
       }
     }
@@ -654,16 +654,6 @@ class SupabaseService {
     if (localList.isNotEmpty) {
       localList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
       return localList;
-    }
-
-    if (normRoom != 'TRIV' && _localPlayersMap.containsKey('TRIV')) {
-      final trivList = List<Player>.from(_localPlayersMap['TRIV'] ?? [])
-          .where((p) => !isMockNickname(p.nickname))
-          .toList();
-      if (trivList.isNotEmpty) {
-        trivList.sort((a, b) => b.cumulativeScore.compareTo(a.cumulativeScore));
-        return trivList;
-      }
     }
 
     return [];

@@ -38,18 +38,17 @@ void main() {
           reason: 'difficulty-chips should be a 4-column grid for uniform button widths');
     });
 
-    test('3. Ad display duration has 30sec, 1min, 2min, 3min, and 4min options', () {
+    test('3. Ad display duration has 10sec, 20sec, 30sec, and 60sec options', () {
+      expect(indexHtmlContent.contains('data-dur="10">10 sec</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-dur="20">20 sec</button>'), isTrue);
       expect(indexHtmlContent.contains('data-dur="30">30 sec</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="60">1 min</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="120">2 min</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="180">3 min</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-dur="240">4 min</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-dur="60">60 sec</button>'), isTrue);
     });
 
     test('4. In-between round duration selector configured with all requested intervals', () {
       expect(indexHtmlContent.contains('IN-BETWEEN ROUND DURATION'), isTrue);
       expect(indexHtmlContent.contains('data-round-dur="30">30s</button>'), isTrue);
-      expect(indexHtmlContent.contains('data-round-dur="60">1 Min (Default)</button>'), isTrue);
+      expect(indexHtmlContent.contains('data-round-dur="60">1 Min</button>'), isTrue);
       expect(indexHtmlContent.contains('data-round-dur="120">2 Min</button>'), isTrue);
       expect(indexHtmlContent.contains('data-round-dur="180">3 Min</button>'), isTrue);
       expect(indexHtmlContent.contains('data-round-dur="240">4 Min</button>'), isTrue);
@@ -235,7 +234,6 @@ void main() {
     test('17. Sound options are deleted and sounds permanently disabled as requested', () {
       final hostContent = File('lib/host/views/host_dashboard_view.dart').readAsStringSync();
       final soundServiceContent = File('lib/shared/services/sound_service.dart').readAsStringSync();
-      final realtimeContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
 
       // SoundService master toggle verification (permanently disabled)
       expect(soundServiceContent.contains('static bool isSoundEffectsEnabled = false;'), isTrue,

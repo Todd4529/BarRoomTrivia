@@ -36,20 +36,18 @@ void main() {
       expect(htmlContent.contains('pdf.min.js'), isTrue);
     });
 
-    test('index.html includes TV Ad Signage screen elements without corner QR badge', () {
+    test('index.html includes TV Ad Signage screen elements with dual-layer and floating corner QR badge', () {
       expect(htmlContent.contains('id="tv-ad-signage-screen"'), isTrue);
       expect(htmlContent.contains('class="tv-ad-signage-screen hidden"'), isTrue);
-      expect(htmlContent.contains('id="tv-ad-slide-img"'), isTrue);
+      expect(htmlContent.contains('id="tv-ad-layer-0"'), isTrue);
+      expect(htmlContent.contains('id="tv-ad-layer-1"'), isTrue);
+      expect(htmlContent.contains('class="tv-ad-slide-img"'), isTrue);
       expect(htmlContent.contains('class="tv-ad-progress-track"'), isTrue);
       expect(htmlContent.contains('id="tv-ad-progress-fill"'), isTrue);
       expect(htmlContent.contains('id="tv-ad-slide-counter-text"'), isTrue);
-      // Corner QR badge was explicitly deleted as requested by the user
-      expect(htmlContent.contains('id="tv-ad-corner-qr"'), isFalse,
-          reason: 'Corner QR badge must be removed from ad signage screen');
-      expect(htmlContent.contains('id="tv-ad-qr-canvas"'), isFalse,
-          reason: 'Corner QR canvas must be removed from ad signage screen');
-      expect(htmlContent.contains('id="tv-ad-qr-room-code"'), isFalse,
-          reason: 'Corner QR room code must be removed from ad signage screen');
+      expect(htmlContent.contains('id="tv-ad-qr-corner"'), isTrue);
+      expect(htmlContent.contains('id="tv-ad-qr-canvas"'), isTrue);
+      expect(htmlContent.contains('id="tv-ad-qr-room-code"'), isTrue);
     });
 
     test('index.html includes Host Settings Ad Mode controls in Tab 4 without QR badge toggle', () {
@@ -59,11 +57,10 @@ void main() {
       expect(htmlContent.contains('id="host-ad-dropzone"'), isTrue);
       expect(htmlContent.contains('id="host-ad-upload-status"'), isTrue);
       expect(htmlContent.contains('id="ad-duration-chips"'), isTrue);
+      expect(htmlContent.contains('data-dur="10"'), isTrue);
+      expect(htmlContent.contains('data-dur="20"'), isTrue);
       expect(htmlContent.contains('data-dur="30"'), isTrue);
       expect(htmlContent.contains('data-dur="60"'), isTrue);
-      expect(htmlContent.contains('data-dur="120"'), isTrue);
-      expect(htmlContent.contains('data-dur="180"'), isTrue);
-      expect(htmlContent.contains('data-dur="240"'), isTrue);
       // Host QR toggle was explicitly removed
       expect(htmlContent.contains('id="host-toggle-ad-qr"'), isFalse,
           reason: 'Host toggle for corner QR code must be removed');
@@ -126,14 +123,14 @@ void main() {
     });
 
     test('CSS defines transformations in between ad slides (slide, 3D tilt, zoom, rise)', () {
-      expect(cssContent.contains('.tv-ad-slide-img.transform-slide-out'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-slide-in'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-3d-out'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-3d-in'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-zoom-out'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-zoom-in'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-rise-out'), isTrue);
-      expect(cssContent.contains('.tv-ad-slide-img.transform-rise-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-slide-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-slide-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-3d-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-3d-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-zoom-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-zoom-in'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-rise-out'), isTrue);
+      expect(cssContent.contains('.tv-ad-layer.transform-rise-in'), isTrue);
     });
   });
 
@@ -322,7 +319,7 @@ void main() {
     });
 
     test('TV display shows fullscreen ad signage when game is paused and ad signage mode is toggled on', () {
-      expect(tvViewContent.contains('(_isGamePaused && _isAdSignageModeActive)'), isTrue,
+      expect(tvViewContent.contains('(_isGamePaused && (_isAdSignageModeActive || _isPauseTimeoutAdActive))'), isTrue,
           reason: 'TV display must render _buildFullscreenSignageDisplay() when paused and ad mode active');
       expect(tvViewContent.contains('(!_isGameActive || _isGamePaused) && !_isPreGameCountdown'), isTrue,
           reason: '_startAdSlideTimer must rotate slides while game is paused');

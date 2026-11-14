@@ -256,6 +256,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       return;
     }
 
+    engine.selectedDifficulty = _selectedDifficulty;
     engine.startPreGame(
       roomCode: _activeSession!.roomCode,
       timerSeconds: _selectedTimerSeconds,
@@ -893,7 +894,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                           'room_code': room.toUpperCase(),
                           'game_play_mode': mode,
                           'updated_at': DateTime.now().toIso8601String(),
-                        });
+                        }, onConflict: 'room_code');
                       } catch (_) {}
                     },
                     child: AnimatedContainer(
@@ -1007,8 +1008,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   builder: (ctx) => AlertDialog(
                     backgroundColor: AppTheme.cardSurface,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: Row(
-                      children: const [
+                    title: const Row(
+                      children: [
                         Icon(Icons.campaign_rounded, color: AppTheme.neonCyan),
                         SizedBox(width: 8),
                         Text('Ad Signage Enabled', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -1089,7 +1090,10 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 final isSelected = _selectedDifficulty == diff;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _selectedDifficulty = diff),
+                    onTap: () => setState(() {
+                      _selectedDifficulty = diff;
+                      GameEngineManager.instance.selectedDifficulty = diff;
+                    }),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       height: 48,
@@ -2178,7 +2182,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                       // BUTTON 2: PAUSE / RESUME
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: (isRunning || _isPreGameCountdownActive)
+                          onPressed: (isRunning || isPaused || _isPreGameCountdownActive)
                               ? () {
                                   if (isPaused) {
                                     _resumeGameEngine();
@@ -2209,7 +2213,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                             side: BorderSide(
                               color: isPaused
                                   ? AppTheme.neonGreen
-                                  : ((isRunning || _isPreGameCountdownActive)
+                                  : ((isRunning || isPaused || _isPreGameCountdownActive)
                                       ? AppTheme.neonYellow
                                       : Colors.white12),
                               width: 1.5,
@@ -2289,6 +2293,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                     ElevatedButton.icon(
                       onPressed: () {
                         engine.gamePlayMode = 'Manual';
+                        engine.selectedDifficulty = _selectedDifficulty;
                         engine.startPreGame(
                           roomCode: room,
                           timerSeconds: 20,

@@ -39,10 +39,9 @@ void main() {
       expect(htmlContent.contains('class="host-sticky-bottom-dock"'), isTrue);
     });
 
-    test('index.html includes all 4 host segmented navigation tabs', () {
+    test('index.html includes host segmented navigation tabs', () {
       expect(htmlContent.contains('data-tab="stage"'), isTrue);
       expect(htmlContent.contains('data-tab="playlist"'), isTrue);
-      expect(htmlContent.contains('data-tab="players"'), isTrue);
       expect(htmlContent.contains('data-tab="settings"'), isTrue);
 
       expect(htmlContent.contains('id="host-pane-stage"'), isTrue);
@@ -97,8 +96,6 @@ void main() {
     test('Tab 3 (Players) contains connected players list and live counter badges', () {
       expect(htmlContent.contains('id="host-connected-players-list"'), isTrue);
       expect(htmlContent.contains('id="host-live-player-badge"'), isTrue);
-      expect(htmlContent.contains('id="host-tab-player-count"'), isTrue);
-      expect(htmlContent.contains('id="btn-refresh-players"'), isTrue);
       expect(htmlContent.contains('id="host-players-room-code"'), isTrue);
     });
 

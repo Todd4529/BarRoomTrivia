@@ -96,7 +96,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   bool _showRoundWinnersOverlay = false;
   Timer? _roundWinnersOverlayTimer;
   Timer? _interRoundCountdownTimer;
-  int _interRoundDurationSeconds = 120;
+  final int _interRoundDurationSeconds = 120;
   bool _isInterRoundPhase = false;
   int _interRoundSecondsRemaining = 120;
   int _interRoundTargetEpochMs = 0;
@@ -302,7 +302,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _isPauseTimeoutAdActive = false;
             });
           } else if (status == 'pre_game_countdown' && !_isGameActive && !_isPreGameCountdown) {
-            final startsAt = res['starts_at'] as int?;
+            final rawStartsAt = res['starts_at'];
+            final int? startsAt = rawStartsAt is num
+                ? rawStartsAt.toInt()
+                : (rawStartsAt is String
+                    ? (int.tryParse(rawStartsAt) ?? DateTime.tryParse(rawStartsAt)?.millisecondsSinceEpoch)
+                    : null);
             final now = DateTime.now().millisecondsSinceEpoch;
             final rem = startsAt != null ? ((startsAt - now) / 1000).ceil().clamp(0, 30) : 10;
             setState(() {
@@ -3202,10 +3207,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
                     ),
-                    child: Column(
+                    child: const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: const [
+                      children: [
                         Text('⭐ EVERYTHING YOU NEED TO HOST & PLAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
                         Text('✓ Unlimited Play: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
                         Text('✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzers', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
@@ -3249,10 +3254,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                   children: [
                                     _buildGooglePlayIcon(size: 26),
                                     const SizedBox(width: 8),
-                                    Expanded(
+                                    const Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: const [
+                                        children: [
                                           Text('GET IT ON', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
                                           Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
                                         ],
@@ -3270,17 +3275,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                 decoration: BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Color(0xFFFF9900).withValues(alpha: 0.6)),
+                                  border: Border.all(color: const Color(0xFFFF9900).withValues(alpha: 0.6)),
                                 ),
-                                child: Row(
+                                child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF9900), size: 24),
-                                    const SizedBox(width: 8),
+                                    Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF9900), size: 24),
+                                    SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: const [
+                                        children: [
                                           Text('AVAILABLE AT', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
                                           Text('Amazon Fire TV', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
                                         ],
@@ -3323,21 +3328,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       height: size,
       child: const CustomPaint(
         painter: _GooglePlayIconPainter(),
-      ),
-    );
-  }
-
-  Widget _buildVenueChip(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.neonCyan.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 11),
       ),
     );
   }
@@ -3583,22 +3573,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           ),
           const SizedBox(width: 170), // Reserved space for floating lower-right QR badge
         ],
-      ),
-    );
-  }
-
-  /// Mini colored tag chip
-  Widget _buildMiniTag(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 10),
       ),
     );
   }

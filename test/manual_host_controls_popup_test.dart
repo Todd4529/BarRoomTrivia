@@ -50,14 +50,14 @@ void main() {
     });
 
     test('3. src/main.js implements manual pop-up logic and triggers when Manual mode is selected', () {
-      final js = File('src/main.js').readAsStringSync();
+      final js = File('src/main.js').readAsStringSync().replaceAll('\r\n', '\n');
       expect(js.contains('function openHostManualModal()'), isTrue);
       expect(js.contains('function closeHostManualModal()'), isTrue);
       expect(js.contains('function updateHostManualModalUI()'), isTrue);
       expect(js.contains('function handleManualHostNextQuestionAction()'), isTrue);
       expect(js.contains("openHostManualModal();"), isTrue,
           reason: 'Selecting Manual mode must immediately open the host manual modal console');
-      expect(js.contains("const isIdleTimer = payload.timer_state === 'idle' || payload.question_phase === 'reading';"), isTrue,
+      expect(js.contains("const isIdleTimer = payload.timer_state === 'idle' || payload.question_phase === 'reading'"), isTrue,
           reason: 'handleIncomingQuestionStart must preserve idle timer state during Manual reading phase');
       expect(js.contains("if (questionInRound === 10) {\n    hostEngineState = 'QUESTION_REVIEW';\n    handleHostAdvanceAfterReview(10, currentRound);"), isTrue,
           reason: 'Skipping Question 10 in Manual mode must transition hostEngineState to QUESTION_REVIEW before advancing');

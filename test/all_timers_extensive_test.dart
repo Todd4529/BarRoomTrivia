@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bar_rooms_trivia/shared/services/realtime_service.dart';
-import 'package:bar_rooms_trivia/shared/services/game_engine.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,14 +9,12 @@ void main() {
     late String mainJsContent;
     late String playerControllerContent;
     late String tvDisplayContent;
-    late String realtimeServiceContent;
     late String htmlContent;
 
     setUpAll(() {
       mainJsContent = File('src/main.js').readAsStringSync();
       playerControllerContent = File('lib/player/views/player_controller_view.dart').readAsStringSync();
       tvDisplayContent = File('lib/tv/views/tv_display_view.dart').readAsStringSync();
-      realtimeServiceContent = File('lib/shared/services/realtime_service.dart').readAsStringSync();
       htmlContent = File('index.html').readAsStringSync();
     });
 
@@ -29,7 +26,7 @@ void main() {
         expect(htmlContent.contains('data-timer="$sec"'), isTrue,
             reason: 'index.html must contain timer chip for ${sec}s');
       }
-      expect(htmlContent.contains('data-timer="20">20s (Default)</button>'), isTrue,
+      expect(htmlContent.contains('data-timer="20">20s</button>'), isTrue,
           reason: '20s timer must be the default chip in index.html');
 
       // main.js checks
@@ -180,9 +177,9 @@ void main() {
       expect(mainJsContent.contains('const resumeSecs = 10;'), isTrue);
     });
 
-    test('12. Top 3 Winners celebration display timer (20s) on TV transitions cleanly to ad signage', () {
-      expect(mainJsContent.contains('const winnerDisplayMs = Math.min(20000, remWinnerSecs * 1000);'), isTrue,
-          reason: 'Top 3 Winners overlay must display for 20s before uncovering signage during intermission');
+    test('12. Top 3 Winners celebration display timer on TV transitions cleanly to ad signage', () {
+      expect(mainJsContent.contains('top3CelebrationEpochMs = Date.now() + 30000;'), isTrue,
+          reason: 'Top 3 Winners overlay must display before uncovering signage during intermission');
       expect(tvDisplayContent.contains('final winnerDisplaySec = delaySec > 20 ? 20 : delaySec;'), isTrue,
           reason: 'TV display must display round winners fanfare for up to 20s');
     });
