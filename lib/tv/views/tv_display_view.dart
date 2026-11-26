@@ -2665,7 +2665,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   /// Fullscreen Venue Ad / Sponsor Signage Display Screen
   Widget _buildFullscreenSignageDisplay() {
-    final playUrl = _getPlayUrl();
     return SizedBox.expand(
       child: ColoredBox(
         color: Colors.black,
@@ -2736,84 +2735,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   ),
                 ),
               ),
-
-            // Permanent Floating Join QR Code in Lower Right Corner of Every Ad
-            Positioned(
-              right: 28,
-              bottom: 24,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xEE0E121E),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.neonCyan, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      blurRadius: 20,
-                      offset: const Offset(0, 6),
-                    ),
-                    BoxShadow(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.3),
-                      blurRadius: 14,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: QrImageView(
-                        data: playUrl,
-                        version: QrVersions.auto,
-                        size: 64,
-                        backgroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'SCAN TO PLAY',
-                          style: TextStyle(
-                            color: AppTheme.neonCyan,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'ROOM CODE',
-                          style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        Text(
-                          _displayRoomCode,
-                          style: const TextStyle(
-                            color: AppTheme.neonYellow,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -2939,30 +2860,35 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Widget _buildFullscreenSlide0() {
     final playUrl = _getPlayUrl();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      padding: const EdgeInsets.fromLTRB(36, 18, 36, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
-                ),
-                child: const Text(
-                  '⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡',
-                  style: TextStyle(
-                    color: AppTheme.neonCyan,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 1.5,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                  ),
+                  child: const Text(
+                    '⚡ OFFICIAL BAR & HOME TRIVIA APP • NO APP DOWNLOAD REQUIRED ⚡',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.neonCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -2996,19 +2922,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
-                      blurRadius: 18,
-                    ),
-                  ],
+              Flexible(
+                child: Text(
+                  'BAR ROOMS TRIVIA',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                    shadows: [
+                      Shadow(
+                        color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -3016,11 +2946,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           const SizedBox(height: 4),
           const Text(
             'HOW TO PLAY ON YOUR MOBILE PHONE',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
           ),
           const SizedBox(height: 2),
           const Text(
             'JOIN THE GAME SHOW IN UNDER 30 SECONDS RIGHT FROM YOUR TABLE!',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
           const SizedBox(height: 12),
@@ -3074,30 +3008,35 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Widget _buildFullscreenSlide1() {
     final playUrl = _getPlayUrl();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      padding: const EdgeInsets.fromLTRB(36, 18, 36, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonGreen, width: 1.5),
-                ),
-                child: const Text(
-                  '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡',
-                  style: TextStyle(
-                    color: AppTheme.neonGreen,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 1.5,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.neonGreen, width: 1.5),
+                  ),
+                  child: const Text(
+                    '🏡 USE AT HOME FOR TRIVIA NIGHT PARTIES & VENUES 🏡',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -3131,19 +3070,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
-                      color: AppTheme.neonGreen.withValues(alpha: 0.6),
-                      blurRadius: 18,
-                    ),
-                  ],
+              Flexible(
+                child: Text(
+                  'BAR ROOMS TRIVIA',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                    shadows: [
+                      Shadow(
+                        color: AppTheme.neonGreen.withValues(alpha: 0.6),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -3151,11 +3094,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           const SizedBox(height: 4),
           const Text(
             'HOST YOUR OWN PUB TRIVIA NIGHT AT HOME & VENUES!',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
           ),
           const SizedBox(height: 2),
           const Text(
             'BRING THE EXCITEMENT OF PUB TRIVIA HOME! Turn any TV and mobile phones into an interactive game show.',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
           ),
           const SizedBox(height: 12),
@@ -3206,30 +3153,35 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   Widget _buildFullscreenSlide2() {
     final playUrl = _getPlayUrl();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 20, 36, 56),
+      padding: const EdgeInsets.fromLTRB(36, 18, 36, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonCyan.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.neonCyan, width: 1.5),
-                ),
-                child: const Text(
-                  '📲 OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV 📲',
-                  style: TextStyle(
-                    color: AppTheme.neonCyan,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 1.5,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonCyan.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                  ),
+                  child: const Text(
+                    '📲 OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV 📲',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppTheme.neonCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -3263,19 +3215,23 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'BAR ROOMS TRIVIA',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.6),
-                      blurRadius: 18,
-                    ),
-                  ],
+              Flexible(
+                child: Text(
+                  'BAR ROOMS TRIVIA',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                    shadows: [
+                      Shadow(
+                        color: AppTheme.neonCyan.withValues(alpha: 0.6),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -3283,6 +3239,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           const SizedBox(height: 4),
           const Text(
             'DOWNLOAD THE OFFICIAL APP ON GOOGLE PLAY & AMAZON FIRE TV APPSTORE',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.neonYellow),
           ),
           const SizedBox(height: 12),
@@ -3293,22 +3251,30 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Expanded(
                   flex: 52,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.black26,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
                     ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Text('⭐ EVERYTHING YOU NEED TO HOST & PLAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
-                        Text('✓ Unlimited Play: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-                        Text('✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzers', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-                        Text('✓ Custom Signage & Ads: Rotate venue specials and party flyers on TV', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-                        Text('✓ Offline Fallback: Local questions ensure the trivia night never stops', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
-                      ],
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Text('⭐ EVERYTHING YOU NEED TO HOST & PLAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1)),
+                          SizedBox(height: 8),
+                          Text('✓ Unlimited Play: Unlimited rounds, games, and connected players', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 6),
+                          Text('✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzers', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 6),
+                          Text('✓ Custom Signage & Ads: Rotate venue specials and party flyers on TV', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 6),
+                          Text('✓ Offline Fallback: Local questions ensure the trivia night never stops', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -3316,7 +3282,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Expanded(
                   flex: 48,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.black38,
                       borderRadius: BorderRadius.circular(20),
@@ -3328,14 +3294,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       children: [
                         const Text(
                           'DOWNLOAD FROM APP STORES',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1),
                         ),
                         Row(
                           children: [
                             // Google Play Badge
                             Expanded(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.circular(12),
@@ -3344,14 +3312,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _buildGooglePlayIcon(size: 26),
+                                    _buildGooglePlayIcon(size: 24),
                                     const SizedBox(width: 8),
                                     const Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text('GET IT ON', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
-                                          Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
+                                          Text('Google Play', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
                                         ],
                                       ),
                                     ),
@@ -3363,7 +3331,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             // Amazon Fire TV Badge
                             Expanded(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.circular(12),
@@ -3372,14 +3340,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF9900), size: 24),
+                                    Icon(Icons.local_fire_department_rounded, color: Color(0xFFFF9900), size: 22),
                                     SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text('AVAILABLE AT', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
-                                          Text('Amazon Fire TV', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
+                                          Text('Amazon Fire TV', style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
                                         ],
                                       ),
                                     ),
@@ -3391,11 +3359,15 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         ),
                         const Text(
                           '✓ Search "Bar Rooms Trivia" on Google Play Store',
-                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 12.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.w700, fontSize: 12),
                         ),
                         const Text(
                           '✓ Search "Bar Rooms Trivia" on Amazon Fire TV Appstore',
-                          style: TextStyle(color: Color(0xFFFF9900), fontWeight: FontWeight.w700, fontSize: 12.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Color(0xFFFF9900), fontWeight: FontWeight.w700, fontSize: 12),
                         ),
                       ],
                     ),
@@ -3637,40 +3609,112 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.neonCyan.withValues(alpha: 0.4), width: 1.5),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  hookText,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
-                ),
-                const SizedBox(height: 2),
-                Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final qrSize = (constraints.maxHeight - 24).clamp(44.0, 72.0);
+          return Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('ROOM: ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
                     Text(
-                      _displayRoomCode,
-                      style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
+                      hookText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
                     ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        '•  Scan the QR code in the corner with any phone camera to join!',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: AppTheme.neonCyan, fontSize: 11),
-                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Text('ROOM: ', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text(
+                          _displayRoomCode,
+                          style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            '•  Scan the QR code in the corner with any phone camera to join!',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: AppTheme.neonCyan, fontSize: 11),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 170), // Reserved space for floating lower-right QR badge
-        ],
+              ),
+              const SizedBox(width: 16),
+              // Fitted Join QR Code Badge seated cleanly inside the bottom banner box
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xEE0E121E),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.neonCyan, width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: QrImageView(
+                          data: playUrl,
+                          version: QrVersions.auto,
+                          size: qrSize,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'SCAN TO PLAY',
+                            style: TextStyle(
+                              color: AppTheme.neonCyan,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          const Text(
+                            'ROOM CODE',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.4,
+                            ),
+                          ),
+                          Text(
+                            _displayRoomCode,
+                            style: const TextStyle(
+                              color: AppTheme.neonYellow,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

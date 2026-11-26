@@ -759,8 +759,8 @@ body[data-view="tv"] .tv-viewport {
 }
 
 #promo-qr-canvas {
-  width: 120px;
-  height: 120px;
+  width: 112px !important;
+  height: 112px !important;
   display: block;
 }
 
@@ -4592,21 +4592,25 @@ body.auth-mode .main-container {
   display: none !important;
 }
 
-/* Lower Right QR Code on Every Ad */
+/* Lower Right QR Code on Every Official Ad — proportionally scaled to fit inside bottom banner box */
 .tv-ad-qr-corner {
+  --slide-h: min(100vh, calc(100vw * 9 / 16));
+  --slide-w: min(100vw, calc(100vh * 16 / 9));
   position: absolute;
-  bottom: calc(max(0px, (100vh - (100vw * 9 / 16)) / 2) + min(100vh, 100vw * 9 / 16) * 0.1481);
+  bottom: calc(max(0px, (100vh - var(--slide-h)) / 2) + var(--slide-h) * 0.14815);
   transform: translateY(50%);
-  right: calc(max(0px, (100vw - (100vh * 16 / 9)) / 2) + min(100vw, 100vh * 16 / 9) * 0.0417 + 18px);
+  right: calc(max(0px, (100vw - var(--slide-w)) / 2) + var(--slide-w) * 0.056);
   z-index: 100;
+  max-height: calc(var(--slide-h) * 0.132);
+  box-sizing: border-box;
   background: rgba(14, 18, 30, 0.94);
   border: 2px solid var(--accent-cyan);
-  border-radius: 18px;
-  padding: 8px 14px;
+  border-radius: clamp(10px, calc(var(--slide-h) * 0.018), 16px);
+  padding: clamp(4px, calc(var(--slide-h) * 0.008), 8px) clamp(8px, calc(var(--slide-h) * 0.015), 14px);
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(0, 229, 255, 0.3);
+  gap: clamp(6px, calc(var(--slide-h) * 0.012), 12px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 229, 255, 0.25);
   backdrop-filter: blur(8px);
   transition: opacity 0.2s ease;
 }
@@ -4617,16 +4621,17 @@ body.auth-mode .main-container {
 
 .tv-ad-qr-frame {
   background-color: #fff;
-  padding: 5px;
-  border-radius: 10px;
+  padding: clamp(3px, calc(var(--slide-h) * 0.0045), 5px);
+  border-radius: clamp(6px, calc(var(--slide-h) * 0.011), 10px);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 #tv-ad-qr-canvas {
-  width: 80px !important;
-  height: 80px !important;
+  width: clamp(38px, calc(var(--slide-h) * 0.084), 92px) !important;
+  height: clamp(38px, calc(var(--slide-h) * 0.084), 92px) !important;
   display: block;
 }
 
@@ -4635,30 +4640,33 @@ body.auth-mode .main-container {
   flex-direction: column;
   align-items: flex-start;
   text-align: left;
+  justify-content: center;
 }
 
 .tv-ad-qr-scan-lbl {
   font-family: var(--font-heading);
   font-weight: 900;
-  font-size: 13px;
+  font-size: clamp(9px, calc(var(--slide-h) * 0.015), 14px);
   color: var(--accent-cyan);
-  letter-spacing: 1.2px;
+  letter-spacing: 1px;
+  line-height: 1.15;
 }
 
 .tv-ad-qr-room-lbl {
-  font-size: 10px;
+  font-size: clamp(7.5px, calc(var(--slide-h) * 0.011), 10.5px);
   font-weight: 700;
   color: var(--text-muted);
-  letter-spacing: 1.5px;
-  margin-top: 2px;
+  letter-spacing: 1.2px;
+  margin-top: 1px;
+  line-height: 1.15;
 }
 
 .tv-ad-qr-room-code {
   font-family: var(--font-heading);
-  font-size: 22px;
+  font-size: clamp(13px, calc(var(--slide-h) * 0.025), 24px);
   font-weight: 900;
   color: var(--accent-yellow);
-  letter-spacing: 2px;
+  letter-spacing: 1.8px;
   line-height: 1.1;
 }
 

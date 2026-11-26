@@ -70,16 +70,6 @@ let playerSessionSyncInterval = null;
 let playerScoreAtSubmission = 0;
 let adLoadSequence = 0;
 
-// State & Broadcast Channel
-const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
-let channel;
-try {
-  channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-} catch (e) {
-  // Fallback for environments where BroadcastChannel is unavailable
-  channel = { postMessage: () => {}, onmessage: null, close: () => {} };
-}
-
 const safeStorage = {
   getItem: (key) => {
     try { return localStorage.getItem(key); } catch (_) { return null; }
@@ -94,9 +84,30 @@ const safeStorage = {
 
 const initialUrlParams = new URLSearchParams(window.location.search);
 const urlRoomCode = initialUrlParams.get('room') || initialUrlParams.get('room_id') || initialUrlParams.get('user_code');
-let currentRoomCode = (urlRoomCode || safeStorage.getItem('bar_trivia_current_room') || 'TRIV').toUpperCase();
+let currentRoomCode = (urlRoomCode || safeStorage.getItem('bar_trivia_current_room') || 'TRIV').toUpperCase().replace(/[^A-Z0-9-]/g, '') || 'TRIV';
 if (urlRoomCode) {
   safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
+}
+
+// Room-Scoped Broadcast Channel so distinct rooms in the same browser never bleed into each other
+function createRoomBroadcastChannel(roomCode) {
+  const norm = String(roomCode || 'TRIV').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'TRIV';
+  try {
+    return new BroadcastChannel(`bar_rooms_trivia_${norm}`);
+  } catch (e) {
+    return { postMessage: () => {}, onmessage: null, close: () => {} };
+  }
+}
+
+let channel = createRoomBroadcastChannel(currentRoomCode);
+
+function rebindBroadcastChannelForRoom(roomCode) {
+  const norm = String(roomCode || 'TRIV').toUpperCase().replace(/[^A-Z0-9-]/g, '') || 'TRIV';
+  try { channel?.close?.(); } catch (_) {}
+  channel = createRoomBroadcastChannel(norm);
+  if (typeof initBroadcastChannelListeners === 'function') {
+    initBroadcastChannelListeners();
+  }
 }
 let currentPlayer = null;
 let currentQuestionIndex = 0;
@@ -1277,6 +1288,7 @@ function initAuthView() {
   if (userCode) {
     currentRoomCode = userCode.trim().toUpperCase();
     safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
+    rebindBroadcastChannelForRoom(currentRoomCode);
     if (tvCodeLabel && tvCodePill) {
       tvCodeLabel.textContent = userCode;
       tvCodePill.classList.remove('hidden');
@@ -2064,6 +2076,7 @@ function initNavigation() {
   const deviceToken = urlParams.get('device_token') || urlParams.get('deviceToken') || hashParams.get('device_token') || hashParams.get('deviceToken') || (window.location.hash.includes('device_token=') ? 'yes' : null);
   if (roomParam) {
     currentRoomCode = roomParam.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    rebindBroadcastChannelForRoom(currentRoomCode);
     const roomInput = document.getElementById('input-room-code');
     const lockBadge = document.getElementById('room-code-locked-badge');
     if (roomInput) {
@@ -2145,7 +2158,7 @@ function initQrCodes() {
 
   const canvasPromo = document.getElementById('promo-qr-canvas');
   if (canvasPromo) {
-    QRCode.toCanvas(canvasPromo, playUrl, { width: 130, margin: 1 }, (err) => {
+    QRCode.toCanvas(canvasPromo, playUrl, { width: 112, margin: 1 }, (err) => {
       if (err) console.error('Promo QR Code error:', err);
     });
   }
@@ -2159,7 +2172,7 @@ function initQrCodes() {
 
   const canvasAdCorner = document.getElementById('tv-ad-qr-canvas');
   if (canvasAdCorner) {
-    QRCode.toCanvas(canvasAdCorner, playUrl, { width: 80, margin: 1 }, (err) => {
+    QRCode.toCanvas(canvasAdCorner, playUrl, { width: 112, margin: 1 }, (err) => {
       if (err) console.error('Ad Corner QR Code error:', err);
     });
   }
@@ -2692,6 +2705,16 @@ function handleIncomingManualTimerStarted(rawPayload) {
   timerEndsAtGlobalMs = endsAt;
   totalTimerDuration = dur;
   currentGameState = 'QUESTION_ACTIVE';
+  if (playerChoiceSubmitted === null) {
+    document.querySelectorAll('.btn-answer').forEach(btn => {
+      btn.disabled = false;
+    });
+    const playerStatusBadge = document.getElementById('player-status-badge');
+    if (playerStatusBadge) {
+      playerStatusBadge.className = 'status-badge status-active';
+      playerStatusBadge.innerHTML = '<span id="status-icon">⏱️</span> UNLOCKED';
+    }
+  }
   const rem = Math.max(0, Math.ceil((timerEndsAtGlobalMs - now) / 1000));
   startCountdown(rem);
 }
@@ -3046,12 +3069,20 @@ function initRealtimeEngine() {
 
 function initBroadcastChannelListeners() {
   channel.onmessage = (event) => {
-    const { type, payload } = event.data;
+    const data = event.data || {};
+    const { type, payload } = data;
+    const incomingRoom = (data.room_code || data.roomCode || payload?.room_code || payload?.roomCode || '').toString().toUpperCase().replace(/-/g, '').trim();
+    const myRoom = String(currentRoomCode || 'TRIV').toUpperCase().replace(/-/g, '').trim();
+    if (incomingRoom && myRoom && incomingRoom !== myRoom) {
+      return;
+    }
 
     if (type === 'REQUEST_STATE_SYNC') {
       channel.postMessage({
         type: 'STATE_SYNC_RESPONSE',
+        room_code: currentRoomCode,
         payload: {
+          room_code: currentRoomCode,
           currentGameState,
           currentQuestionData,
           currentQuestionIndex,
@@ -7737,7 +7768,7 @@ function onQuestionStart(payload) {
         playerStatusBadge.className = 'status-badge status-active';
         playerStatusBadge.innerHTML = `<span id="status-icon">✓</span> ANSWER SUBMITTED`;
       } else if (isIdle) {
-        playerStatusBadge.className = 'status-badge status-active';
+        playerStatusBadge.className = 'status-badge status-locked';
         playerStatusBadge.innerHTML = `<span id="status-icon">🎤</span> HOST READING QUESTION`;
       } else {
         playerStatusBadge.className = 'status-badge status-active';
@@ -7747,7 +7778,7 @@ function onQuestionStart(payload) {
 
     if (!payload.is_resumed || playerChoiceSubmitted === null) {
       answerBtns.forEach(btn => {
-        btn.disabled = false;
+        btn.disabled = isIdle;
         btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
         const existingBadge = btn.querySelector('.player-correct-badge');
         if (existingBadge) existingBadge.remove();
@@ -8944,6 +8975,7 @@ function initPlayerControls() {
     const enteredRoom = (roomInput?.value || '').trim();
     if (enteredRoom) {
       currentRoomCode = enteredRoom.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      rebindBroadcastChannelForRoom(currentRoomCode);
     }
 
     const rawNick = (nicknameInput?.value || '').trim();

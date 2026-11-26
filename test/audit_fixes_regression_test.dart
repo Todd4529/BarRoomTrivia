@@ -228,6 +228,11 @@ void main() {
       expect(css.contains('body[data-view="host"] .app-header'), isTrue);
       expect(css.contains('z-index: 1200;'), isTrue);
       expect(css.contains('z-index: 10050;'), isTrue);
+
+      // Web BroadcastChannel room isolation & Manual Reading Phase button lock
+      final js = File('src/main.js').readAsStringSync();
+      expect(js.contains('function createRoomBroadcastChannel(roomCode)'), isTrue);
+      expect(js.contains('btn.disabled = isIdle;'), isTrue);
     });
   });
 }
