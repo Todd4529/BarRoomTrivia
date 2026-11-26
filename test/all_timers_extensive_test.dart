@@ -65,8 +65,8 @@ void main() {
     test('3. Player Controller View implements defensive fallback guard for question timer', () {
       expect(playerControllerContent.contains('if (!isIdleTimer && durationSec <= 4 && fallbackDuration > 4)'), isTrue,
           reason: 'Player Controller View must enforce durationSec <= 4 fallback guard in onQuestionBroadcast');
-      expect(playerControllerContent.contains('if (durationSec <= 4 && dur > 4)'), isTrue,
-          reason: 'Player Controller View must enforce durationSec <= 4 fallback guard in polling recovery');
+      expect(playerControllerContent.contains('if (!isReadingPhase && durationSec <= 4 && dur > 4)'), isTrue,
+          reason: 'Player Controller View must enforce durationSec <= 4 fallback guard in polling recovery outside reading phase');
     });
 
     test('4. TV Display View implements defensive fallback guard for question timer', () {

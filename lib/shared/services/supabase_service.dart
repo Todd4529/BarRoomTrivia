@@ -24,22 +24,14 @@ class SupabaseService {
 
   /// Email / Password sign‑in
   Future<User?> signInWithEmail(String email, String password) async {
-    try {
-      final response = await _client.auth.signInWithPassword(email: email, password: password);
-      return response.user;
-    } catch (_) {
-      return null;
-    }
+    final response = await _client.auth.signInWithPassword(email: email, password: password);
+    return response.user;
   }
 
   /// Email / Password sign‑up
   Future<User?> signUpWithEmail(String email, String password) async {
-    try {
-      final response = await _client.auth.signUp(email: email, password: password);
-      return response.user;
-    } catch (_) {
-      return null;
-    }
+    final response = await _client.auth.signUp(email: email, password: password);
+    return response.user;
   }
 
   /// Google provider sign‑in
@@ -72,9 +64,7 @@ class SupabaseService {
 
   /// Send password‑reset email
   Future<void> sendPasswordReset(String email) async {
-    try {
-      await _client.auth.resetPasswordForEmail(email);
-    } catch (_) {}
+    await _client.auth.resetPasswordForEmail(email);
   }
 
   /// Update user password (for password recovery)
@@ -149,6 +139,10 @@ class SupabaseService {
   static void syncPlayersFromBroadcast(String roomCode, dynamic playersJson) {
     final normRoom = roomCode.toUpperCase();
     if (playersJson is List) {
+      if (playersJson.isEmpty) {
+        clearLocalPlayers(normRoom);
+        return;
+      }
       final parsedList = <Player>[];
       for (var item in playersJson) {
         if (item is Map) {
@@ -299,7 +293,7 @@ class SupabaseService {
     }
   }
 
-  /// Register player in a room session with nickname
+  /// Register player in a room session with nickname (preserves score on rejoin)
   Future<Player> registerPlayer({
     required String roomCode,
     required String nickname,
@@ -310,12 +304,14 @@ class SupabaseService {
     final normRoom = roomCode.toUpperCase();
     final players = _localPlayersMap.putIfAbsent(normRoom, () => []);
     final idx = players.indexWhere((p) => p.nickname.toLowerCase() == nickname.toLowerCase());
+    final existingPlayer = idx >= 0 ? players[idx] : null;
+    final preservedScore = existingPlayer?.cumulativeScore ?? 0;
     final newPlayer = Player(
-      id: 'player-${DateTime.now().millisecondsSinceEpoch}',
+      id: existingPlayer?.id ?? 'player-${DateTime.now().millisecondsSinceEpoch}',
       roomCode: normRoom,
-      playerUid: 'uid-${nickname.toLowerCase()}',
+      playerUid: existingPlayer?.playerUid ?? 'uid-${nickname.toLowerCase()}',
       nickname: nickname,
-      cumulativeScore: 0,
+      cumulativeScore: preservedScore,
       isConnected: true,
     );
     if (idx >= 0) {
@@ -338,6 +334,21 @@ class SupabaseService {
   void _syncPlayerToDbInBackground(String normRoom, String nickname, Player newPlayer) async {
     try {
       final user = await signInAnonymously().timeout(const Duration(milliseconds: 600));
+      final existingRows = await _client
+          .from('players')
+          .select('cumulative_score')
+          .eq('room_code', normRoom)
+          .ilike('nickname', nickname)
+          .limit(1)
+          .timeout(const Duration(milliseconds: 600));
+      int dbScore = newPlayer.cumulativeScore;
+      if (existingRows.isNotEmpty) {
+        final rawScore = existingRows.first['cumulative_score'];
+        if (rawScore is num && rawScore.toInt() > dbScore) {
+          dbScore = rawScore.toInt();
+        }
+      }
+
       await _client
           .from('players')
           .upsert(
@@ -345,20 +356,16 @@ class SupabaseService {
               'player_uid': user?.id ?? newPlayer.playerUid,
               'room_code': normRoom,
               'nickname': nickname,
-              'cumulative_score': 0,
+              'cumulative_score': dbScore,
               'is_connected': true,
             },
             onConflict: 'room_code, player_uid',
           )
           .timeout(const Duration(milliseconds: 600));
 
-      // Also ensure any existing DB record with matching nickname and room starts at 0
-      await _client
-          .from('players')
-          .update({'cumulative_score': 0, 'is_connected': true})
-          .eq('room_code', normRoom)
-          .ilike('nickname', nickname)
-          .timeout(const Duration(milliseconds: 600));
+      if (dbScore > newPlayer.cumulativeScore) {
+        updatePlayerScoreDirectly(roomCode: normRoom, nickname: nickname, score: dbScore);
+      }
     } catch (_) {}
   }
 
@@ -659,17 +666,22 @@ class SupabaseService {
     return [];
   }
 
-  /// Host: Create new room session with Dev Fallback
+  /// Host: Create or update room session with Dev Fallback
   Future<GameSession> createRoomSession(String roomCode) async {
     try {
+      final normRoom = roomCode.toUpperCase().trim();
       final user = _client.auth.currentUser ?? (await signInAnonymously().timeout(const Duration(milliseconds: 500)));
       final response = await _client
           .from('game_sessions')
-          .insert({
-            'room_code': roomCode,
-            'host_id': user?.id,
-            'status': 'lobby',
-          })
+          .upsert(
+            {
+              'room_code': normRoom,
+              'host_id': user?.id,
+              'status': 'lobby',
+              'updated_at': DateTime.now().toIso8601String(),
+            },
+            onConflict: 'room_code',
+          )
           .select()
           .single()
           .timeout(const Duration(milliseconds: 500));

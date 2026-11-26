@@ -54,7 +54,9 @@ class AnswerButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 64,
                 fontWeight: FontWeight.w900,
-                color: isDisabled ? Colors.white38 : Colors.white,
+                color: isDisabled
+                    ? Colors.white38
+                    : (effectiveColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white),
               ),
             ),
           ),

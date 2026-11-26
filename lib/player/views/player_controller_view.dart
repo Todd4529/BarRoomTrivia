@@ -304,7 +304,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _currentQuestion = question;
             _selectedOption = null;
             _correctOption = null;
-            _inputsLocked = false;
+            _inputsLocked = isIdleTimer;
             _isReviewPhase = false;
             _isScoredForThisQuestion = false;
             _isQuestionTimerRunning = !isIdleTimer;
@@ -349,6 +349,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
         setState(() {
           _remainingSeconds = remSec;
           _isQuestionTimerRunning = true;
+          _inputsLocked = _selectedOption != null;
           _isInterQuestionPhase = false;
           _isReviewPhase = false;
         });
@@ -433,7 +434,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
           startsAt = dt != null ? dt.millisecondsSinceEpoch : int.tryParse(rawStarts);
         }
         final now = DateTime.now().millisecondsSinceEpoch;
-        final targetStartsAt = (startsAt != null && (startsAt - now) > 2000)
+        final targetStartsAt = (startsAt != null && startsAt > now)
             ? startsAt
             : (now + 10000);
         final remainingSec = ((targetStartsAt - now) / 1000).ceil().clamp(1, 30);
@@ -517,7 +518,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             if (mounted) {
               setState(() {
                 _isResumeCountdownActive = false;
-                _inputsLocked = false;
+                _inputsLocked = _selectedOption != null || !_isQuestionTimerRunning;
               });
               _targetTimerEndsAtMs = DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000);
               _startLocalCountdown();
@@ -548,6 +549,12 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
             _isResumeCountdownActive = false;
             _isInterQuestionPhase = false;
             _isInterRoundPhase = false;
+            _currentRound = 1;
+            _questionNumberInRound = 1;
+            _lastGradedQuestionKey = null;
+            _isScoredForThisQuestion = false;
+            _wasCurrentQuestionCorrect = false;
+            _top3Winners = [];
 
             if (mode == 'zero_scores') {
               _myScore = 0;
@@ -877,18 +884,19 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   calcQNum != _questionNumberInRound ||
                   (_currentQuestion!.id != q.id && _currentQuestion!.questionText != q.questionText)));
 
+              final isReadingPhase = status == 'active_reading';
               if (isNewQuestion) {
                 final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
-                int targetEndsAt = (timerEndsAt != null && timerEndsAt > now)
+                int targetEndsAt = (!isReadingPhase && timerEndsAt != null && timerEndsAt > now)
                     ? timerEndsAt
                     : (now + dur * 1000);
                 final remainingMs = targetEndsAt - now;
-                int durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
-                if (durationSec <= 4 && dur > 4) {
+                int durationSec = isReadingPhase ? dur : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+                if (!isReadingPhase && durationSec <= 4 && dur > 4) {
                   durationSec = dur;
                   targetEndsAt = now + (dur * 1000);
                 }
-                _targetTimerEndsAtMs = targetEndsAt;
+                _targetTimerEndsAtMs = isReadingPhase ? null : targetEndsAt;
 
                 _interQuestionTimer?.cancel();
                 _interRoundTimer?.cancel();
@@ -904,12 +912,25 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                   _currentQuestionId = q.id;
                   _selectedOption = null;
                   _correctOption = null;
-                  _inputsLocked = false;
+                  _inputsLocked = isReadingPhase;
+                  _isQuestionTimerRunning = !isReadingPhase;
                   _isReviewPhase = false;
                   _isScoredForThisQuestion = false;
                   if (rNum != null && rNum > 0) _currentRound = rNum;
                   _questionNumberInRound = calcQNum;
                   _remainingSeconds = durationSec;
+                });
+                if (!isReadingPhase) {
+                  _startLocalCountdown();
+                }
+              } else if (isSameQ && !isReadingPhase && !_isQuestionTimerRunning && !_isReviewPhase) {
+                final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
+                final targetEndsAt = (timerEndsAt != null && timerEndsAt > now) ? timerEndsAt : (now + dur * 1000);
+                _targetTimerEndsAtMs = targetEndsAt;
+                setState(() {
+                  _isQuestionTimerRunning = true;
+                  _inputsLocked = _selectedOption != null;
+                  _remainingSeconds = max(1, ((targetEndsAt - now) / 1000).ceil().clamp(1, 180));
                 });
                 _startLocalCountdown();
               } else {
@@ -1093,16 +1114,6 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               score: _myScore,
               pointsToAdd: 10,
             );
-            _realtimeService.broadcastPlayerScoreUpdated(
-              roomCode: room,
-              nickname: nick,
-              score: _myScore,
-              pointsEarned: 10,
-            );
-            _realtimeService.broadcastLeaderboardUpdated(
-              roomCode: room,
-              players: SupabaseService.getLocalPlayersJson(room),
-            );
           }
           }
         }
@@ -1192,24 +1203,55 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     super.dispose();
   }
 
+  Future<void> _confirmLeaveGame() async {
+    if (!mounted) return;
+    if (_player == null) {
+      context.go('/hub');
+      return;
+    }
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardSurfaceElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: AppTheme.neonCyan.withOpacity(0.4), width: 1.5),
+        ),
+        title: const Text('Leave Trivia Game?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you sure you want to leave this room? You can rejoin anytime with the same nickname to keep your score.',
+          style: TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('STAY', style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('LEAVE GAME', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (shouldLeave == true && mounted) {
+      context.go('/hub');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        if (context.mounted) {
-          context.go('/hub');
-        }
+        _confirmLeaveGame();
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () {
-            if (context.mounted) context.go('/hub');
-          },
-          const SingleActivator(LogicalKeyboardKey.goBack): () {
-            if (context.mounted) context.go('/hub');
-          },
+          const SingleActivator(LogicalKeyboardKey.escape): _confirmLeaveGame,
+          const SingleActivator(LogicalKeyboardKey.goBack): _confirmLeaveGame,
         },
         child: Scaffold(
           backgroundColor: AppTheme.darkBackground,
@@ -1228,7 +1270,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                     child: Container(
                       color: Colors.black.withOpacity(0.88),
                       alignment: Alignment.center,
-                      padding: const EdgeInsets.only(top: 86, left: 20, right: 20, bottom: 20),
+                      padding: const EdgeInsets.only(top: 124, left: 20, right: 20, bottom: 20),
                       child: SingleChildScrollView(
                         child: Container(
                           constraints: const BoxConstraints(maxWidth: 420),
@@ -1297,7 +1339,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                                 ),
                               ),
                               const SizedBox(height: 18),
-                              ...List.generate(_top3Winners.length, (idx) {
+                              ...List.generate(_top3Winners.length.clamp(0, 3), (idx) {
                                 final w = _top3Winners[idx];
                                 final badges = ['🥇 1ST PLACE (+20 BONUS)', '🥈 2ND PLACE', '🥉 3RD PLACE'];
                                 final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
@@ -1890,7 +1932,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
 
   Widget _buildActivePlayerScreen() {
     return Padding(
-      padding: const EdgeInsets.only(top: 86, left: 16, right: 16, bottom: 16),
+      padding: const EdgeInsets.only(top: 124, left: 16, right: 16, bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2269,7 +2311,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '0:${_preGameSecondsRemaining.toString().padLeft(2, '0')}',
+                        '${_preGameSecondsRemaining ~/ 60}:${(_preGameSecondsRemaining % 60).toString().padLeft(2, '0')}',
                         style: const TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.w900,
@@ -2306,8 +2348,11 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -2318,6 +2363,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 ),
                 child: Text(
                   _currentQuestion?.category.toUpperCase() ?? '',
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -2326,6 +2372,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (_isResumeCountdownActive)
                     Container(
@@ -2428,18 +2475,23 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            Question.decodeHtmlAndSymbols(_currentQuestion?.questionText ?? ''),
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              height: 1.3,
-              fontFamilyFallback: ['Roboto', 'Arial', 'sans-serif'],
+          const SizedBox(height: 12),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 150),
+            child: SingleChildScrollView(
+              child: Text(
+                Question.decodeHtmlAndSymbols(_currentQuestion?.questionText ?? ''),
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  height: 1.3,
+                  fontFamilyFallback: ['Roboto', 'Arial', 'sans-serif'],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           Expanded(
             child: Column(
               children: [
@@ -2510,6 +2562,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
     } else if (_isReviewPhase && !isCorrect && !isSelected) {
       bg = Colors.grey.shade900;
     }
+    final Color fgColor = bg.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
 
     return Material(
       color: Colors.transparent,
@@ -2548,10 +2601,10 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 children: [
                   Text(
                     letter,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                      color: fgColor,
                     ),
                   ),
                   // Removed check and x icons
@@ -2566,7 +2619,7 @@ class _PlayerControllerViewState extends State<PlayerControllerView> {
                 style: TextStyle(
                   fontSize: text.length > 35 ? 14 : (text.length > 20 ? 16 : 18),
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: fgColor,
                   fontFamilyFallback: const ['Roboto', 'Arial', 'sans-serif'],
                 ),
               ),

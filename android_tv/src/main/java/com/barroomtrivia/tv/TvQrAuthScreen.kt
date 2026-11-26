@@ -116,50 +116,58 @@ fun TvQrAuthScreen(
         }
     }
 
-    // 2. Status Polling Loop every 4 seconds + Expiration Countdown
-    LaunchedEffect(authState) {
-        val currentState = authState
-        if (currentState is TvAuthState.DisplayQr) {
-            val deviceToken = currentState.deviceToken
-            var secondsLeft = currentState.remainingSeconds
+    // 2. Status Polling Loop every 4 seconds + Expiration Countdown (keyed ONLY on deviceToken so ticks don't cancel it!)
+    val activeDisplayToken = (authState as? TvAuthState.DisplayQr)?.deviceToken
+    LaunchedEffect(activeDisplayToken) {
+        val initialState = authState as? TvAuthState.DisplayQr ?: return@LaunchedEffect
+        val deviceToken = initialState.deviceToken
+        var secondsLeft = initialState.remainingSeconds
 
-            while (isActive && secondsLeft > 0) {
-                delay(4000L) // Poll status every 4 seconds
-                secondsLeft -= 4
+        while (isActive && secondsLeft > 0) {
+            delay(4000L) // Poll status every 4 seconds
+            secondsLeft -= 4
 
-                val statusResult = withContext(Dispatchers.IO) {
-                    pollDeviceStatus(backendBaseUrl, deviceToken)
-                }
+            val statusResult = withContext(Dispatchers.IO) {
+                pollDeviceStatus(backendBaseUrl, deviceToken)
+            }
 
-                if (statusResult != null) {
-                    val status = statusResult.optString("status")
-                    if (status == "verified") {
-                        val userId = statusResult.getString("user_id")
-                        val userInfo = statusResult.optJSONObject("user_info")
-                        val displayName = userInfo?.optString("email") ?: "Trivia Host"
-                        val sessionToken = statusResult.optString("session_token", currentState.sessionToken)
+            if (statusResult != null) {
+                val status = statusResult.optString("status")
+                if (status == "verified") {
+                    val userId = statusResult.getString("user_id")
+                    val userInfo = statusResult.optJSONObject("user_info")
+                    val displayName = userInfo?.optString("email") ?: "Trivia Host"
+                    val sessionToken = statusResult.optString("session_token", initialState.sessionToken)
 
-                        authState = TvAuthState.Authenticated(userId, displayName, sessionToken)
-                        delay(1200L)
-                        onAuthSuccess(userId, sessionToken)
-                        break
-                    } else if (status == "expired") {
-                        authState = TvAuthState.Expired("Pairing code has expired. Please refresh for a new code.")
-                        break
-                    }
-                }
-
-                // Update countdown seconds
-                if (authState is TvAuthState.DisplayQr) {
-                    val updated = authState as TvAuthState.DisplayQr
-                    authState = updated.copy(remainingSeconds = maxOf(0, secondsLeft))
+                    authState = TvAuthState.Authenticated(userId, displayName, sessionToken)
+                    return@LaunchedEffect
+                } else if (status == "expired") {
+                    authState = TvAuthState.Expired("Pairing code has expired. Please refresh for a new code.")
+                    return@LaunchedEffect
                 }
             }
 
-            if (secondsLeft <= 0 && authState is TvAuthState.DisplayQr) {
-                authState = TvAuthState.Expired("QR code timed out. Generate a fresh code to connect.")
+            // Update countdown seconds without cancelling this coroutine
+            val current = authState
+            if (current is TvAuthState.DisplayQr && current.deviceToken == deviceToken) {
+                authState = current.copy(remainingSeconds = maxOf(0, secondsLeft))
+            } else {
+                return@LaunchedEffect
             }
         }
+
+        val finalState = authState
+        if (secondsLeft <= 0 && finalState is TvAuthState.DisplayQr && finalState.deviceToken == deviceToken) {
+            authState = TvAuthState.Expired("QR code timed out. Generate a fresh code to connect.")
+        }
+    }
+
+    // 2b. Navigate once authenticated without being cancelled by state transitions
+    val authenticatedState = authState as? TvAuthState.Authenticated
+    LaunchedEffect(authenticatedState?.sessionToken) {
+        val authed = authenticatedState ?: return@LaunchedEffect
+        delay(1200L)
+        onAuthSuccess(authed.userId, authed.sessionToken)
     }
 
     // 3. UI Layout (10-foot TV experience)

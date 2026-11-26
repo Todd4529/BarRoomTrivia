@@ -55,7 +55,19 @@ final GoRouter _router = GoRouter(
           );
         }
 
-        if (view == 'player' || (view == null && room != null && state.uri.queryParameters['view'] != 'tv')) {
+        // If launched via TV Host Controls Recovery QR code (/?view=host&room=...)
+        if (view == 'host') {
+          return HostDashboardView(initialRoomCode: room);
+        }
+
+        if (view == 'tv') {
+          return TvDisplayView(
+            roomCode: room ?? 'TRIV',
+            autoStart: state.uri.queryParameters['auto_start'] == 'true',
+          );
+        }
+
+        if (view == 'player' || (view == null && room != null)) {
           return PlayerControllerView(initialRoomCode: room);
         }
         return const InitialRouteDecider();
@@ -190,7 +202,7 @@ class _BarRoomTriviaAppState extends State<BarRoomTriviaApp> {
         _router.go('/reset-password');
       } else if (data.event == AuthChangeEvent.signedIn) {
         final location = _router.routerDelegate.currentConfiguration.uri.path;
-        if (location == '/auth' || location == '/onboarding') {
+        if (location == '/' || location == '/auth' || location == '/onboarding') {
           _router.go('/hub');
         }
       }
@@ -204,8 +216,8 @@ class _BarRoomTriviaAppState extends State<BarRoomTriviaApp> {
         final updateInfo = await InAppUpdate.checkForUpdate();
         if (updateInfo.updateAvailability == UpdateAvailability.updateAvailable) {
           if (updateInfo.flexibleUpdateAllowed) {
+            // Download in background without killing an active game session mid-round
             await InAppUpdate.startFlexibleUpdate();
-            await InAppUpdate.completeFlexibleUpdate();
           } else if (updateInfo.immediateUpdateAllowed) {
             await InAppUpdate.performImmediateUpdate();
           }
@@ -270,6 +282,11 @@ class _MainNavigationHubState extends State<MainNavigationHub> {
     } catch (_) {}
 
     if (!mounted) return;
+    // Only auto-jump into TV Display on landscape big screens/TVs, never hijack a host's phone
+    final size = MediaQuery.maybeOf(context)?.size;
+    final isTvBigScreen = size != null && size.width > size.height && size.width >= 850;
+    if (!isTvBigScreen) return;
+
     _realtimeService.joinRoomChannel(
       roomCode: _targetRoomCode,
       onPreGameCountdownBroadcast: (payload) {
@@ -554,6 +571,7 @@ class _FocusableTargetCardState extends State<FocusableTargetCard> {
         return KeyEventResult.ignored;
       },
       child: InkWell(
+        canRequestFocus: false,
         onTap: widget.onTap,
         borderRadius: BorderRadius.circular(20),
         child: AnimatedContainer(

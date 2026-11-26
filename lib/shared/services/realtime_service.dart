@@ -10,6 +10,7 @@ class RealtimeService {
   RealtimeChannel? _channel;
   RealtimeChannel? _defaultChannel;
   RealtimeChannel? _globalChannel;
+  String? _currentRoomCode;
 
   // Static event bus for local dev testing / multi-view synchronization
   static final StreamController<Map<String, dynamic>> _localEventBus =
@@ -104,23 +105,24 @@ class RealtimeService {
     void Function(Map<String, dynamic>)? onAdSlidesUpdatedBroadcast,
     void Function(Map<String, dynamic>)? onSoundEffectsToggledBroadcast,
   }) {
+    bool matchesRoom(Map<String, dynamic> data) {
+      final eventRoom = (data['room_code'] as String?)?.toUpperCase().trim();
+      final currentRoom = roomCode.toUpperCase().trim();
+      if (eventRoom == null || eventRoom.isEmpty) return true;
+      final normEvent = eventRoom.replaceAll('-', '');
+      final normCurrent = currentRoom.replaceAll('-', '');
+      return eventRoom == currentRoom || normEvent == normCurrent;
+    }
+
     void handleEvent(dynamic rawData) {
       if (rawData is Map<String, dynamic>) {
         // Convert sender-clock deadlines to this device's clock
         final data = normalizeClockSkew(rawData);
-        final eventRoom = (data['room_code'] as String?)?.toUpperCase();
-        final currentRoom = roomCode.toUpperCase();
-        
+        final eventRoom = (data['room_code'] as String?)?.toUpperCase().trim();
+
         // Strict Room Matching: Only accept events intended for this room
-        if (eventRoom != null && eventRoom.isNotEmpty) {
-          final normEvent = eventRoom.replaceAll('-', '');
-          final normCurrent = currentRoom.replaceAll('-', '');
-          final matches = eventRoom == currentRoom ||
-              normEvent == normCurrent ||
-              eventRoom == 'GLOBAL';
-          if (!matches) {
-            return;
-          }
+        if (!matchesRoom(data)) {
+          return;
         }
 
         final event = data['event'] as String?;
@@ -148,6 +150,11 @@ class RealtimeService {
           onSoundEffectsToggledBroadcast(data);
         } else if (event == 'request_state_sync' && onRequestStateSyncBroadcast != null) {
           onRequestStateSyncBroadcast(data);
+        } else if (event == 'leaderboard_cleared') {
+          SupabaseService.clearLocalPlayers(eventRoom ?? roomCode);
+          if (onLeaderboardUpdatedBroadcast != null) {
+            onLeaderboardUpdatedBroadcast({...data, 'players': []});
+          }
         } else if (event == 'player_joined') {
           final nick = data['nickname']?.toString();
           if (nick != null && nick.isNotEmpty) {
@@ -185,6 +192,8 @@ class RealtimeService {
       }
     }
 
+    _currentRoomCode = roomCode.toUpperCase().trim();
+
     // 1. Listen to local event bus for same-process responsiveness
     _localSubscription?.cancel();
     _localSubscription = _localEventBus.stream.listen(handleEvent);
@@ -199,16 +208,20 @@ class RealtimeService {
     _mqttSubscription?.cancel();
     _mqttSubscription = mqtt.eventStream.listen(handleEvent);
 
-    // Helper to register callbacks on any RealtimeChannel
+    // Helper to register callbacks on any RealtimeChannel with room verification
     void attachListeners(RealtimeChannel ch) {
       ch
           .onBroadcast(
             event: 'question_start',
-            callback: (payload) => onQuestionBroadcast(normalizeClockSkew(payload)),
+            callback: (payload) {
+              if (!matchesRoom(payload)) return;
+              onQuestionBroadcast(normalizeClockSkew(payload));
+            },
           )
           .onBroadcast(
             event: 'manual_timer_started',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onManualTimerStartedBroadcast != null) {
                 onManualTimerStartedBroadcast(normalizeClockSkew(payload));
               }
@@ -216,11 +229,15 @@ class RealtimeService {
           )
           .onBroadcast(
             event: 'timer_expired',
-            callback: (payload) => onTimerExpiredBroadcast(normalizeClockSkew(payload)),
+            callback: (payload) {
+              if (!matchesRoom(payload)) return;
+              onTimerExpiredBroadcast(normalizeClockSkew(payload));
+            },
           )
           .onBroadcast(
             event: 'pre_game_countdown',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onPreGameCountdownBroadcast != null) {
                 onPreGameCountdownBroadcast(normalizeClockSkew(payload));
               }
@@ -229,6 +246,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'game_paused',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onGamePausedBroadcast != null) {
                 onGamePausedBroadcast(payload);
               }
@@ -237,6 +255,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'game_resuming',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onGameResumingBroadcast != null) {
                 onGameResumingBroadcast(normalizeClockSkew(payload));
               }
@@ -245,6 +264,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'game_reset',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onGameResetBroadcast != null) {
                 onGameResetBroadcast(payload);
               }
@@ -253,14 +273,26 @@ class RealtimeService {
           .onBroadcast(
             event: 'round_completed',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onRoundCompletedBroadcast != null) {
                 onRoundCompletedBroadcast(normalizeClockSkew(payload));
               }
             },
           )
           .onBroadcast(
+            event: 'leaderboard_cleared',
+            callback: (payload) {
+              if (!matchesRoom(payload)) return;
+              SupabaseService.clearLocalPlayers(roomCode);
+              if (onLeaderboardUpdatedBroadcast != null) {
+                onLeaderboardUpdatedBroadcast({...payload, 'players': []});
+              }
+            },
+          )
+          .onBroadcast(
             event: 'leaderboard_updated',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               final pList = payload['players'] ?? payload['leaderboard'];
               if (pList != null) {
                 SupabaseService.syncPlayersFromBroadcast(roomCode, pList);
@@ -273,6 +305,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'player_score_updated',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               final nick = payload['nickname']?.toString();
               final rawScore = payload['cumulative_score'] ?? payload['score'] ?? payload['points'];
               int score = 0;
@@ -296,6 +329,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'player_joined',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               final nick = payload['nickname']?.toString();
               if (nick != null && nick.isNotEmpty) {
                 SupabaseService.registerIncomingPlayer(roomCode, nick);
@@ -308,6 +342,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'ad_mode_toggled',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onAdModeToggledBroadcast != null) {
                 onAdModeToggledBroadcast(payload);
               }
@@ -316,6 +351,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'ad_slides_updated',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onAdSlidesUpdatedBroadcast != null) {
                 onAdSlidesUpdatedBroadcast(payload);
               }
@@ -324,6 +360,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'sound_effects_toggled',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onSoundEffectsToggledBroadcast != null) {
                 onSoundEffectsToggledBroadcast(payload);
               }
@@ -332,6 +369,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'sound_toggled',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onSoundEffectsToggledBroadcast != null) {
                 onSoundEffectsToggledBroadcast(payload);
               }
@@ -340,6 +378,7 @@ class RealtimeService {
           .onBroadcast(
             event: 'request_state_sync',
             callback: (payload) {
+              if (!matchesRoom(payload)) return;
               if (onRequestStateSyncBroadcast != null) {
                 onRequestStateSyncBroadcast(payload);
               }
@@ -348,22 +387,12 @@ class RealtimeService {
           .subscribe();
     }
 
-    // 3. Subscribe to Supabase Realtime channels
+    // 3. Subscribe strictly to this room's Supabase Realtime channel
     try {
       final norm = roomCode.toUpperCase().trim();
       _channel = SupabaseConfig.client.channel('room_$norm');
       attachListeners(_channel!);
       _activeChannels[norm] = _channel!;
-
-      if (norm != 'TRIV') {
-        _defaultChannel = SupabaseConfig.client.channel('room_TRIV');
-        attachListeners(_defaultChannel!);
-        _activeChannels['TRIV'] = _defaultChannel!;
-      }
-
-      _globalChannel = SupabaseConfig.client.channel('room_GLOBAL');
-      attachListeners(_globalChannel!);
-      _activeChannels['GLOBAL'] = _globalChannel!;
     } catch (_) {}
 
     return _channel ?? SupabaseConfig.client.channel('room_$roomCode');
@@ -569,7 +598,9 @@ class RealtimeService {
         'current_question_data': payload,
         'question_data': payload,
         'duration_seconds': durationSeconds,
-        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
+        'timer_ends_at': timerEndsAtEpochMs > 0
+            ? DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String()
+            : null,
         'game_play_mode': gamePlayMode,
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'room_code').then((_) {}).catchError((_) {});
@@ -1042,7 +1073,11 @@ class RealtimeService {
     _localSubscription = null;
     _mqttSubscription?.cancel();
     _mqttSubscription = null;
-    MqttService().dispose();
+    if (_currentRoomCode != null) {
+      MqttService().unsubscribeFromRoom(_currentRoomCode!);
+      _activeChannels.remove(_currentRoomCode);
+      _currentRoomCode = null;
+    }
     if (_channel != null) {
       try {
         SupabaseConfig.client.removeChannel(_channel!);

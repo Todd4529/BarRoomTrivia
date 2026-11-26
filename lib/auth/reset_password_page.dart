@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../shared/theme/app_theme.dart';
 import '../shared/services/supabase_service.dart';
 
@@ -16,6 +17,13 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _loading = false;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleResetPassword() async {
     final password = _passwordController.text;
@@ -51,12 +59,14 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pushReplacementNamed('/host');
-      } else {
+        context.go('/host');
+      } else if (mounted) {
         setState(() => _errorMessage = 'Failed to update password. Please try requesting a new reset link.');
       }
     } catch (e) {
-      setState(() => _errorMessage = 'An unexpected error occurred.');
+      if (mounted) {
+        setState(() => _errorMessage = 'An unexpected error occurred.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

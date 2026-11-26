@@ -5,21 +5,64 @@ import authRoutes from './src/routes/authRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Enable CORS for mobile apps, TV displays, and web clients
+// Respect X-Forwarded-Proto/Host behind reverse proxies
+app.set('trust proxy', 1);
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Allowlist CORS origins (configurable via ALLOWED_ORIGINS env var)
+const defaultAllowedOrigins = [
+  'https://barroomstrivia.com',
+  'https://www.barroomstrivia.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const allowedOrigins = envOrigins.length > 0 ? envOrigins : defaultAllowedOrigins;
+
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: (origin, callback) => {
+    // Allow non-browser / native mobile & TV clients (no Origin header) and allowlisted origins
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.barroomstrivia.com')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Body parsers
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Simple in-memory per-IP rate limiter for auth routes
+const rateHits = new Map();
+setInterval(() => rateHits.clear(), 60 * 1000).unref();
+app.use('/auth', (req, res, next) => {
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  const count = (rateHits.get(ip) || 0) + 1;
+  rateHits.set(ip, count);
+  if (count > 120) {
+    return res.status(429).json({ success: false, error: 'Too many requests, please retry shortly' });
+  }
+  return next();
+});
 
-// Request logging in development
+// Body parsers with payload size limit
+app.use(express.json({ limit: '64kb' }));
+app.use(express.urlencoded({ extended: true, limit: '64kb' }));
+
+// Redacted request logging (never log query string tokens)
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
+  console.log(`[${timestamp}] ${req.method} ${req.path}`);
   next();
 });
 
@@ -38,17 +81,14 @@ app.use((req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
+  console.error('Unhandled server error:', err?.message || err);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // Start listening if run directly
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Device Auth Backend running on http://0.0.0.0:${PORT}`);
-    console.log(`- Device Code Init: GET http://localhost:${PORT}/auth/device/code`);
-    console.log(`- Device Verify:    POST http://localhost:${PORT}/auth/device/verify`);
-    console.log(`- Status Poll:      GET http://localhost:${PORT}/auth/device/status?device_token=...`);
+    console.log(`Device Auth Backend running on http://0.0.0.0:${PORT}`);
   });
 }
 

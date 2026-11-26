@@ -1,16 +1,13 @@
 $ftpServer = $env:HOSTINGER_FTP_HOST
-if (-not $ftpServer) { $ftpServer = "82.180.172.248" }
-
 $ftpUser = $env:HOSTINGER_FTP_USER
-if (-not $ftpUser) { $ftpUser = "u371548014.barroomstrivia.com" }
-
 $ftpPass = $env:HOSTINGER_FTP_PASSWORD
-if (-not $ftpPass) { 
-    $ftpPass = "rSU+5^L&zL>2"
+if (-not $ftpServer -or -not $ftpUser -or -not $ftpPass) {
+    Write-Error "Missing required environment variables: HOSTINGER_FTP_HOST, HOSTINGER_FTP_USER, and HOSTINGER_FTP_PASSWORD must be set."
+    exit 1
 }
 $sourceDir = (Resolve-Path ".\dist").Path
 
-Write-Host "Starting deployment to Hostinger FTP ($ftpServer)..." -ForegroundColor Cyan
+Write-Host "Starting FTPS deployment to Hostinger ($ftpServer)..." -ForegroundColor Cyan
 
 function Make-FtpDirectory {
     param ([string]$remotePath)
@@ -19,6 +16,7 @@ function Make-FtpDirectory {
         $request = [System.Net.FtpWebRequest]::Create($uri)
         $request.Credentials = New-Object System.Net.NetworkCredential($ftpUser, $ftpPass)
         $request.Method = [System.Net.WebRequestMethods+Ftp]::MakeDirectory
+        $request.EnableSsl = $true
         $request.UsePassive = $true
         $response = $request.GetResponse()
         $response.Close()
@@ -37,6 +35,7 @@ function Upload-FtpFile {
     $request = [System.Net.FtpWebRequest]::Create($uri)
     $request.Credentials = New-Object System.Net.NetworkCredential($ftpUser, $ftpPass)
     $request.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile
+    $request.EnableSsl = $true
     $request.UseBinary = $true
     $request.UsePassive = $true
     $request.KeepAlive = $false

@@ -12,14 +12,63 @@ window.addEventListener('unhandledrejection', (e) => {
   console.warn('[Unhandled Promise]', e.reason);
 });
 
-const SUPABASE_URL = 'https://tzdikvbvdvgjaiznqkcd.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8';
+const SUPABASE_URL = (import.meta?.env?.VITE_SUPABASE_URL || 'https://tzdikvbvdvgjaiznqkcd.supabase.co').trim();
+const SUPABASE_ANON_KEY = (import.meta?.env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8').trim();
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let supabaseUnreachableUntilMs = 0;
+function isSupabaseReachable() {
+  return Boolean(supabase) && Date.now() >= supabaseUnreachableUntilMs;
+}
+function markSupabaseUnreachable(err) {
+  const msg = String(err?.message || err || '');
+  if (!msg || /Failed to fetch|ERR_NAME_NOT_RESOLVED|NetworkError|fetch|401|Invalid API key|ENOTFOUND/i.test(msg)) {
+    supabaseUnreachableUntilMs = Date.now() + 60000;
+  }
+}
+async function safeSupabaseWrite(queryFactory) {
+  if (!isSupabaseReachable()) return null;
+  try {
+    const res = await queryFactory();
+    if (res && res.error) {
+      markSupabaseUnreachable(res.error);
+    }
+    return res;
+  } catch (err) {
+    markSupabaseUnreachable(err);
+    return null;
+  }
+}
+function toIsoTimestamp(val) {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    const parsed = Date.parse(val);
+    return !isNaN(parsed) ? new Date(parsed).toISOString() : val;
+  }
+  const num = Number(val);
+  return (!isNaN(num) && num > 0) ? new Date(num).toISOString() : null;
+}
+function isUuid(val) {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+function sanitizeSafeUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (/^(data:image\/[a-z0-9.+-]+;base64,|https?:\/\/|\.?\/)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return '';
+}
 
 let mqttClient = null;
 let liveRoomChannel = null;
 let liveDefaultChannel = null;
 let liveGlobalChannel = null;
+let dbPlayersSyncChannel = null;
+let realtimeEngineInitialized = false;
+let playerSessionSyncInterval = null;
+let playerScoreAtSubmission = 0;
+let adLoadSequence = 0;
 
 // State & Broadcast Channel
 const BROADCAST_CHANNEL_NAME = 'bar_rooms_trivia_TRIV';
@@ -708,6 +757,7 @@ const genreIconMap = {
   'Mind Benders & Riddles': '🧠',
   'Business & Brands': '💼',
   'Broadway & Theater': '🎭',
+  'Mythology & Folklore': '🏛️',
   'General Knowledge': '💡',
   'Auto Select': '⚡',
   'Random': '🎲'
@@ -757,14 +807,16 @@ async function refreshHostPlayers() {
 
   // 1. Fetch fresh roster silently in background from Supabase players table
   try {
-    if (supabase) {
+    if (isSupabaseReachable()) {
       let { data, error } = await supabase
         .from('players')
         .select('*')
         .eq('room_code', normRoom)
         .order('cumulative_score', { ascending: false });
 
-      if (!error && Array.isArray(data)) {
+      if (error) {
+        markSupabaseUnreachable(error);
+      } else if (Array.isArray(data)) {
         const realPlayers = data.filter(p => {
           if (!p || !p.nickname || isFictitiousPlayer(p.nickname)) return false;
           if (p.is_connected === false) return false;
@@ -932,25 +984,16 @@ async function executeClearHostLeaderboard() {
   renderLeaderboard();
   renderHostPlayersRoster();
 
-  // 4. Delete players from Supabase players table & deactivate
-  try {
-    if (supabase) {
-      await supabase.from('players').delete().eq('room_code', normRoom);
-      await supabase.from('players').delete().eq('room_code', 'TRIV');
-      await supabase.from('players').delete().ilike('room_code', `%${normRoom}%`);
-      await supabase.from('players').update({ is_connected: false, cumulative_score: 0, score: 0 }).eq('room_code', normRoom);
-      await supabase.from('players').update({ is_connected: false, cumulative_score: 0, score: 0 }).eq('room_code', 'TRIV');
-
-      // Also persist to game_sessions so other devices know the clear timestamp
-      await supabase.from('game_sessions').upsert({
-        room_code: normRoom,
-        leaderboard_cleared_at: new Date(clearEpoch).toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    }
-  } catch (err) {
-    console.warn('[Leaderboard] Supabase clear scores error:', err);
-  }
+  // 4. Delete players strictly for THIS room_code only (never touch other venues)
+  await safeSupabaseWrite(async () => {
+    await supabase.from('players').delete().eq('room_code', normRoom);
+    await supabase.from('players').update({ is_connected: false, cumulative_score: 0 }).eq('room_code', normRoom);
+    return supabase.from('game_sessions').upsert({
+      room_code: normRoom,
+      leaderboard_cleared_at: new Date(clearEpoch).toISOString(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' });
+  });
 
   // 5. Broadcast to all clients (TV displays and player phones)
   try {
@@ -1165,7 +1208,10 @@ function initApp() {
   initPlayerControls();
   initTvModeToggle();
   initBroadcastChannelListeners();
-  initRealtimeEngine();
+  const initialActiveView = document.body.getAttribute('data-view') || 'marketing';
+  if (initialActiveView !== 'marketing') {
+    ensureRealtimeEngineStarted();
+  }
   initIndicatorClicks();
   
   onVenueNameUpdated({ venueName: currentVenueName });
@@ -1184,10 +1230,14 @@ function initApp() {
   startPromoCarouselRotation();
   startLeaderboardAutoScroll();
   renderLeaderboard();
-  loadInitialPlayers();
-  // Background sync roster continuously in background without displaying any refresh spinners
-  setInterval(() => {
+  if ((document.body.getAttribute('data-view') || 'marketing') !== 'marketing') {
     loadInitialPlayers();
+  }
+  // Background sync roster continuously in background without polling on marketing landing page
+  setInterval(() => {
+    if ((document.body.getAttribute('data-view') || 'marketing') !== 'marketing' && isSupabaseReachable()) {
+      loadInitialPlayers();
+    }
   }, 20000);
 }
 
@@ -1344,31 +1394,19 @@ function initAuthView() {
       } catch (_) {}
     }
 
-    // Upsert into game_sessions for both TRIV and the specific room code
-    try {
-      supabase.from('game_sessions').upsert([
-        {
-          room_code: 'TRIV',
-          host_id: user.id,
-          status: 'waiting_for_host',
-          is_ad_mode_active: isAdModeActive,
-          updated_at: new Date().toISOString()
-        },
-        {
-          room_code: targetRoom,
-          host_id: user.id,
-          status: 'waiting_for_host',
-          is_ad_mode_active: isAdModeActive,
-          updated_at: new Date().toISOString()
-        }
-      ], { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    // Upsert into game_sessions strictly for targetRoom with valid UUID host_id only
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: targetRoom,
+      host_id: isUuid(user.id) ? user.id : null,
+      status: 'waiting_for_host',
+      is_ad_mode_active: isAdModeActive,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
 
-    // Send immediately and retry multiple times
+    // Send immediately and retry briefly
     sendAll();
-    setTimeout(sendAll, 300);
-    setTimeout(sendAll, 800);
-    setTimeout(sendAll, 1600);
+    setTimeout(sendAll, 400);
+    setTimeout(sendAll, 1200);
 
     // If host has ads active before starting game, broadcast ad mode immediately
     if (isAdModeActive) {
@@ -1376,7 +1414,7 @@ function initAuthView() {
       syncTvSignageDisplay();
     }
 
-    // Immediately show success and transition to Host Panel
+    // Show success and transition to Host Panel
     showAlert('TV Connected! Opening Host Controls...', false);
     if (btnQuickConnect) btnQuickConnect.textContent = 'CONNECTED! OPENING...';
     if (btnSubmit) btnSubmit.textContent = 'CONNECTED! OPENING...';
@@ -1385,8 +1423,24 @@ function initAuthView() {
     }, 700);
   }
 
+  let isAuthActionInFlight = false;
+  function resetAuthButtons() {
+    isAuthActionInFlight = false;
+    if (btnQuickConnect) {
+      btnQuickConnect.disabled = false;
+      btnQuickConnect.textContent = '⚡ QUICK CONNECT AS HOST (NO PASSWORD)';
+    }
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = isSignUpMode ? 'CREATE ACCOUNT & CONNECT TV' : 'SIGN IN & CONNECT TV';
+    }
+  }
+  window.resetAuthViewButtons = resetAuthButtons;
+
   function quickConnectAsHost(e) {
     if (e) e.preventDefault();
+    if (isAuthActionInFlight) return;
+    isAuthActionInFlight = true;
     hideAlert();
     const email = emailInput?.value.trim() || safeStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
     if (emailInput && !emailInput.value) {
@@ -1416,61 +1470,52 @@ function initAuthView() {
 
   async function handleAuthAction(e) {
     if (e) e.preventDefault();
+    if (isAuthActionInFlight) return;
     hideAlert();
-    const email = emailInput?.value.trim() || safeStorage.getItem('bar_trivia_host_email') || 'host@venue.com';
-    const password = passwordInput?.value || '123456';
+    const email = (emailInput?.value || '').trim();
+    const password = passwordInput?.value || '';
 
+    if (!email || !password) {
+      showAlert('Please enter both your email address and password.', true);
+      return;
+    }
+    if (isSignUpMode && password.length < 6) {
+      showAlert('Password must be at least 6 characters long.', true);
+      return;
+    }
+
+    isAuthActionInFlight = true;
     if (btnQuickConnect) btnQuickConnect.disabled = true;
-    btnSubmit.disabled = true;
-    btnSubmit.textContent = isSignUpMode ? 'CREATING...' : 'CONNECTING...';
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = isSignUpMode ? 'CREATING...' : 'SIGNING IN...';
+    }
 
     try {
-      let authUser = null;
+      const authRes = isSignUpMode
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
 
-      if (isSignUpMode) {
-        const signUpRes = await supabase.auth.signUp({ email, password }).catch(() => ({ error: null }));
-        if (signUpRes.data?.user) {
-          authUser = signUpRes.data.user;
-        } else {
-          const loginRes = await supabase.auth.signInWithPassword({ email, password }).catch(() => ({ error: null }));
-          if (loginRes.data?.user) {
-            authUser = loginRes.data.user;
-          }
-        }
-      } else {
-        const loginRes = await supabase.auth.signInWithPassword({ email, password }).catch(() => ({ error: null }));
-        if (loginRes.data?.user) {
-          authUser = loginRes.data.user;
-        } else {
-          const signUpRes = await supabase.auth.signUp({ email, password }).catch(() => ({ error: null }));
-          if (signUpRes.data?.user) {
-            authUser = signUpRes.data.user;
-          }
-        }
+      if (authRes?.error || !authRes?.data?.user) {
+        const errMsg = authRes?.error?.message || 'Invalid email or password. Please check your credentials or use Quick Connect below.';
+        markSupabaseUnreachable(authRes?.error);
+        showAlert(errMsg, true);
+        resetAuthButtons();
+        return;
       }
 
-      const finalUser = authUser || {
-        id: 'host_' + Date.now(),
-        email: email,
-        user_metadata: { display_name: email.split('@')[0] }
-      };
-
+      const authUser = authRes.data.user;
       safeStorage.setItem('bar_trivia_host_email', email);
-      safeStorage.setItem('bar_trivia_host_id', finalUser.id);
-
-      broadcastDeviceAuth(finalUser);
+      safeStorage.setItem('bar_trivia_host_id', authUser.id);
+      broadcastDeviceAuth(authUser);
     } catch (err) {
-      console.warn('Auth fallback triggered:', err);
-      const fallbackUser = {
-        id: 'host_' + Date.now(),
-        email: email,
-        user_metadata: { display_name: email.split('@')[0] }
-      };
-      broadcastDeviceAuth(fallbackUser);
+      markSupabaseUnreachable(err);
+      showAlert('Unable to reach the sign-in server right now. Check your connection or use Quick Connect for local hosting.', true);
+      resetAuthButtons();
     }
   }
 
-  // Expose handlers globally for reliable HTML onclick/onsubmit triggering
+  // Expose handlers globally
   window.quickConnectAsHost = quickConnectAsHost;
   window.handleHostAuthSubmit = handleAuthAction;
 
@@ -1484,10 +1529,9 @@ function initAuthView() {
     passwordInput.readOnly = false;
   }
 
-  // Attach DOM event listeners
+  // Attach single clean DOM event listeners (form submit handles Enter & submit button click)
   btnQuickConnect?.addEventListener('click', quickConnectAsHost);
   form?.addEventListener('submit', handleAuthAction);
-  btnSubmit?.addEventListener('click', handleAuthAction);
 }
 
 // TV DISPLAY MODE TOGGLE (PROMO CAROUSEL VS LIVE QUESTION STAGE)
@@ -1600,7 +1644,7 @@ function initTvExitAndRecoveryMenu() {
     if (tvExitOverlay) {
       tvExitOverlay.classList.remove('hidden');
       setTimeout(() => {
-        btnTvExitYes?.focus();
+        btnTvExitCancel?.focus();
       }, 30);
     }
   }
@@ -1611,9 +1655,9 @@ function initTvExitAndRecoveryMenu() {
 
   function showTvHostQrRecovery() {
     closeTvExitDialog();
-    const hostBaseUrl = window.location.origin.includes('localhost')
+    const hostBaseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? window.location.origin
-      : 'https://barroomstrivia.com';
+      : (window.location.origin || 'https://barroomstrivia.com');
     const hostUrl = `${hostBaseUrl}/?view=host&room=${currentRoomCode}`;
 
     const isRunning = isAutomatedEngineRunning ||
@@ -1638,7 +1682,12 @@ function initTvExitAndRecoveryMenu() {
       if (tvHostQrEmptyCard) tvHostQrEmptyCard.classList.remove('hidden');
     }
 
-    if (tvHostQrOverlay) tvHostQrOverlay.classList.remove('hidden');
+    if (tvHostQrOverlay) {
+      tvHostQrOverlay.classList.remove('hidden');
+      setTimeout(() => {
+        (isRunning ? btnTvCloseHostQr : btnTvCloseEmptyHostQr)?.focus();
+      }, 30);
+    }
   }
 
   function closeTvHostQrRecovery() {
@@ -1674,33 +1723,23 @@ function initTvExitAndRecoveryMenu() {
     stopHostHeartbeatLoop();
     stopTvAdSignageRotation();
 
-    // 2. Try closing browser window via multiple methods
-    let closed = false;
-    try {
-      window.close();
-      if (window.closed) closed = true;
-    } catch (_) {}
+    // 2. Hide all TV ad/promo/live/modal layers and display dedicated Application Closed screen
+    const tvAdEl = document.getElementById('tv-ad-signage-screen');
+    const tvPromoEl = document.getElementById('tv-promo-screen');
+    const tvLiveEl = document.getElementById('tv-live-grid');
+    const tvWinnerEl = document.getElementById('tv-winner-modal-overlay');
+    const tvHostQrEl = document.getElementById('tv-host-qr-modal-overlay');
+    if (tvAdEl) tvAdEl.classList.add('hidden');
+    if (tvPromoEl) tvPromoEl.classList.add('hidden');
+    if (tvLiveEl) tvLiveEl.classList.add('hidden');
+    if (tvWinnerEl) tvWinnerEl.classList.add('hidden');
+    if (tvHostQrEl) tvHostQrEl.classList.add('hidden');
 
-    if (!closed) {
-      try {
-        window.open('', '_self', '');
-        window.close();
-        if (window.closed) closed = true;
-      } catch (_) {}
-    }
-
-    if (!closed && typeof navigator !== 'undefined' && navigator.app && typeof navigator.app.exitApp === 'function') {
-      try {
-        navigator.app.exitApp();
-        closed = true;
-      } catch (_) {}
-    }
-
-    // 3. Fallback: Display dedicated full-screen Application Exited screen
     const exitedScreen = document.getElementById('tv-exited-screen');
     if (exitedScreen) {
       exitedScreen.classList.remove('hidden');
       exitedScreen.style.display = 'flex';
+      setTimeout(() => document.getElementById('btn-reopen-app')?.focus(), 30);
     } else {
       document.body.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0a0b10;color:#fff;text-align:center;font-family:sans-serif;padding:24px;">
@@ -1710,6 +1749,13 @@ function initTvExitAndRecoveryMenu() {
           <button onclick="location.reload()" style="background:#00e5ff;color:#000;font-weight:900;border:none;padding:12px 24px;border-radius:12px;font-size:15px;cursor:pointer;">Restart App</button>
         </div>
       `;
+    }
+
+    // 3. Only attempt native app exit if running in a WebView/Cordova wrapper (never window.open('_self'))
+    if (typeof navigator !== 'undefined' && navigator.app && typeof navigator.app.exitApp === 'function') {
+      try {
+        navigator.app.exitApp();
+      } catch (_) {}
     }
   });
 
@@ -1746,6 +1792,19 @@ function initTvExitAndRecoveryMenu() {
       return;
     }
 
+    if (isHostQrOpen && (e.key === 'Enter' || e.key === 'NumpadEnter' || e.key === 'Select')) {
+      e.preventDefault();
+      closeTvHostQrRecovery();
+      return;
+    }
+
+    const exitedScreen = document.getElementById('tv-exited-screen');
+    if (exitedScreen && !exitedScreen.classList.contains('hidden') && (e.key === 'Enter' || e.key === 'NumpadEnter' || e.key === 'Select')) {
+      e.preventDefault();
+      document.getElementById('btn-reopen-app')?.click();
+      return;
+    }
+
     if (isExitOpen) {
       const activeEl = document.activeElement;
       if (e.key === 'ArrowRight') {
@@ -1759,29 +1818,66 @@ function initTvExitAndRecoveryMenu() {
         btnTvShowHostQr?.focus();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        btnTvExitYes?.focus();
+        btnTvExitCancel?.focus();
       } else if (e.key === 'Enter' || e.key === 'NumpadEnter' || e.key === 'Select') {
         e.preventDefault();
-        if (activeEl === btnTvExitCancel) {
-          btnTvExitCancel.click();
+        if (activeEl === btnTvExitYes) {
+          btnTvExitYes.click();
         } else if (activeEl === btnTvShowHostQr) {
           btnTvShowHostQr.click();
         } else {
-          btnTvExitYes?.click();
+          btnTvExitCancel?.click();
         }
       }
+    }
+  });
+
+  // Allow Escape key to dismiss Host modals cleanly
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const manualModal = document.getElementById('host-manual-modal-overlay');
+    if (manualModal && !manualModal.classList.contains('hidden')) {
+      closeHostManualModal();
+      return;
+    }
+    const clearModal = document.getElementById('clear-leaderboard-modal-overlay');
+    if (clearModal && !clearModal.classList.contains('hidden')) {
+      closeClearLeaderboardModal();
     }
   });
 }
 
 // 1. NAVIGATION ROUTING & INSTANT VIEW SWITCHING
-function switchView(viewName) {
+function switchView(viewName, pushHistory = true) {
   if (!viewName) return;
   if (viewName === 'lobby') viewName = 'auth';
 
   // Toggle player mode on body
   document.body.classList.toggle('player-mode', viewName === 'player');
   document.body.setAttribute('data-view', viewName);
+
+  if (viewName !== 'marketing') {
+    ensureRealtimeEngineStarted();
+  }
+  if (viewName === 'auth' && typeof window.resetAuthViewButtons === 'function') {
+    window.resetAuthViewButtons();
+  }
+  if (pushHistory && typeof history !== 'undefined' && history.pushState) {
+    try {
+      const nextParams = new URLSearchParams(window.location.search);
+      if (viewName === 'marketing') {
+        nextParams.delete('view');
+      } else {
+        nextParams.set('view', viewName);
+        if (currentRoomCode) nextParams.set('room', currentRoomCode);
+      }
+      const queryStr = nextParams.toString();
+      const targetUrl = queryStr ? `${window.location.pathname}?${queryStr}` : window.location.pathname;
+      if (targetUrl !== window.location.pathname + window.location.search) {
+        history.pushState({ view: viewName }, '', targetUrl);
+      }
+    } catch (_) {}
+  }
 
   // 1. Toggle panel visibility
   const panels = document.querySelectorAll('.view-panel');
@@ -1910,6 +2006,27 @@ function initNavigation() {
     });
   });
 
+  document.querySelectorAll('[data-nav-view]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const targetView = link.getAttribute('data-nav-view');
+      if (!targetView) return;
+      e.preventDefault();
+      switchView(targetView);
+    });
+  });
+
+  ['stat-pill-timer', 'stat-pill-diff'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
+    });
+  });
+
   targetCards.forEach(card => {
     card.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1921,7 +2038,7 @@ function initNavigation() {
   // Browser Back / Forward button support
   window.addEventListener('popstate', (e) => {
     const view = e.state?.view || new URLSearchParams(window.location.search).get('view') || 'marketing';
-    switchView(view);
+    switchView(view, false);
   });
 
   popoutPlayerBtn?.addEventListener('click', (e) => {
@@ -2014,9 +2131,9 @@ document.addEventListener('click', (e) => {
 
 // 2. DYNAMIC QR CODES
 function initQrCodes() {
-  const playBaseUrl = window.location.origin.includes('localhost')
+  const playBaseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? window.location.origin
-    : 'https://barroomstrivia.com';
+    : (window.location.origin || 'https://barroomstrivia.com');
   const playUrl = `${playBaseUrl}/?view=player&room=${currentRoomCode}`;
 
   const canvasStage = document.getElementById('qr-canvas');
@@ -2058,45 +2175,57 @@ function getMqttTopic() {
   return `barrooms_trivia/room_${currentRoomCode.toUpperCase()}`;
 }
 
+function ensureRealtimeEngineStarted() {
+  if (realtimeEngineInitialized) return;
+  realtimeEngineInitialized = true;
+  initRealtimeEngine();
+}
+
 function initRealtimeSupabaseChannels() {
+  if (!isSupabaseReachable()) return;
   try {
     const norm = currentRoomCode.toUpperCase();
     if (liveRoomChannel) {
       try { supabase.removeChannel(liveRoomChannel); } catch (_) {}
+      liveRoomChannel = null;
     }
     if (liveDefaultChannel) {
       try { supabase.removeChannel(liveDefaultChannel); } catch (_) {}
+      liveDefaultChannel = null;
     }
     if (liveGlobalChannel) {
       try { supabase.removeChannel(liveGlobalChannel); } catch (_) {}
+      liveGlobalChannel = null;
+    }
+    if (dbPlayersSyncChannel) {
+      try { supabase.removeChannel(dbPlayersSyncChannel); } catch (_) {}
+      dbPlayersSyncChannel = null;
     }
 
     function attachListener(ch) {
       ch.on('broadcast', { event: '*' }, ({ event, payload }) => {
-        console.log(`[Supabase Realtime ${ch.topic}] Event:`, event, payload);
         handleRealtimeIncomingEvent(event, payload);
       });
       ch.subscribe((status, err) => {
-        console.log(`[Supabase Realtime ${ch.topic}] status:`, status, err || '');
+        if (err || status === 'CHANNEL_ERROR') {
+          markSupabaseUnreachable(err || status);
+        }
       });
     }
 
     liveRoomChannel = supabase.channel(`room_${norm}`);
     attachListener(liveRoomChannel);
 
-    liveGlobalChannel = supabase.channel('room_GLOBAL');
-    attachListener(liveGlobalChannel);
-
-    // Active postgres_changes subscription for real-time player joins/scores
+    // Room-scoped postgres_changes subscription (cleaned up on reconnect)
     try {
-      supabase.channel('db_players_sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {
+      dbPlayersSyncChannel = supabase.channel(`db_players_sync_${norm}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_code=eq.${norm}` }, () => {
           loadInitialPlayers();
         })
         .subscribe();
     } catch (_) {}
   } catch (e) {
-    console.warn('Error setting up Supabase Realtime channels:', e);
+    markSupabaseUnreachable(e);
   }
 }
 
@@ -2116,7 +2245,7 @@ function broadcastRealtimeEvent(event, payload = {}) {
     channel.postMessage({ type: event.toUpperCase(), payload: fullPayload });
   } catch (_) {}
 
-  // 2. Internet-Wide Realtime MQTT WebSockets
+  // 2. Room-Scoped MQTT WebSockets (never leak game traffic onto global tv_pairing)
   if (mqttClient && mqttClient.connected) {
     try {
       const topic = getMqttTopic();
@@ -2126,30 +2255,28 @@ function broadcastRealtimeEvent(event, payload = {}) {
       if (strippedTopic !== topic) {
         mqttClient.publish(strippedTopic, jsonStr);
       }
-      mqttClient.publish('tv_pairing', jsonStr);
     } catch (e) {
       console.warn('[Realtime MQTT] Failed to publish:', e);
     }
-  } else {
+  } else if (realtimeEngineInitialized) {
     pendingMqttMessages.push(fullPayload);
     if (pendingMqttMessages.length > 50) pendingMqttMessages.shift();
   }
 
-  // 3. Internet-Wide Supabase Realtime Gateway
-  try {
-    if (!liveRoomChannel) {
-      initRealtimeSupabaseChannels();
+  // 3. Room-Scoped Supabase Realtime Gateway
+  if (isSupabaseReachable()) {
+    try {
+      if (!liveRoomChannel) {
+        initRealtimeSupabaseChannels();
+      }
+      liveRoomChannel?.send({
+        type: 'broadcast',
+        event: event,
+        payload: fullPayload
+      });
+    } catch (err) {
+      markSupabaseUnreachable(err);
     }
-    const sendObj = {
-      type: 'broadcast',
-      event: event,
-      payload: fullPayload
-    };
-    liveRoomChannel?.send(sendObj);
-    liveDefaultChannel?.send(sendObj);
-    liveGlobalChannel?.send(sendObj);
-  } catch (err) {
-    console.warn('[Supabase Realtime Broadcast] Error:', err);
   }
 }
 
@@ -2276,10 +2403,10 @@ function handleIncomingPreGameCountdown(rawPayload) {
     if (tvPromoScreen) tvPromoScreen.classList.add('hidden');
     if (tvAdScreen) tvAdScreen.classList.add('hidden');
     stopTvAdSignageRotation();
-    if (tvLiveGrid) {
-    tvLiveGrid.classList.remove('hidden');
-    initQrCodes();
-  }
+    if (tvLiveGrid && tvLiveGrid.classList.contains('hidden')) {
+      tvLiveGrid.classList.remove('hidden');
+      initQrCodes();
+    }
     if (btnLive) btnLive.classList.add('active');
     if (btnPromo) btnPromo.classList.remove('active');
 
@@ -2385,8 +2512,8 @@ function handleIncomingQuestionStart(rawPayload) {
   const opts = qObj.options || payload.options || {};
   const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
   const optB = payload.option_b || payload.optionB || qObj.option_b || qObj.optionB || opts.B || opts.b || (Array.isArray(opts) ? opts[1] : 'Option B');
-  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.option_c || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
-  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
+  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.optionC || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
+  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.optionD || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
   const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
 
   const incomingDiff = normalizeDifficulty(payload.selectedDifficulty || payload.difficulty || qObj.difficulty || selectedDifficulty, 'Standard');
@@ -2614,13 +2741,7 @@ function handleRealtimeIncomingEvent(event, data) {
   if (incomingRoom && incomingRoom !== 'GLOBAL') {
     const matches = incomingRoom === currentRoom || normIncoming === normCurrent;
     if (!matches) {
-      if (currentRoom === 'TRIV') {
-        currentRoomCode = incomingRoom;
-        safeStorage.setItem('bar_trivia_current_room', currentRoomCode);
-        initQrCodes();
-      } else {
-        return;
-      }
+      return;
     }
   }
 
@@ -2659,7 +2780,7 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'game_resuming') {
     onGameResuming(payload);
   } else if (normEvent === 'game_reset') {
-    onGameReset();
+    onGameReset(payload);
   } else if (normEvent === 'request_state_sync') {
     if (isLocalHostEngineMaster && isAutomatedEngineRunning) {
       if (hostEngineState === 'PRE_GAME') {
@@ -2774,7 +2895,7 @@ function handleRealtimeIncomingEvent(event, data) {
   } else if (normEvent === 'leaderboard_updated') {
     mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
   } else if (normEvent === 'leaderboard_cleared') {
-    onLeaderboardCleared();
+    onLeaderboardCleared(payload);
   } else if (normEvent === 'ad_mode_toggled') {
     onAdModeToggled(payload);
   } else if (normEvent === 'ad_slides_updated') {
@@ -2834,10 +2955,7 @@ function initRealtimeEngine() {
   const topic = getMqttTopic();
   const norm = currentRoomCode.toUpperCase();
   const stripped = norm.replace(/-/g, '');
-  const topicsToSub = [topic, 'tv_pairing'];
-  if (norm === 'TRIV') {
-    topicsToSub.push('barrooms_trivia/room_TRIV');
-  }
+  const topicsToSub = [topic];
   if (stripped !== norm) {
     topicsToSub.push(`barrooms_trivia/room_${stripped}`);
   }
@@ -2881,8 +2999,6 @@ function initRealtimeEngine() {
                 // receivers correctly treat stale queued events as expired.
                 const jsonStr = JSON.stringify({ ...p, timestamp: Date.now() });
                 mqttClient.publish(topic, jsonStr);
-                if (topic !== 'barrooms_trivia/room_TRIV') mqttClient.publish('barrooms_trivia/room_TRIV', jsonStr);
-                mqttClient.publish('tv_pairing', jsonStr);
               } catch (_) {}
             });
           }
@@ -2977,7 +3093,7 @@ function initBroadcastChannelListeners() {
     } else if (type === 'LEADERBOARD_UPDATED') {
       mergeIncomingLeaderboard(payload?.players || payload?.leaderboard);
     } else if (type === 'LEADERBOARD_CLEARED') {
-      onLeaderboardCleared();
+      onLeaderboardCleared(payload);
     } else if (type === 'GAME_PAUSED') {
       onGamePaused(payload);
     } else if (type === 'GAME_RESUMING') {
@@ -3207,6 +3323,7 @@ function initHostControls() {
     if (statPillPlayers) {
       statPillPlayers.classList.toggle('active-tab', tabName === 'players');
       statPillPlayers.setAttribute('aria-selected', tabName === 'players' ? 'true' : 'false');
+      if (tabName !== 'players') statPillPlayers.blur();
     }
 
     if (tabName === 'players') {
@@ -3339,7 +3456,7 @@ function initHostControls() {
 
   // GAME PLAY MODE (AUTO vs MANUAL)
   const modeChips = document.querySelectorAll('.mode-chip');
-  function updateGameModeUI(mode) {
+  function updateGameModeUI(mode, shouldBroadcast = true) {
     const targetMode = (mode === 'Manual') ? 'Manual' : 'Auto';
     hostGamePlayMode = targetMode;
     safeStorage.setItem('bar_trivia_game_play_mode', targetMode);
@@ -3352,32 +3469,31 @@ function initHostControls() {
       chip.style.boxShadow = '';
     });
     updateHostManualDock();
+    if (!shouldBroadcast) return;
     if (targetMode === 'Manual') {
       openHostManualModal();
     }
     channel.postMessage({ type: 'GAME_MODE_UPDATED', payload: { gamePlayMode: targetMode, game_play_mode: targetMode } });
     broadcastRealtimeEvent('game_mode_updated', { room_code: currentRoomCode, game_play_mode: targetMode, gamePlayMode: targetMode });
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        game_play_mode: targetMode,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      game_play_mode: targetMode,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
   }
 
   modeChips.forEach(chip => {
     chip.addEventListener('click', (e) => {
       e.preventDefault();
-      updateGameModeUI(chip.dataset.mode || 'Auto');
+      updateGameModeUI(chip.dataset.mode || 'Auto', true);
     });
   });
 
-  // Default to saved or Auto mode on host controls initialization
-  updateGameModeUI(hostGamePlayMode || 'Auto');
+  // Restore saved or Auto mode locally without broadcasting (prevents Players from overwriting Host)
+  updateGameModeUI(hostGamePlayMode || 'Auto', false);
 
   // DIFFICULTY LEVEL SELECTION (KIDS, BEGINNER, STANDARD, ADVANCED)
-  function updateDifficultyUI(diff) {
+  function updateDifficultyUI(diff, shouldBroadcast = true) {
     selectedDifficulty = normalizeDifficulty(diff || 'Standard', 'Standard');
     safeStorage.setItem('bar_trivia_difficulty', selectedDifficulty);
     diffChips.forEach(chip => {
@@ -3400,26 +3516,25 @@ function initHostControls() {
       tvDiffBadge.textContent = `${diffEmojiMap[selectedDifficulty] || '🎯'} ${selectedDifficulty.toUpperCase()}`;
     }
 
+    if (!shouldBroadcast) return;
     channel.postMessage({ type: 'DIFFICULTY_UPDATED', payload: { difficulty: selectedDifficulty, selectedDifficulty } });
     broadcastRealtimeEvent('difficulty_updated', { room_code: currentRoomCode, difficulty: selectedDifficulty, selectedDifficulty });
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        difficulty: selectedDifficulty,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      difficulty: selectedDifficulty,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
   }
 
   diffChips.forEach(chip => {
     chip.addEventListener('click', (e) => {
       e.preventDefault();
-      updateDifficultyUI(chip.dataset.diff || 'Standard');
+      updateDifficultyUI(chip.dataset.diff || 'Standard', true);
     });
   });
 
-  // Restore saved difficulty on host controls initialization
-  updateDifficultyUI(selectedDifficulty);
+  // Restore saved difficulty locally without broadcasting
+  updateDifficultyUI(selectedDifficulty, false);
 
   // QUESTION TIMER DURATION SELECTOR
   timerChips.forEach(chip => {
@@ -3440,13 +3555,11 @@ function initHostControls() {
 
         channel.postMessage({ type: 'TIMER_DURATION_UPDATED', payload: { question_duration: parsedSecs, duration_seconds: parsedSecs } });
         broadcastRealtimeEvent('timer_duration_updated', { room_code: currentRoomCode, question_duration: parsedSecs, duration_seconds: parsedSecs });
-        try {
-          supabase.from('game_sessions').upsert({
-            room_code: currentRoomCode,
-            duration_seconds: parsedSecs,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'room_code' }).catch(() => {});
-        } catch (_) {}
+        safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          duration_seconds: parsedSecs,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'room_code' }));
       }
 
       const statActiveTimer = document.getElementById('stat-active-timer');
@@ -3461,6 +3574,18 @@ function initHostControls() {
       }
     });
   });
+
+  // Sync #stat-active-timer pill with actual selectedQuestionDuration on startup
+  const initStatActiveTimer = document.getElementById('stat-active-timer');
+  if (initStatActiveTimer) {
+    if (selectedQuestionDuration >= 60) {
+      const mins = Math.floor(selectedQuestionDuration / 60);
+      const secs = selectedQuestionDuration % 60;
+      initStatActiveTimer.textContent = secs > 0 ? `${mins}m ${secs}s` : `${mins} Min`;
+    } else {
+      initStatActiveTimer.textContent = `${selectedQuestionDuration}s`;
+    }
+  }
 
   // IN-BETWEEN ROUND DURATION SELECTOR (30s, 1 Min, 2 Min, 3 Min, 4 Min, 5 Min, 10 Min)
   const interRoundChips = document.querySelectorAll('.inter-round-chip');
@@ -3479,13 +3604,11 @@ function initHostControls() {
 
         channel.postMessage({ type: 'INTER_ROUND_DURATION_UPDATED', payload: { inter_round_duration: dur, delay_seconds: dur } });
         broadcastRealtimeEvent('inter_round_duration_updated', { room_code: currentRoomCode, inter_round_duration: dur, delay_seconds: dur });
-        try {
-          supabase.from('game_sessions').upsert({
-            room_code: currentRoomCode,
-            inter_round_duration: dur,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'room_code' }).catch(() => {});
-        } catch (_) {}
+        safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          inter_round_duration: dur,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'room_code' }));
       }
     });
   });
@@ -3581,17 +3704,15 @@ function initHostControls() {
     });
     syncTvSignageDisplay();
 
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        status: 'paused',
-        current_round: pausedRound,
-        current_question_index: pausedQuestionIndex,
-        remaining_question_seconds: pausedRemainingQuestionSeconds,
-        paused_at: new Date(pausedNowEpoch).toISOString(),
-        updated_at: new Date(pausedNowEpoch).toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'paused',
+      current_round: pausedRound,
+      current_question_index: pausedQuestionIndex,
+      remaining_question_seconds: pausedRemainingQuestionSeconds,
+      paused_at: new Date(pausedNowEpoch).toISOString(),
+      updated_at: new Date(pausedNowEpoch).toISOString()
+    }, { onConflict: 'room_code' }));
   }
 
   function resumeGameEngine() {
@@ -3695,12 +3816,12 @@ function initHostControls() {
       const questionInRound = (currentQuestionIndex % 10) + 1;
       timerEndsAtGlobalMs = 0;
       hostTargetEpochMs = 0;
-      remainingTimerSeconds = 20;
+      remainingTimerSeconds = remainingSecs || 20;
       hostEngineState = 'QUESTION_READING';
       currentGameState = 'QUESTION_READING';
       startHostHeartbeatLoop();
 
-      const activeGenre = question?.category || question?.genre || activeRoundGenre || 'General Trivia';
+      const activeGenre = question?.category || question?.genre || (selectedGenreQueue[0] || 'General Trivia');
       const payload = {
         questionIndex: currentQuestionIndex,
         roundNumber: currentRound,
@@ -3746,34 +3867,32 @@ function initHostControls() {
       updateHostManualModalUI();
       syncTvSignageDisplay();
 
-      try {
-        supabase.from('game_sessions').upsert({
-          room_code: currentRoomCode,
-          status: 'active_reading',
-          current_question_index: currentQuestionIndex + 1,
-          current_round: currentRound,
-          round_number: currentRound,
-          duration_seconds: 20,
-          timer_ends_at: null,
+      safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+        room_code: currentRoomCode,
+        status: 'active_reading',
+        current_question_index: currentQuestionIndex + 1,
+        current_round: currentRound,
+        round_number: currentRound,
+        duration_seconds: 20,
+        timer_ends_at: null,
+        genre: activeGenre,
+        question_data: {
+          id: question?.id,
+          question_id: question?.id,
+          category: activeGenre,
           genre: activeGenre,
-          question_data: {
-            id: question?.id,
-            question_id: question?.id,
-            category: activeGenre,
-            genre: activeGenre,
-            difficulty: selectedDifficulty,
-            text: question?.text,
-            question_text: question?.text,
-            options: question?.options,
-            correct: question?.correct,
-            correct_option: question?.correct,
-            round_number: currentRound,
-            roundNumber: currentRound,
-            question_number_in_round: questionInRound,
-          },
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'room_code' }).catch(() => {});
-      } catch (_) {}
+          difficulty: selectedDifficulty,
+          text: question?.text,
+          question_text: question?.text,
+          options: question?.options,
+          correct: question?.correct,
+          correct_option: question?.correct,
+          round_number: currentRound,
+          roundNumber: currentRound,
+          question_number_in_round: questionInRound,
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'room_code' }));
 
       return;
     }
@@ -3809,24 +3928,27 @@ function initHostControls() {
     });
     syncTvSignageDisplay();
 
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        status: 'resuming',
-        starts_at: startsAtMs,
-        current_round: currentRound,
-        current_question_index: currentQuestionIndex,
-        remaining_question_seconds: remainingSecs,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'resuming',
+      starts_at: toIsoTimestamp(startsAtMs),
+      current_round: currentRound,
+      current_question_index: currentQuestionIndex,
+      remaining_question_seconds: remainingSecs,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
 
     clearTimeout(autoEngineTimeout);
     autoEngineTimeout = setTimeout(() => {
       if (!isAutomatedEngineRunning) return;
 
-      if (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedHostEngineState === 'QUESTION_READING' || (!pausedHostEngineState && (pausedQuestionData || currentQuestionData)) || (pausedQuestionData || currentQuestionData)) {
-        const question = pausedQuestionData || currentQuestionData;
+      const resumedQuestion = pausedQuestionData || currentQuestionData;
+      const shouldResumeActiveQuestion =
+        (pausedHostEngineState === 'QUESTION_ACTIVE' || pausedHostEngineState === 'QUESTION_READING' || !pausedHostEngineState) &&
+        Boolean(resumedQuestion);
+
+      if (shouldResumeActiveQuestion) {
+        const question = resumedQuestion;
         const questionInRound = (currentQuestionIndex % 10) + 1;
         const qDuration = Math.max(1, remainingSecs);
 
@@ -3835,7 +3957,7 @@ function initHostControls() {
         hostEngineState = 'QUESTION_ACTIVE';
         startHostHeartbeatLoop();
 
-        const activeGenre = question?.category || activeRoundGenre || 'General Trivia';
+        const activeGenre = question?.category || question?.genre || (selectedGenreQueue[0] || 'General Trivia');
         const payload = {
           questionIndex: currentQuestionIndex,
           roundNumber: currentRound,
@@ -3870,34 +3992,32 @@ function initHostControls() {
         broadcastRealtimeEvent('question_start', payload);
         onQuestionStart(payload);
 
-        try {
-          supabase.from('game_sessions').upsert({
-            room_code: currentRoomCode,
-            status: 'question_active',
-            current_question_index: currentQuestionIndex + 1,
-            current_round: currentRound,
-            round_number: currentRound,
-            duration_seconds: qDuration,
-            timer_ends_at: timerEndsAtGlobalMs ? new Date(timerEndsAtGlobalMs).toISOString() : null,
+        safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+          room_code: currentRoomCode,
+          status: 'question_active',
+          current_question_index: currentQuestionIndex + 1,
+          current_round: currentRound,
+          round_number: currentRound,
+          duration_seconds: qDuration,
+          timer_ends_at: timerEndsAtGlobalMs ? new Date(timerEndsAtGlobalMs).toISOString() : null,
+          genre: activeGenre,
+          question_data: {
+            id: question.id,
+            question_id: question.id,
+            category: activeGenre,
             genre: activeGenre,
-            question_data: {
-              id: question.id,
-              question_id: question.id,
-              category: activeGenre,
-              genre: activeGenre,
-              difficulty: selectedDifficulty,
-              text: question.text,
-              question_text: question.text,
-              options: question.options,
-              correct: question.correct,
-              correct_option: question.correct,
-              round_number: currentRound,
-              roundNumber: currentRound,
-              question_number_in_round: questionInRound,
-            },
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'room_code' }).catch(() => {});
-        } catch (_) {}
+            difficulty: selectedDifficulty,
+            text: question.text,
+            question_text: question.text,
+            options: question.options,
+            correct: question.correct,
+            correct_option: question.correct,
+            round_number: currentRound,
+            roundNumber: currentRound,
+            question_number_in_round: questionInRound,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'room_code' }));
 
         clearTimeout(autoEngineTimeout);
         autoEngineTimeout = setTimeout(() => {
@@ -3980,26 +4100,26 @@ function initHostControls() {
       roundNumber: currentRound,
     });
 
-    broadcastRealtimeEvent('leaderboard_updated', {
-      players: playersLeaderboard,
-      leaderboard: playersLeaderboard,
-      room_code: currentRoomCode
-    });
+    if (playersLeaderboard.length > 0) {
+      broadcastRealtimeEvent('leaderboard_updated', {
+        players: playersLeaderboard,
+        leaderboard: playersLeaderboard,
+        room_code: currentRoomCode
+      });
+    }
 
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        status: 'pre_game_countdown',
-        starts_at: startsAtMs,
-        current_question_index: 0,
-        current_round: 1,
-        round_number: 1,
-        question_data: null,
-        current_question_data: null,
-        genre: initialGenre,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'pre_game_countdown',
+      starts_at: toIsoTimestamp(startsAtMs),
+      current_question_index: 0,
+      current_round: 1,
+      round_number: 1,
+      question_data: null,
+      current_question_data: null,
+      genre: initialGenre,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
 
     // 2. Fetch questions during the countdown
     await initOpenTdbToken().catch(() => {});
@@ -4145,6 +4265,8 @@ function initHostControls() {
     isAutomatedEngineRunning = false;
     isLocalHostEngineMaster = false;
     activeHostQuestion = null;
+    currentQuestionData = null;
+    currentRoundQuestions = [];
     pausedHostEngineState = 'IDLE';
     pausedRemainingQuestionSeconds = 0;
     pausedQuestionData = null;
@@ -4166,17 +4288,15 @@ function initHostControls() {
     channel.postMessage({ type: 'GAME_RESET', payload: { roomCode: currentRoomCode, reset_mode: 'clear_all' } });
     broadcastRealtimeEvent('game_reset', { room_code: currentRoomCode, reset_mode: 'clear_all' });
 
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        status: 'lobby',
-        current_round: 1,
-        current_question_index: 0,
-        question_data: null,
-        current_question_data: null,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'lobby',
+      current_round: 1,
+      current_question_index: 0,
+      question_data: null,
+      current_question_data: null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'room_code' }));
 
     onGameReset({ roomCode: currentRoomCode });
     hostEngineState = 'IDLE';
@@ -4195,7 +4315,8 @@ function initHostControls() {
     // or if this client is a Player controller view!
     if (isLocalHostEngineMaster || hostHeartbeatInterval !== null || currentGameState === 'EXITED') return;
     const activeView = document.body.getAttribute('data-view');
-    if (activeView === 'player' || document.body.classList.contains('player-mode')) return;
+    if (activeView === 'player' || activeView === 'marketing' || document.body.classList.contains('player-mode')) return;
+    if (!isSupabaseReachable()) return;
 
     try {
       const code = (currentRoomCode || 'TRIV').trim().toUpperCase();
@@ -4261,7 +4382,15 @@ function initHostControls() {
             if (session.question_data) {
               currentQuestionData = session.question_data;
               const qInRound = (currentQuestionIndex % 10) + 1;
-              updateHostLiveStagePreviewCard(session.question_data, currentRound, qInRound);
+              const hostQEl = document.getElementById('host-live-q-text');
+              const hostCounterEl = document.getElementById('host-stage-q-counter');
+              const hostGenreEl = document.getElementById('host-live-genre-pill');
+              const qText = decodeHtmlEntities(session.question_data.text || session.question_data.question_text || '');
+              if (hostQEl && qText) hostQEl.textContent = qText;
+              if (hostCounterEl) hostCounterEl.textContent = `Question ${qInRound} of 10 (Round ${currentRound})`;
+              if (hostGenreEl && (session.question_data.category || session.genre)) {
+                hostGenreEl.textContent = (session.question_data.category || session.genre).toUpperCase();
+              }
             }
             updateHostEngineUI('IN PROGRESS');
           }
@@ -4291,7 +4420,7 @@ function initHostControls() {
             }
             const rem = targetEpoch ? Math.max(0, Math.ceil((targetEpoch - Date.now()) / 1000)) : (Number(session.duration_seconds) || 120);
             onRoundWinner({
-              top_scorers: playersLeaderboard.slice(0, 3),
+              top3Winners: playersLeaderboard.slice(0, 3),
               delaySeconds: rem,
               starts_at_epoch_ms: targetEpoch
             });
@@ -4339,20 +4468,25 @@ function initHostControls() {
           }
         }
 
-        if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
+        if (Array.isArray(session.ad_slides)) {
           const remoteSlides = session.ad_slides;
           const isDifferent = !customAdSlides || customAdSlides.length !== remoteSlides.length ||
             remoteSlides.some((s, idx) => !customAdSlides[idx] || (customAdSlides[idx].id || customAdSlides[idx].dataUrl) !== (s.id || s.dataUrl));
           if (isDifferent) {
             customAdSlides = remoteSlides;
-            idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+            if (customAdSlides.length === 0) {
+              idbAdStorage.clearSlides().catch(() => {});
+              safeStorage.removeItem('bar_trivia_custom_ad_slides');
+            } else {
+              idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+            }
             renderHostAdGallery();
             syncTvSignageDisplay();
           }
         }
       }
     } catch (err) {
-      console.warn('[Host Sync] Error checking active session:', err);
+      markSupabaseUnreachable(err);
     }
   }
 
@@ -4367,14 +4501,18 @@ function updateGenreQueueUI() {
 
   genreChips.forEach(chip => {
     const genre = chip.dataset.genre;
+    if (!chip.dataset.label) {
+      chip.dataset.label = chip.textContent.trim();
+    }
+    const displayLabel = escapeHtml(chip.dataset.label || genre);
     const qIndex = selectedGenreQueue.indexOf(genre);
 
     if (qIndex > -1) {
       chip.className = 'genre-chip in-queue';
-      chip.innerHTML = `<span class="q-num-badge">#${qIndex + 1}</span> ${genre}`;
+      chip.innerHTML = `<span class="q-num-badge">#${qIndex + 1}</span> ${displayLabel}`;
     } else {
       chip.className = 'genre-chip';
-      chip.innerHTML = genre;
+      chip.textContent = chip.dataset.label || genre;
     }
   });
 
@@ -4391,7 +4529,7 @@ function updateGenreQueueUI() {
   const stageQueuePreview = document.getElementById('host-stage-queue-preview');
   if (stageQueuePreview) {
     if (selectedGenreQueue.length === 0) {
-      stageQueuePreview.innerHTML = `<span class="queue-empty-msg">All 30 Specific Genres in Auto-Select Rotation</span>`;
+      stageQueuePreview.innerHTML = `<span class="queue-empty-msg">All 20 Specific Genres in Auto-Select Rotation</span>`;
     } else {
       stageQueuePreview.innerHTML = selectedGenreQueue.map((g, i) => `
         <span class="queue-tag">#${i + 1} ${escapeHtml(g)}</span>
@@ -4425,12 +4563,18 @@ function onLogoUpdated({ logoUrl }) {
 
   const activeLogo = logoUrl || customBarLogoUrl;
 
-  if (activeLogo) {
-    if (tvLogoImg) tvLogoImg.src = activeLogo;
+  const safeLogoUrl = sanitizeSafeUrl(activeLogo);
+  if (safeLogoUrl) {
+    if (tvLogoImg) tvLogoImg.src = safeLogoUrl;
     if (tvLogoContainer) tvLogoContainer.classList.remove('hidden');
     if (tvBrandIcon) tvBrandIcon.classList.add('hidden');
     if (promoLogoPlaceholder) {
-      promoLogoPlaceholder.innerHTML = `<img src="${activeLogo}" style="max-height: 70px; max-width: 140px; object-fit: contain;">`;
+      promoLogoPlaceholder.innerHTML = '';
+      const imgEl = document.createElement('img');
+      imgEl.src = safeLogoUrl;
+      imgEl.alt = 'Venue Logo';
+      imgEl.style.cssText = 'max-height: 70px; max-width: 140px; object-fit: contain;';
+      promoLogoPlaceholder.appendChild(imgEl);
     }
   } else {
     if (tvLogoContainer) tvLogoContainer.classList.add('hidden');
@@ -5040,7 +5184,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
         title: 'BUZZ IN ANSWERS',
         color: '#ffd600',
         headline: 'REAL-TIME MULTIPLAYER',
-        desc: 'Questions and options appear on the TV. Tap your color-coded answer on your phone before the timer hits zero for maximum speed points!',
+        desc: 'Questions and options appear on the TV. Tap your color-coded answer on your phone before the timer hits zero to earn 10 points per correct answer!',
         badge: '✓ Fast Live Buzzer Sync'
       },
       {
@@ -5131,7 +5275,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
       },
       {
         icon: '🎯',
-        title: '30+ TRIVIA GENRES',
+        title: '20+ TRIVIA GENRES',
         color: '#00e676',
         headline: 'THOUSANDS OF QUESTIONS',
         desc: 'Pop Culture, 80s/90s Nostalgia, Sports, History, Science, Literature, Riddles & thousands of fresh curated questions with continuous non-repeating play!',
@@ -5228,7 +5372,7 @@ function generateOfficialBarRoomsTriviaAdDataUrl(slideNumber = 1) {
     const appBullets = [
       '✓ Unlimited Trivia: Unlimited games and unlimited connected players.',
       '✓ Real-Time Multiplayer: Live synchronized countdown timers & buzzer scoring.',
-      '✓ Mobile Host Controls: Skip questions, pause anytime, and manage player roster.',
+      '✓ Mobile Host Controls: Auto or Manual MC mode, pause anytime, and manage player roster.',
       '✓ Custom Signage & Ads: Upload food specials, drink menus, and flyer ads.',
       '✓ Offline Fallback: Local question cache ensures the party never stops!'
     ];
@@ -5494,6 +5638,7 @@ let top3CelebrationEpochMs = 0;
 
 // 6. TV Ad Signage Synchronization & Carousel Rotation
 function syncTvSignageDisplay(forceRestartRotation = false) {
+  if (currentGameState === 'EXITED') return;
   const tvAdScreen = document.getElementById('tv-ad-signage-screen');
   const tvPromoScreen = document.getElementById('tv-promo-screen');
   const tvLiveGrid = document.getElementById('tv-live-grid');
@@ -5755,12 +5900,15 @@ function displayAdSlide(index, immediate = false) {
     return;
   }
 
-  // Pre-decode incoming image to guarantee zero blank frames or texture tearing
+  // Pre-decode incoming image with sequence guard so late loads never corrupt newer slides
+  const myLoadSeq = ++adLoadSequence;
   const preloader = new Image();
   preloader.onload = () => {
+    if (myLoadSeq !== adLoadSequence) return;
     executeTransition();
   };
   preloader.onerror = () => {
+    if (myLoadSeq !== adLoadSequence) return;
     const fallback = getOfficialBarRoomsTriviaAdSlide();
     if (fallback && fallback.dataUrl && slideUrl !== fallback.dataUrl) {
       slideUrl = fallback.dataUrl;
@@ -5830,9 +5978,11 @@ function renderHostAdGallery() {
       ? `${slide.name} (P.${slide.page}/${slide.totalPages})`
       : slide.name;
 
+    const safeSlideUrl = sanitizeSafeUrl(slide.dataUrl || slide.data_url || slide.url || '');
+    const safeName = escapeHtml(displayName || 'Custom Slide');
     card.innerHTML = `
-      <img src="${slide.dataUrl}" alt="${displayName}" class="ad-thumb-img">
-      <div class="ad-thumb-badge" title="${displayName}">${displayName}</div>
+      <img src="${escapeHtml(safeSlideUrl)}" alt="${safeName}" class="ad-thumb-img">
+      <div class="ad-thumb-badge" title="${safeName}">${safeName}</div>
       <button type="button" class="btn-remove-ad-slide" title="Delete Custom Slide" data-custom-index="${customIndex}">✕</button>
     `;
 
@@ -5896,19 +6046,16 @@ function broadcastAdModeChange() {
     console.warn('Ad mode broadcast error:', e);
   }
 
-  try {
-    supabase.from('game_sessions').upsert({
-      room_code: (currentRoomCode || 'TRIV').toUpperCase(),
-      is_ad_mode_active: isAdModeActive,
-      ad_slides: customAdSlides,
-      ad_slide_duration_seconds: adSlideDurationSeconds,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'room_code' }).catch(() => {});
-  } catch (_) {}
+  safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+    room_code: (currentRoomCode || 'TRIV').toUpperCase(),
+    is_ad_mode_active: isAdModeActive,
+    ad_slides: customAdSlides,
+    ad_slide_duration_seconds: adSlideDurationSeconds,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'room_code' }));
 }
 
 function broadcastAdSlidesUpdated() {
-  broadcastAdModeChange();
   const allSlides = getAllActiveAdSlides();
   try {
     channel.postMessage({
@@ -6106,16 +6253,14 @@ function initHostAdSettings() {
         try {
           safeStorage.setItem('bar_trivia_custom_ad_slides', JSON.stringify(customAdSlides.slice(0, 5)));
         } catch (_) {}
-        renderHostAdGallery();
-        broadcastAdSlidesUpdated();
-
         // Automatically toggle Ad Mode ON if it was OFF
         if (!isAdModeActive) {
           isAdModeActive = true;
           safeStorage.setItem('bar_trivia_ad_mode_active', 'true');
           if (toggleAdMode) toggleAdMode.checked = true;
-          broadcastAdModeChange();
         }
+
+        renderHostAdGallery();
 
         // Jump directly to the newly uploaded custom ad so it displays immediately!
         const allSlides = getAllActiveAdSlides();
@@ -6203,7 +6348,9 @@ async function loadAdSlidesAndInit() {
   renderHostAdGallery();
   if (customAdSlides && customAdSlides.length > 0) {
     currentAdSlideIndex = 0;
-    broadcastAdSlidesUpdated();
+    if (document.body.getAttribute('data-view') === 'host') {
+      broadcastAdSlidesUpdated();
+    }
     displayAdSlide(0, true);
   }
   syncTvSignageDisplay(true);
@@ -6211,7 +6358,10 @@ async function loadAdSlidesAndInit() {
 
 // Expose Ad mode helpers globally for testing and console inspection
 window.idbAdStorage = idbAdStorage;
-window.customAdSlides = customAdSlides;
+Object.defineProperty(window, 'customAdSlides', {
+  get: () => customAdSlides,
+  configurable: true,
+});
 window.isAdModeActive = () => isAdModeActive;
 window.getOfficialBarRoomsTriviaAdSlide = getOfficialBarRoomsTriviaAdSlide;
 window.getOfficialBarRoomsTriviaAdSlides = getOfficialBarRoomsTriviaAdSlides;
@@ -6415,7 +6565,6 @@ async function runNextAutomatedStep() {
       total_duration: durationSeconds,
       totalTimerDuration: durationSeconds,
       timer_ends_at_epoch_ms: timerEndsAtGlobalMs,
-      timerEndsAtMs: timerEndsAtGlobalMs,
       category: question.category || activeRoundGenre,
       genre: question.category || activeRoundGenre,
       question_text: question.text,
@@ -6437,35 +6586,33 @@ async function runNextAutomatedStep() {
     onQuestionStart(payload);
     updateHostManualDock();
 
-    try {
-      supabase.from('game_sessions').upsert({
-        room_code: currentRoomCode,
-        status: isManual ? 'active_reading' : 'question_active',
-        current_question_index: currentQuestionIndex + 1,
-        current_round: currentRound,
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: isManual ? 'active_reading' : 'question_active',
+      current_question_index: currentQuestionIndex + 1,
+      current_round: currentRound,
+      round_number: currentRound,
+      duration_seconds: durationSeconds,
+      timer_ends_at: timerEndsAtGlobalMs ? new Date(timerEndsAtGlobalMs).toISOString() : null,
+      game_play_mode: hostGamePlayMode,
+      genre: activeRoundGenre,
+      question_data: {
+        id: question.id,
+        question_id: question.id,
+        category: question.category || activeRoundGenre,
+        genre: question.category || activeRoundGenre,
+        difficulty: selectedDifficulty,
+        text: question.text,
+        question_text: question.text,
+        options: question.options,
+        correct: question.correct,
+        correct_option: question.correct,
         round_number: currentRound,
-        duration_seconds: durationSeconds,
-        timer_ends_at: timerEndsAtGlobalMs ? new Date(timerEndsAtGlobalMs).toISOString() : null,
-        game_play_mode: hostGamePlayMode,
-        genre: activeRoundGenre,
-        question_data: {
-          id: question.id,
-          question_id: question.id,
-          category: question.category || activeRoundGenre,
-          genre: question.category || activeRoundGenre,
-          difficulty: selectedDifficulty,
-          text: question.text,
-          question_text: question.text,
-          options: question.options,
-          correct: question.correct,
-          correct_option: question.correct,
-          round_number: currentRound,
-          roundNumber: currentRound,
-          question_number_in_round: questionInRound,
-        },
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'room_code' }).catch(() => {});
-    } catch (_) {}
+        roundNumber: currentRound,
+        question_number_in_round: questionInRound,
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'room_code' }));
 
     clearTimeout(autoEngineTimeout);
     if (!isManual) {
@@ -6550,17 +6697,15 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
   onTimerExpired(expiredPayload);
   updateHostManualDock();
 
-  try {
-    supabase.from('game_sessions').upsert({
-      room_code: currentRoomCode,
-      status: 'question_review',
-      current_question_index: currentQuestionIndex + 1,
-      current_round: currentRound,
-      round_number: currentRound,
-      timer_ends_at: new Date(hostTargetEpochMs).toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'room_code' }).catch(() => {});
-  } catch (_) {}
+  safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+    room_code: currentRoomCode,
+    status: 'question_review',
+    current_question_index: currentQuestionIndex + 1,
+    current_round: currentRound,
+    round_number: currentRound,
+    timer_ends_at: new Date(hostTargetEpochMs).toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'room_code' }));
 
   if (anyScoreChanged) {
     broadcastRealtimeEvent('leaderboard_updated', {
@@ -6568,17 +6713,13 @@ function handleHostQuestionTimeout(question, currentRound, questionInRound) {
       leaderboard: playersLeaderboard,
       room_code: currentRoomCode
     });
-    // Persist scores to Supabase DB in background
+    // Persist scores to Supabase DB cleanly
     playersLeaderboard.forEach(p => {
-      try {
-        supabase.from('players').upsert({
-          room_code: currentRoomCode.toUpperCase(),
-          nickname: p.nickname,
-          player_uid: p.player_uid || p.nickname,
-          cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
-          is_connected: true
-        }, { onConflict: 'room_code, nickname' });
-      } catch (_) {}
+      safeSupabaseWrite(() => supabase.from('players').update({
+        cumulative_score: Number(p.cumulative_score ?? p.score ?? 0),
+        is_connected: true,
+        updated_at: new Date().toISOString(),
+      }).eq('room_code', currentRoomCode.toUpperCase()).ilike('nickname', p.nickname));
     });
   }
 
@@ -6633,6 +6774,11 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
             points_earned: 20,
           });
 
+          safeSupabaseWrite(() => supabase.from('players').update({
+            cumulative_score: winner.score,
+            updated_at: new Date().toISOString(),
+          }).eq('room_code', currentRoomCode.toUpperCase()).ilike('nickname', winner.nickname));
+
           if (currentPlayer && currentPlayer.nickname && currentPlayer.nickname.toLowerCase() === winner.nickname.toLowerCase()) {
             currentPlayer.score = winner.score;
             const scoreVal = document.getElementById('player-score-val');
@@ -6686,25 +6832,19 @@ function handleHostAdvanceAfterReview(questionInRound, currentRound) {
     onRoundWinner(winnerPayload);
     updateHostManualDock();
 
-    try {
-      const summaryPayload = {
-        room_code: currentRoomCode,
-        status: 'round_summary',
-        current_round: nextRound,
-        round_number: completedRound,
-        current_question_index: currentQuestionIndex,
-        question_data: null,
-        current_question_data: null,
-        duration_seconds: interRoundSecs,
-        timer_ends_at: new Date(hostTargetEpochMs).toISOString(),
-        starts_at: hostTargetEpochMs,
-        updated_at: new Date().toISOString(),
-      };
-      supabase.from('game_sessions').upsert(summaryPayload, { onConflict: 'room_code' }).catch(() => {});
-      if (currentRoomCode.toUpperCase() !== 'TRIV') {
-        supabase.from('game_sessions').upsert({ ...summaryPayload, room_code: 'TRIV' }, { onConflict: 'room_code' }).catch(() => {});
-      }
-    } catch (_) {}
+    safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+      room_code: currentRoomCode,
+      status: 'round_summary',
+      current_round: nextRound,
+      round_number: completedRound,
+      current_question_index: currentQuestionIndex,
+      question_data: null,
+      current_question_data: null,
+      duration_seconds: interRoundSecs,
+      timer_ends_at: toIsoTimestamp(hostTargetEpochMs),
+      starts_at: toIsoTimestamp(hostTargetEpochMs),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'room_code' }));
 
     if (hostGamePlayMode === 'Auto') {
       autoEngineTimeout = setTimeout(() => {
@@ -7012,12 +7152,7 @@ function updateHostManualDock() {
 
   manualBanner.classList.remove('hidden');
 
-  if (btnOpenModal) {
-    btnOpenModal.onclick = (e) => {
-      e.preventDefault();
-      openHostManualModal();
-    };
-  }
+  // Click handler attached once via addEventListener during initHostControls
 
   // Update Dock Timer Button
   if (btnDockTimer) {
@@ -7113,15 +7248,13 @@ function startManualQuestionCountdown() {
   startHostHeartbeatLoop();
   updateHostManualDock();
 
-  try {
-    supabase.from('game_sessions').upsert({
-      room_code: currentRoomCode,
-      status: 'question_active',
-      timer_ends_at: new Date(timerEndsAtGlobalMs).toISOString(),
-      duration_seconds: durationSeconds,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'room_code' }).catch(() => {});
-  } catch (_) {}
+  safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+    room_code: currentRoomCode,
+    status: 'question_active',
+    timer_ends_at: toIsoTimestamp(timerEndsAtGlobalMs),
+    duration_seconds: durationSeconds,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'room_code' }));
 
   clearTimeout(autoEngineTimeout);
   autoEngineTimeout = setTimeout(() => {
@@ -7210,16 +7343,14 @@ async function handleHostAdvanceAfterRoundSummary() {
     starts_at_epoch_ms: startsAtMs,
   });
 
-  try {
-    supabase.from('game_sessions').upsert({
-      room_code: currentRoomCode,
-      status: 'pre_game_countdown',
-      current_question_index: currentQuestionIndex,
-      current_round: nextRound,
-      starts_at: startsAtMs,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'room_code' }).catch(() => {});
-  } catch (_) {}
+  safeSupabaseWrite(() => supabase.from('game_sessions').upsert({
+    room_code: currentRoomCode,
+    status: 'pre_game_countdown',
+    current_question_index: currentQuestionIndex,
+    current_round: nextRound,
+    starts_at: toIsoTimestamp(startsAtMs),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'room_code' }));
 
   try {
     currentRoundQuestions = await fetchRealtimeTriviaQuestions(nextGenre, selectedDifficulty, 10);
@@ -7288,9 +7419,9 @@ function onQuestionStart(payload) {
   const qObj = payload.questionData || payload.question_data || payload;
   const opts = qObj.options || payload.options || {};
   const optA = payload.option_a || payload.optionA || qObj.option_a || qObj.optionA || opts.A || opts.a || (Array.isArray(opts) ? opts[0] : 'Option A');
-  const optB = payload.option_b || payload.optionB || qObj.option_b || qObj.option_b || opts.B || opts.b || (Array.isArray(opts) ? opts[1] : 'Option B');
-  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.option_c || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
-  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.option_d || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
+  const optB = payload.option_b || payload.optionB || qObj.option_b || qObj.optionB || opts.B || opts.b || (Array.isArray(opts) ? opts[1] : 'Option B');
+  const optC = payload.option_c || payload.optionC || qObj.option_c || qObj.optionC || opts.C || opts.c || (Array.isArray(opts) ? opts[2] : 'Option C');
+  const optD = payload.option_d || payload.optionD || qObj.option_d || qObj.optionD || opts.D || opts.d || (Array.isArray(opts) ? opts[3] : 'Option D');
   const correct = (qObj.correct || qObj.correct_option || payload.correct_option || payload.correct || 'A').toUpperCase().trim();
 
   const incomingDiff = normalizeDifficulty(payload.selectedDifficulty || payload.difficulty || qObj.difficulty || selectedDifficulty, 'Standard');
@@ -7329,10 +7460,12 @@ function onQuestionStart(payload) {
   }
 
   currentQuestionData = questionData;
-  playerChoiceSubmitted = null;
-  isCurrentQuestionScored = false;
-  lastScoredQuestionKey = null;
-  currentQuestionAnswers = {};
+  if (!payload.is_resumed) {
+    playerChoiceSubmitted = null;
+    isCurrentQuestionScored = false;
+    lastScoredQuestionKey = null;
+    currentQuestionAnswers = {};
+  }
   if (payload.cumulative_question_index !== undefined) {
     currentQuestionIndex = Math.max(0, Number(payload.cumulative_question_index) - 1);
   } else if (payload.questionIndex !== undefined) {
@@ -7650,7 +7783,9 @@ function startCountdown(seconds) {
     timerLabel.style.display = '';
   }
   const validSeconds = Math.max(1, Number(seconds) || Number(totalTimerDuration) || Number(selectedQuestionDuration) || (hostGamePlayMode === 'Manual' ? 20 : 90));
-  totalTimerDuration = validSeconds;
+  if (!totalTimerDuration || validSeconds > totalTimerDuration) {
+    totalTimerDuration = validSeconds;
+  }
   const now = Date.now();
   if (!timerEndsAtGlobalMs || timerEndsAtGlobalMs <= now || ((timerEndsAtGlobalMs - now) <= 4000 && validSeconds > 4)) {
     timerEndsAtGlobalMs = now + (validSeconds * 1000);
@@ -8042,13 +8177,10 @@ function onTimerExpired(payload) {
       currentPlayer.streak = (currentPlayer.streak || 0) + 1;
       const pointsEarned = 10;
       const targetPlayer = playersLeaderboard.find(p => p.nickname.toLowerCase() === currentPlayer.nickname.toLowerCase());
-      if (targetPlayer) {
-        const lbScore = Number(targetPlayer.cumulative_score ?? targetPlayer.score ?? 0);
-        if (lbScore > Number(currentPlayer.score || 0)) {
-          currentPlayer.score = lbScore;
-        }
-      }
-      currentPlayer.score += pointsEarned;
+      const lbScore = targetPlayer ? Number(targetPlayer.cumulative_score ?? targetPlayer.score ?? 0) : 0;
+      const expectedAfterQuestion = Number(playerScoreAtSubmission || 0) + pointsEarned;
+      // Avoid double-scoring if host's leaderboard_updated already added +10
+      currentPlayer.score = Math.max(Number(currentPlayer.score || 0), lbScore, expectedAfterQuestion);
       const scoreVal = document.getElementById('player-score-val');
       if (scoreVal) scoreVal.textContent = currentPlayer.score;
 
@@ -8079,15 +8211,11 @@ function onTimerExpired(payload) {
       });
 
       // Also persist directly to Supabase DB so score is preserved
-      try {
-        supabase.from('players').upsert({
-          room_code: currentRoomCode.toUpperCase(),
-          nickname: currentPlayer.nickname,
-          player_uid: currentPlayer.nickname,
-          cumulative_score: currentPlayer.score,
-          is_connected: true
-        }, { onConflict: 'room_code, nickname' });
-      } catch (_) {}
+      safeSupabaseWrite(() => supabase.from('players').update({
+        cumulative_score: currentPlayer.score,
+        is_connected: true,
+        updated_at: new Date().toISOString()
+      }).eq('room_code', currentRoomCode.toUpperCase()).ilike('nickname', currentPlayer.nickname));
 
       const randomQuote = getRandomItem(funnyCorrectQuotes);
       showResultModal(true, `+${pointsEarned} PTS`, correctTextStr, randomQuote, reviewSeconds, nextEpoch, isLastQ, isManualModeActive);
@@ -8328,6 +8456,7 @@ function hideResultModal() {
     overlay.onclick = null;
   }
   clearInterval(modalCountdownInterval);
+  clearTimeout(modalCountdownInterval);
 }
 
 // 7. MULTI-LAYER ROUND WINNER CELEBRATION MODAL WITH LIVE COUNTDOWN
@@ -8859,33 +8988,14 @@ function initPlayerControls() {
         score: Number(currentPlayer.score ?? 0),
         room_code: currentRoomCode,
       });
-      // Also write directly to Supabase players table
-      try {
-        supabase.from('players').upsert({
-          room_code: currentRoomCode.toUpperCase(),
-          nickname: currentPlayer.nickname,
-          player_uid: currentPlayer.nickname,
-          cumulative_score: Number(currentPlayer.score ?? 0),
-          is_connected: true,
-          updated_at: new Date().toISOString()
-        }).catch(() => {});
-        if (currentRoomCode.toUpperCase() !== 'TRIV') {
-          supabase.from('players').upsert({
-            room_code: 'TRIV',
-            nickname: currentPlayer.nickname,
-            player_uid: currentPlayer.nickname,
-            cumulative_score: Number(currentPlayer.score ?? 0),
-            is_connected: true,
-            updated_at: new Date().toISOString()
-          }).catch(() => {});
-        }
-      } catch (_) {}
+      safeSupabaseWrite(() => supabase.from('players').update({
+        cumulative_score: Number(currentPlayer.score ?? 0),
+        is_connected: true,
+        updated_at: new Date().toISOString()
+      }).eq('room_code', currentRoomCode.toUpperCase()).ilike('nickname', currentPlayer.nickname));
     };
     sendJoinBroadcast();
-    setTimeout(sendJoinBroadcast, 300);
     setTimeout(sendJoinBroadcast, 800);
-    setTimeout(sendJoinBroadcast, 1800);
-    setTimeout(sendJoinBroadcast, 3000);
 
     broadcastRealtimeEvent('request_state_sync', { room_code: currentRoomCode });
     onPlayerJoined(currentPlayer);
@@ -8905,11 +9015,14 @@ function initPlayerControls() {
       });
     }
 
+    let lastPlayerHeartbeatMs = Date.now();
     async function syncSessionFromSupabase() {
-      // Periodic player heartbeat ensures TV display maintains sync
-      if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname)) {
+      // Lightweight 30s presence heartbeat (prevents O(N^2) broadcast storm)
+      if (currentPlayer && currentPlayer.nickname && !isFictitiousPlayer(currentPlayer.nickname) && (Date.now() - lastPlayerHeartbeatMs) >= 30000) {
+        lastPlayerHeartbeatMs = Date.now();
         sendJoinBroadcast();
       }
+      if (!isSupabaseReachable()) return;
 
       try {
         const code = (currentRoomCode || 'TRIV').trim().toUpperCase();
@@ -8954,13 +9067,18 @@ function initPlayerControls() {
               }
             }
           }
-          if (session.ad_slides && Array.isArray(session.ad_slides) && session.ad_slides.length > 0) {
+          if (Array.isArray(session.ad_slides)) {
             const remoteSlides = session.ad_slides;
             const isDifferent = !customAdSlides || customAdSlides.length !== remoteSlides.length ||
               remoteSlides.some((s, idx) => !customAdSlides[idx] || (customAdSlides[idx].id || customAdSlides[idx].dataUrl) !== (s.id || s.dataUrl));
             if (isDifferent) {
               customAdSlides = remoteSlides;
-              idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+              if (customAdSlides.length === 0) {
+                idbAdStorage.clearSlides().catch(() => {});
+                safeStorage.removeItem('bar_trivia_custom_ad_slides');
+              } else {
+                idbAdStorage.saveSlides(customAdSlides).catch(() => {});
+              }
               renderHostAdGallery();
               syncTvSignageDisplay();
             }
@@ -9002,7 +9120,7 @@ function initPlayerControls() {
             }
             startsAt = startsAt || Date.now();
             const rem = Math.max(1, Math.ceil((startsAt - Date.now()) / 1000));
-            handleIncomingPreGameCountdown({ countdown_seconds: rem, round_number: rNum || currentRound, genre: session.genre });
+            handleIncomingPreGameCountdown({ countdown_seconds: rem, starts_at_epoch_ms: startsAt, round_number: rNum || currentRound, genre: session.genre });
           } else if ((session.status === 'question_active' || session.status === 'active_reading') && session.question_data) {
             const isIntermissionActive = currentGameState === 'ROUND_SUMMARY' || hostEngineState === 'ROUND_SUMMARY';
             const sessionRound = Number(session.current_round || session.round_number || session.question_data.round_number || session.question_data.roundNumber || currentRound);
@@ -9130,7 +9248,7 @@ function initPlayerControls() {
           }
         }
       } catch (err) {
-        console.warn('[Sync] checkActiveGameSession error:', err);
+        markSupabaseUnreachable(err);
       }
     }
 
@@ -9141,7 +9259,8 @@ function initPlayerControls() {
 
     triggerActiveSessionSync = checkActiveGameSession;
     checkActiveGameSession();
-    setInterval(checkActiveGameSession, 2000);
+    if (playerSessionSyncInterval) clearInterval(playerSessionSyncInterval);
+    playerSessionSyncInterval = setInterval(checkActiveGameSession, 2000);
   }
 
   formJoin?.addEventListener('submit', (e) => {
@@ -9162,6 +9281,7 @@ function initPlayerControls() {
 
       const choice = (btn.dataset.choice || '').toUpperCase();
       playerChoiceSubmitted = choice;
+      playerScoreAtSubmission = Number(currentPlayer.score || 0);
 
       // Haptic feedback (buzzer vibration on mobile devices)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
@@ -9204,8 +9324,9 @@ function onPlayerJoined(player) {
   }
   player.nickname = formatPlayerNickname(player.nickname);
   const initialScore = Number(player.score ?? player.cumulative_score ?? 0);
-  const exists = playersLeaderboard.some(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
-  if (!exists) {
+  let rosterChanged = false;
+  const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
+  if (idx === -1) {
     playersLeaderboard.push({
       id: player.id || player.nickname,
       player_uid: player.player_uid || player.nickname,
@@ -9216,39 +9337,28 @@ function onPlayerJoined(player) {
       streak: player.streak || 0,
       is_connected: true
     });
+    rosterChanged = true;
   } else {
-    const idx = playersLeaderboard.findIndex(p => p.nickname.toLowerCase() === player.nickname.toLowerCase());
-    if (idx >= 0) {
-      playersLeaderboard[idx].is_connected = true;
-      if (initialScore === 0) {
-        playersLeaderboard[idx].score = 0;
-        playersLeaderboard[idx].cumulative_score = 0;
-      } else if (player.score !== undefined || player.cumulative_score !== undefined) {
-        playersLeaderboard[idx].score = Math.max(Number(playersLeaderboard[idx].score || 0), initialScore);
-        playersLeaderboard[idx].cumulative_score = Math.max(Number(playersLeaderboard[idx].cumulative_score || 0), initialScore);
-      }
+    playersLeaderboard[idx].is_connected = true;
+    const prevScore = Number(playersLeaderboard[idx].score || 0);
+    // Preserve existing score when player refreshes/rejoins with initialScore === 0
+    if (initialScore > prevScore) {
+      playersLeaderboard[idx].score = initialScore;
+      playersLeaderboard[idx].cumulative_score = initialScore;
+      rosterChanged = true;
     }
   }
 
   renderLeaderboard();
-  channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
-  broadcastRealtimeEvent('leaderboard_updated', {
-    players: playersLeaderboard,
-    leaderboard: playersLeaderboard,
-    room_code: currentRoomCode
-  });
-
-  // Persist to Supabase DB players table
-  try {
-    supabase.from('players').upsert({
-      room_code: currentRoomCode.toUpperCase(),
-      nickname: player.nickname,
-      player_uid: player.player_uid || player.nickname,
-      cumulative_score: initialScore,
-      is_connected: true,
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'room_code,nickname' }).catch(() => {});
-  } catch (_) {}
+  const activeView = document.body.getAttribute('data-view');
+  if (rosterChanged && (isLocalHostEngineMaster || activeView === 'host' || activeView === 'tv')) {
+    channel.postMessage({ type: 'LEADERBOARD_UPDATED', payload: { leaderboard: playersLeaderboard } });
+    broadcastRealtimeEvent('leaderboard_updated', {
+      players: playersLeaderboard,
+      leaderboard: playersLeaderboard,
+      room_code: currentRoomCode
+    });
+  }
 
   updateHostEngineUI(isAutomatedEngineRunning ? 'IN PROGRESS' : 'NOT STARTED');
 }
@@ -9542,11 +9652,25 @@ function onGameResuming(payload) {
   countdownInterval = setInterval(updateResumeTick, 1000);
 }
 
-// RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL
-function onGameReset() {
+// RESET GAME -> REVERT TO ROTATING PROMO CAROUSEL & CLEAN UP ALL REMOTE TIMERS/PLAYER UI
+function onGameReset(payload = {}) {
+  const resetMode = payload?.reset_mode || payload?.resetMode || 'clear_all';
+  isAutomatedEngineRunning = false;
   isLocalHostEngineMaster = false;
   activeHostQuestion = null;
-  playersLeaderboard = [];
+  currentQuestionData = null;
+  currentRoundQuestions = [];
+  if (resetMode === 'clear_all') {
+    playersLeaderboard = [];
+  } else if (resetMode === 'zero_scores') {
+    playersLeaderboard.forEach(p => { p.score = 0; p.cumulative_score = 0; p.streak = 0; });
+  }
+  if (currentPlayer && (resetMode === 'clear_all' || resetMode === 'zero_scores')) {
+    currentPlayer.score = 0;
+    currentPlayer.streak = 0;
+    const scoreValEl = document.getElementById('player-score-val');
+    if (scoreValEl) scoreValEl.textContent = '0';
+  }
   selectedGenreQueue = [];
   currentRound = 1;
   currentQuestionIndex = 0;
@@ -9566,8 +9690,29 @@ function onGameReset() {
   hideResultModal();
   hideWinnerModals();
   hideInterQuestionCountdown();
+  clearTimeout(autoEngineTimeout);
+  clearInterval(countdownInterval);
+  clearInterval(modalCountdownInterval);
+  clearTimeout(modalCountdownInterval);
+  clearInterval(tvNextQCountdownInterval);
+  clearInterval(winnerCountdownInterval);
+  clearInterval(playerReviewInterval);
+  clearInterval(playerInterQuestionInterval);
   clearInterval(preGameCountdownInterval);
   clearPauseAdTimeout();
+
+  // Reset player question view and disable stale answer buttons
+  const playerQText = document.getElementById('player-question-text');
+  if (playerQText) playerQText.textContent = 'Waiting for host to start the next game...';
+  const playerStatus = document.getElementById('player-status-badge');
+  if (playerStatus) {
+    playerStatus.className = 'status-badge status-locked';
+    playerStatus.innerHTML = '<span id="status-icon">⏳</span> WAITING';
+  }
+  document.querySelectorAll('.btn-answer').forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('selected', 'unselected', 'review-correct', 'review-wrong');
+  });
   const tvTimerBlock = document.getElementById('tv-timer-block') || document.querySelector('.tv-timer-block');
   if (tvTimerBlock) tvTimerBlock.classList.remove('is-ready-state');
   const tvTimerRingColumn = document.getElementById('tv-timer-ring-column') || document.querySelector('.tv-timer-ring-column');
@@ -9797,7 +9942,7 @@ function formatPlayerNickname(name) {
 }
 
 function escapeHtml(text) {
-  return text.replace(/[&<>"']/g, function(m) {
+  return String(text ?? '').replace(/[&<>"']/g, function(m) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
   });
 }

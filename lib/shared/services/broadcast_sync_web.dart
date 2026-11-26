@@ -11,13 +11,22 @@ void postEventImpl(Map<String, dynamic> payload) {
   } catch (_) {}
 }
 
+final Set<void Function(Map<String, dynamic> payload)> _listeners = {};
+bool _domListenersRegistered = false;
+
 void listenImpl(void Function(Map<String, dynamic> payload) onEvent) {
+  _listeners.add(onEvent);
+  if (_domListenersRegistered) return;
+  _domListenersRegistered = true;
+
   try {
     html.window.onStorage.listen((event) {
       if (event.key == 'bar_rooms_trivia_sync' && event.newValue != null) {
         try {
           final data = jsonDecode(event.newValue!) as Map<String, dynamic>;
-          onEvent(data);
+          for (final listener in List.of(_listeners)) {
+            listener(data);
+          }
         } catch (_) {}
       }
     });
@@ -26,7 +35,9 @@ void listenImpl(void Function(Map<String, dynamic> payload) onEvent) {
       if (event is html.CustomEvent && event.detail != null) {
         try {
           final data = jsonDecode(event.detail.toString()) as Map<String, dynamic>;
-          onEvent(data);
+          for (final listener in List.of(_listeners)) {
+            listener(data);
+          }
         } catch (_) {}
       }
     });

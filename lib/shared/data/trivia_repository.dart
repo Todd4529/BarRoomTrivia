@@ -388,10 +388,10 @@ class TriviaRepository {
     }
   }
 
-  /// Guaranteed 500+ unique, non-repeating questions for EVERY single trivia genre
+  /// Guaranteed unique, non-repeating questions for EVERY single trivia genre
   static List<Question> getQuestionsForCategory(String category) {
     final key = category.trim();
-    if (_categoryCache.containsKey(key) && _categoryCache[key]!.length >= 500) {
+    if (_categoryCache.containsKey(key) && _categoryCache[key]!.isNotEmpty) {
       return _categoryCache[key]!;
     }
 
@@ -469,7 +469,8 @@ class TriviaRepository {
 
     String targetGenre;
     if (validGenres.isNotEmpty) {
-      targetGenre = validGenres[questionIndex % validGenres.length];
+      // Keep the entire round on the active queued genre; GameEngineManager rotates genres between rounds
+      targetGenre = validGenres.first;
     } else {
       final allAvailableGenres = TriviaGenres.allGenres
           .where((g) => g != 'Auto Select' && g != 'Random (Mixed)')
@@ -512,11 +513,29 @@ class TriviaRepository {
       cursor = 0;
     }
 
-    // Dynamic anti-repetition lookahead: choose a question whose wrong answers do not overlap with the previous question
+    // Helper to match host-selected difficulty (Kids/Beginner/Standard/Advanced) against question tags
+    bool matchesRequestedDifficulty(String qDiff) {
+      final req = difficulty.trim().toLowerCase();
+      if (req.isEmpty || req == 'mixed') return true;
+      final qd = qDiff.trim().toLowerCase();
+      if (qd == req) return true;
+      if (req == 'beginner' || req == 'kids') return qd == 'easy' || qd == 'kids' || qd == 'beginner';
+      if (req == 'standard') return qd == 'medium' || qd == 'standard';
+      if (req == 'advanced') return qd == 'hard' || qd == 'advanced';
+      return false;
+    }
+
+    // Dynamic anti-repetition + difficulty lookahead
     int chosenIndex = cursor;
-    if (_lastServedWrongs.isNotEmpty) {
-      for (int lookAhead = cursor; lookAhead < min(cursor + 30, deck.length); lookAhead++) {
-        final cand = deck[lookAhead];
+    int? firstNonOverlapIdx;
+    int? firstDiffAndNonOverlapIdx;
+    int? firstDiffIdx;
+    final lookLimit = min(cursor + 40, deck.length);
+    for (int lookAhead = cursor; lookAhead < lookLimit; lookAhead++) {
+      final cand = deck[lookAhead];
+      final diffOk = matchesRequestedDifficulty(cand.difficulty);
+      bool nonOverlap = true;
+      if (_lastServedWrongs.isNotEmpty) {
         final candCorrect = cand.correctOption.toUpperCase() == 'B'
             ? cand.optionB
             : cand.correctOption.toUpperCase() == 'C'
@@ -528,13 +547,16 @@ class TriviaRepository {
             .where((opt) => opt.trim().toLowerCase() != candCorrect.trim().toLowerCase())
             .map((opt) => opt.trim().toLowerCase())
             .toSet();
-
-        if (candWrongs.intersection(_lastServedWrongs).isEmpty) {
-          chosenIndex = lookAhead;
-          break;
-        }
+        nonOverlap = candWrongs.intersection(_lastServedWrongs).isEmpty;
       }
+      if (diffOk && nonOverlap) {
+        firstDiffAndNonOverlapIdx = lookAhead;
+        break;
+      }
+      if (nonOverlap && firstNonOverlapIdx == null) firstNonOverlapIdx = lookAhead;
+      if (diffOk && firstDiffIdx == null) firstDiffIdx = lookAhead;
     }
+    chosenIndex = firstDiffAndNonOverlapIdx ?? firstNonOverlapIdx ?? firstDiffIdx ?? cursor;
 
     if (chosenIndex != cursor) {
       final temp = deck[cursor];
@@ -554,14 +576,22 @@ class TriviaRepository {
                 ? seed.optionD
                 : seed.optionA;
 
-    // Isolate wrong options
+    // Isolate distinct wrong options
     final rawOptions = [seed.optionA, seed.optionB, seed.optionC, seed.optionD];
-    final rawWrongs = rawOptions.where((opt) => opt != correctText).toList();
+    final seenLower = <String>{correctText.trim().toLowerCase()};
+    final rawWrongs = <String>[];
+    for (final opt in rawOptions) {
+      final norm = opt.trim();
+      final lower = norm.toLowerCase();
+      if (norm.isNotEmpty && !seenLower.contains(lower)) {
+        seenLower.add(lower);
+        rawWrongs.add(norm);
+      }
+    }
 
-    // If any wrong answer still matches an answer from the immediately preceding question,
-    // swap in an authentic non-overlapping wrong option from another question in the deck.
-    if (_lastServedWrongs.isNotEmpty) {
-      final candidateDistractors = <String>[];
+    // Gather non-overlapping distractors from other questions in the deck (also used if rawWrongs < 3)
+    final candidateDistractors = <String>[];
+    if (_lastServedWrongs.isNotEmpty || rawWrongs.length < 3) {
       final usedLower = <String>{
         correctText.trim().toLowerCase(),
         ...rawWrongs.map((w) => w.trim().toLowerCase()),
@@ -586,11 +616,29 @@ class TriviaRepository {
         }
       }
       int candIdx = 0;
-      for (int i = 0; i < rawWrongs.length; i++) {
-        if (_lastServedWrongs.contains(rawWrongs[i].trim().toLowerCase()) && candIdx < candidateDistractors.length) {
-          rawWrongs[i] = candidateDistractors[candIdx++];
+      if (_lastServedWrongs.isNotEmpty) {
+        for (int i = 0; i < rawWrongs.length; i++) {
+          if (_lastServedWrongs.contains(rawWrongs[i].trim().toLowerCase()) && candIdx < candidateDistractors.length) {
+            rawWrongs[i] = candidateDistractors[candIdx++];
+          }
         }
       }
+      while (rawWrongs.length < 3 && candIdx < candidateDistractors.length) {
+        rawWrongs.add(candidateDistractors[candIdx++]);
+      }
+    }
+
+    // Guarantee exactly 3 wrong options so finalOptions always has length 4 (prevents RangeError)
+    const fallbackDistractors = ['None of the above', 'All of the above', 'Not listed'];
+    int fbIdx = 0;
+    while (rawWrongs.length < 3 && fbIdx < fallbackDistractors.length) {
+      final fb = fallbackDistractors[fbIdx++];
+      if (!rawWrongs.any((w) => w.toLowerCase() == fb.toLowerCase()) && correctText.trim().toLowerCase() != fb.toLowerCase()) {
+        rawWrongs.add(fb);
+      }
+    }
+    while (rawWrongs.length > 3) {
+      rawWrongs.removeLast();
     }
 
     _lastServedWrongs = rawWrongs.map((w) => w.trim().toLowerCase()).toSet();
@@ -599,9 +647,9 @@ class TriviaRepository {
     final finalOptions = [correctText, ...rawWrongs]..shuffle(_random);
 
     String correctOptLetter = 'A';
-    if (finalOptions[1] == correctText) correctOptLetter = 'B';
-    if (finalOptions[2] == correctText) correctOptLetter = 'C';
-    if (finalOptions[3] == correctText) correctOptLetter = 'D';
+    if (finalOptions.length > 1 && finalOptions[1] == correctText) correctOptLetter = 'B';
+    if (finalOptions.length > 2 && finalOptions[2] == correctText) correctOptLetter = 'C';
+    if (finalOptions.length > 3 && finalOptions[3] == correctText) correctOptLetter = 'D';
 
     final resolvedDifficulty = (difficulty.trim().isNotEmpty && difficulty != 'Mixed')
         ? difficulty.trim()

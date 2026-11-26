@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -129,7 +129,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Mozilla PDF.js for in-browser client-side rendering of PDF ad flyers -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <!-- PWA Manifest & App Icons -->
   <link rel="manifest" href="./manifest.webmanifest">
   <link id="dynamic-favicon" rel="icon" type="image/png" href="data:image/png;base64,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">
@@ -140,13 +140,19 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=3">
   <link rel="stylesheet" href="/src/style.css">
 </head>
-<body class="dark-theme" data-view="auth">
+<body class="dark-theme" data-view="marketing">
   <!-- Global App Bar -->
-  <header class="app-header" style="justify-content: center;">
-    <div class="logo-container">
+  <header class="app-header">
+    <a href="./" class="logo-container header-brand-link" data-nav-view="marketing">
       <img id="app-logo-icon" src="./assets/images/app_logo.png" alt="Bar Rooms Trivia Logo" class="header-logo-img" onerror="this.onerror=null;this.src='./app_logo.png';">
       <h1 class="app-title" id="app-title-text">BAR ROOMS TRIVIA</h1>
-    </div>
+    </a>
+    <nav class="header-launch-nav" aria-label="Quick Launch">
+      <a href="./?view=player" class="header-nav-link" data-nav-view="player">📱 Join Game</a>
+      <a href="./?view=tv" class="header-nav-link" data-nav-view="tv">📺 TV Display</a>
+      <a href="./?view=host" class="header-nav-link" data-nav-view="host">👑 Host Console</a>
+      <a href="./?view=auth" class="header-nav-cta" data-nav-view="auth">Sign In</a>
+    </nav>
   </header>
 
   <main class="main-container">
@@ -167,6 +173,13 @@
             Turn slow weeknights into high-energy events. Players buzz in instantly from their smartphones.
             Your TVs run the show. Zero paper, zero app installs, 100% automated or bartender-hosted.
           </p>
+
+          <div class="hero-cta-row">
+            <a href="./?view=player" class="btn btn-primary hero-cta-btn" data-nav-view="player">📱 Join a Game</a>
+            <a href="./?view=host" class="btn btn-success hero-cta-btn" data-nav-view="host">👑 Host Console</a>
+            <a href="./?view=tv" class="btn btn-secondary hero-cta-btn" data-nav-view="tv">📺 Launch TV Display</a>
+            <a href="./?view=auth" class="btn btn-outline hero-cta-btn" data-nav-view="auth">🔑 Host Sign In</a>
+          </div>
 
           <!-- SIDE-BY-SIDE PRODUCT SHOWCASE: REAL IN-GAME TV DISPLAY + REAL PLAYER PHONE DISPLAY -->
           <div class="product-showcase-container">
@@ -377,7 +390,7 @@
             <div class="feature-card">
               <div class="feature-icon" style="background: rgba(0, 229, 255, 0.15); color: #00e5ff;">📱</div>
               <h3>Zero App Installs for Patrons</h3>
-              <p>Players simply scan the TV QR code or go to <strong>barroomstrivia.com/play</strong> on any smartphone. They enter a nickname, buzz in, and compete in real-time.</p>
+              <p>Players simply scan the TV QR code or open <strong>barroomstrivia.com/?view=player</strong> on any smartphone. They enter a nickname, buzz in, and compete in real-time.</p>
             </div>
 
             <div class="feature-card">
@@ -401,7 +414,7 @@
             <div class="feature-card">
               <div class="feature-icon" style="background: rgba(0, 230, 118, 0.15); color: #00e676;">🏆</div>
               <h3>Live Big-Screen Leaderboards</h3>
-              <p>Real-time scoring animations, round recaps, streak multipliers, and celebratory confetti overlays keep your bar energized until last call.</p>
+              <p>Real-time scoring animations, round recaps, round-winner bonus points (+20 pts), and celebratory confetti overlays keep your bar energized until last call.</p>
             </div>
 
             <div class="feature-card">
@@ -493,14 +506,14 @@
           <h2 class="section-title">Get Started Today</h2>
           <p class="section-desc">Download our native TV apps.</p>
           <div class="download-badges">
-            <div class="store-badge">
+            <a class="store-badge store-badge-link" href="https://www.amazon.com/s?k=Bar+Rooms+Trivia&i=mobile-apps" target="_blank" rel="noopener noreferrer">
               <span class="badge-icon">🔥</span>
               <div class="badge-text">
                 <span class="badge-sub">Available for</span>
                 <strong class="badge-main">Amazon Fire TV</strong>
               </div>
-            </div>
-            <div class="store-badge">
+            </a>
+            <a class="store-badge store-badge-link" href="https://play.google.com/store/search?q=Bar%20Rooms%20Trivia&c=apps" target="_blank" rel="noopener noreferrer">
               <span class="badge-icon" style="display:inline-flex; align-items:center; justify-content:center;">
                 <svg viewBox="0 0 512 512" width="28" height="28" style="display:block;">
                   <path fill="#00e5ff" d="M32.5 15.1c-4.2 4.6-6.5 11.4-6.5 19.9v442c0 8.5 2.3 15.3 6.5 19.9l1.1 1.1 247.3-247.3v-5.7L33.6 14l-1.1 1.1z"/>
@@ -513,7 +526,7 @@
                 <span class="badge-sub">Available on</span>
                 <strong class="badge-main">Google Play Store</strong>
               </div>
-            </div>
+            </a>
           </div>
         </div>
 
@@ -545,8 +558,8 @@
 
           <div id="auth-status-alert" class="auth-alert hidden"></div>
 
-          <form id="form-host-auth" class="auth-form-fields" onsubmit="window.handleHostAuthSubmit && window.handleHostAuthSubmit(event); return false;">
-            <button type="button" id="btn-quick-connect" class="btn btn-primary btn-block btn-lg" onclick="window.quickConnectAsHost && window.quickConnectAsHost(event)" style="margin-bottom: 6px; font-size: 16px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 0 25px rgba(0, 229, 255, 0.4); cursor: pointer; pointer-events: auto;">
+          <form id="form-host-auth" class="auth-form-fields">
+            <button type="button" id="btn-quick-connect" class="btn btn-primary btn-block btn-lg" style="margin-bottom: 6px; font-size: 16px; font-weight: 900; letter-spacing: 1px; box-shadow: 0 0 25px rgba(0, 229, 255, 0.4); cursor: pointer; pointer-events: auto;">
               ⚡ QUICK CONNECT AS HOST
             </button>
 
@@ -565,8 +578,8 @@
               <input type="password" id="auth-password-input" placeholder="••••••••" autocomplete="current-password" autocapitalize="none" autocorrect="off">
             </div>
 
-            <button type="submit" id="btn-submit-auth" class="btn btn-secondary btn-block" onclick="window.handleHostAuthSubmit && window.handleHostAuthSubmit(event)" style="cursor: pointer; pointer-events: auto;">
-              SIGN IN & CONNECT TV
+            <button type="submit" id="btn-submit-auth" class="btn btn-secondary btn-block" style="cursor: pointer; pointer-events: auto;">
+              SIGN IN &amp; CONNECT TV
             </button>
 
           </form>
@@ -636,7 +649,7 @@
               
               <div class="promo-steps-row">
                 <div class="p-step"><span class="step-num">⚡</span> Live Phone Buzzers</div>
-                <div class="p-step"><span class="step-num">🎯</span> 30+ Trivia Genres</div>
+                <div class="p-step"><span class="step-num">🎯</span> 20+ Trivia Genres</div>
                 <div class="p-step"><span class="step-num">🏆</span> Instant TV Standings</div>
               </div>
               
@@ -674,7 +687,7 @@
               
               <h1 class="promo-title-centered">CLIMB THE LIVE LEADERBOARD</h1>
               
-              <p class="promo-para">Earn points for fast and accurate answers on every question!</p>
+              <p class="promo-para">Earn +10 points for every correct answer plus +20 bonus points for round winners!</p>
               
               <p class="promo-para-secondary">Real-time scoring updates the TV leaderboard instantly!</p>
             </div>
@@ -714,15 +727,15 @@
             <!-- Dual Slide Layers for Silky Smooth Crossfade & Transformations -->
             <div id="tv-ad-layer-0" class="tv-ad-layer active">
               <div class="tv-ad-slide-backdrop"></div>
-              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+              <img class="tv-ad-slide-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Venue Advertisement">
             </div>
             <div id="tv-ad-layer-1" class="tv-ad-layer">
               <div class="tv-ad-slide-backdrop"></div>
-              <img class="tv-ad-slide-img" src="" alt="Venue Advertisement">
+              <img class="tv-ad-slide-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Venue Advertisement">
             </div>
             <!-- Backward compatibility elements for DOM queries -->
             <div id="tv-ad-slide-backdrop" class="tv-ad-slide-backdrop" style="display: none;"></div>
-            <img id="tv-ad-slide-img" class="tv-ad-slide-img" style="display: none;" src="" alt="">
+            <img id="tv-ad-slide-img" class="tv-ad-slide-img" style="display: none;" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="">
           </div>
 
           <!-- Slide Counter Pill -->
@@ -898,11 +911,11 @@
               Choose an option below. If the host lost the current game website, select <strong>HOST CONTROL QR CODE</strong> to reconnect instantly.
             </p>
             <div style="display: flex; gap: 12px; margin-bottom: 14px;">
-              <button id="btn-tv-exit-yes" class="btn btn-danger" autofocus style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 800; cursor: pointer; background: #ff4d4d; border: 2px solid #ffffff; color: #ffffff; box-shadow: 0 0 20px rgba(255, 77, 77, 0.7);">
-                Yes
+              <button id="btn-tv-exit-yes" class="btn btn-danger" style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 800; cursor: pointer;">
+                Yes, Exit
               </button>
   
-              <button id="btn-tv-exit-cancel" class="btn btn-outline" style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 700; cursor: pointer;">
+              <button id="btn-tv-exit-cancel" class="btn btn-outline" autofocus style="flex: 1; border-radius: 14px; padding: 14px; font-weight: 700; cursor: pointer;">
                 Cancel
               </button>
   
@@ -1090,7 +1103,7 @@
             <!-- CORRECT ANSWER SHOWCASE BOX -->
             <div class="correct-answer-box">
               <span class="ans-label">CORRECT ANSWER:</span>
-              <strong id="result-correct-text" class="ans-text">B) Taylor Swift</strong>
+              <strong id="result-correct-text" class="ans-text">—</strong>
             </div>
 
             <!-- FUNNY STATEMENT QUOTE -->
@@ -1174,11 +1187,11 @@
               <span class="metric-lbl">ROUND</span>
               <strong id="stat-round">1</strong>
             </div>
-            <div class="metric-pill clickable-metric-pill" id="stat-pill-timer" style="cursor: pointer;" title="Configure Question Timer Duration">
+            <div class="metric-pill clickable-metric-pill" id="stat-pill-timer" role="button" tabindex="0" style="cursor: pointer;" title="Configure Question Timer Duration">
               <span class="metric-lbl">TIMER</span>
-              <strong id="stat-active-timer">1m 30s</strong>
+              <strong id="stat-active-timer">20s</strong>
             </div>
-            <div class="metric-pill clickable-metric-pill" id="stat-pill-diff" style="cursor: pointer;" title="Configure Difficulty Level">
+            <div class="metric-pill clickable-metric-pill" id="stat-pill-diff" role="button" tabindex="0" style="cursor: pointer;" title="Configure Difficulty Level">
               <span class="metric-lbl">DIFF</span>
               <strong id="stat-difficulty">Standard</strong>
             </div>
@@ -1188,18 +1201,10 @@
             </button>
           </div>
         </div>
-        <!--
-            </button>
-            </div>
-          </div>
-        </div>
-
-        -->
         <!-- C. SEGMENTED TAB SWITCHER (App Tabs) -->
         <nav class="host-segmented-tabs" role="tablist">
           <button type="button" class="host-tab-btn active" data-tab="stage" role="tab" aria-selected="true">
             <span class="tab-ico">
-
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="6" width="20" height="12" rx="3"></rect>
                 <path d="M6 12h4m-2-2v4m7-3h.01m3 2h.01"></path>
@@ -1209,7 +1214,6 @@
           </button>
           <button type="button" class="host-tab-btn" data-tab="playlist" role="tab" aria-selected="false">
             <span class="tab-ico">
-
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9 18V5l12-2v13"></path>
                 <circle cx="6" cy="18" r="3"></circle>
@@ -1218,20 +1222,17 @@
             </span>
             <span class="tab-lbl">Playlist</span>
           </button>
-          <!--
-          </button>
-
-
+          <button type="button" class="host-tab-btn" data-tab="players" role="tab" aria-selected="false">
+            <span class="tab-ico">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-
-
-
-
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
               </svg>
             </span>
-
+            <span class="tab-lbl">Players</span>
           </button>
-          -->
           <button type="button" class="host-tab-btn" data-tab="settings" role="tab" aria-selected="false">
             <span class="tab-ico">
 
@@ -1334,7 +1335,7 @@
                 </div>
 
                 <div class="genre-category-filter-chips">
-                  <button type="button" class="genre-cat-pill active" data-cat="all">All (22)</button>
+                  <button type="button" class="genre-cat-pill active" data-cat="all">All (20+)</button>
                   <button type="button" class="genre-cat-pill" data-cat="bar">🍺 Bar Life</button>
                   <button type="button" class="genre-cat-pill" data-cat="ent">🎬 Entertainment</button>
                   <button type="button" class="genre-cat-pill" data-cat="brain">🧠 Knowledge</button>
@@ -1382,7 +1383,7 @@
                   <span class="badge-live-count" id="host-live-player-badge">0 Active</span>
                 </div>
                 <div class="title-right-actions">
-                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" onclick="window.openClearLeaderboardModal ? window.openClearLeaderboardModal() : (window.clearHostLeaderboard && window.clearHostLeaderboard())" title="Clear leaderboard and remove all player scores">
+                  <button type="button" class="btn btn-clear-leaderboard" id="btn-clear-leaderboard" title="Clear leaderboard and remove all player scores">
                     Clear Leaderboard
                   </button>
 
@@ -1461,8 +1462,8 @@
                 </div>
                 <div class="inter-round-chips" id="inter-round-chips-container">
                   <button type="button" class="inter-round-chip" data-round-dur="30">30s</button>
-                  <button type="button" class="inter-round-chip active" data-round-dur="60">1 Min</button>
-                  <button type="button" class="inter-round-chip" data-round-dur="120">2 Min</button>
+                  <button type="button" class="inter-round-chip" data-round-dur="60">1 Min</button>
+                  <button type="button" class="inter-round-chip active" data-round-dur="120">2 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="180">3 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="240">4 Min</button>
                   <button type="button" class="inter-round-chip" data-round-dur="300">5 Min</button>
@@ -1539,8 +1540,8 @@
                   </div>
                 </div>
                 <div class="legal-links-row" style="display: flex; gap: 14px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
-                  <a href="privacy.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">🔒 Privacy Policy</a>
-                  <a href="terms.html" target="_blank" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">📜 Terms of Service</a>
+                  <a href="privacy.html" target="_blank" rel="noopener noreferrer" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">🔒 Privacy Policy</a>
+                  <a href="terms.html" target="_blank" rel="noopener noreferrer" class="legal-link" style="color: var(--neon-cyan); font-size: 13px; font-weight: 600; text-decoration: underline;">📜 Terms of Service</a>
                   <span style="color: var(--text-muted); font-size: 12px; margin-left: auto;">v1.1.90 Official Release</span>
                 </div>
               </div>

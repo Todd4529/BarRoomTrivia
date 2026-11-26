@@ -91,6 +91,7 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
           user.email?.split('@').first ??
           'Host';
 
+      // Public realtime/MQTT pairing payload — NEVER include bearer/access tokens on shared brokers
       final payload = {
         'event': 'device_authorized',
         'type': 'device_authorized',
@@ -102,9 +103,6 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
           'email': user.email ?? 'Host User',
           'display_name': displayName,
         },
-        'auth_tokens': {
-          'access_token': session?.accessToken ?? '',
-        },
         'timestamp': DateTime.now().toIso8601String(),
         'sent_at_epoch_ms': DateTime.now().millisecondsSinceEpoch,
       };
@@ -113,18 +111,16 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       BroadcastSync.postEvent(payload);
       RealtimeService.postLocalEvent(payload);
 
-      // 2. Publish over EMQX MQTT (immediate global internet delivery to TV)
+      // 2. Publish over EMQX MQTT strictly to this TV's token and room topics
       try {
         final mqtt = MqttService();
-        mqtt.connect();
+        await mqtt.connect().timeout(const Duration(seconds: 3));
         mqtt.publish('device_auth_$token', payload);
         mqtt.publish('barrooms_trivia/room_$targetRoom', payload);
         final stripped = targetRoom.replaceAll('-', '');
         if (stripped != targetRoom) {
           mqtt.publish('barrooms_trivia/room_$stripped', payload);
         }
-        mqtt.publish('barrooms_trivia/room_TRIV', payload);
-        mqtt.publish('tv_pairing', payload);
       } catch (e) {
         debugPrint('[Auth] MQTT publish error: $e');
       }
@@ -142,10 +138,11 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         debugPrint('[Auth] game_sessions upsert notice: $e');
       }
 
-      // 4. Broadcast to Supabase Realtime channels
+      // 4. Broadcast strictly to this TV's Supabase Realtime channels and clean them up
       Future<void> sendToChannel(String chName) async {
+        RealtimeChannel? ch;
         try {
-          final ch = SupabaseConfig.client.channel(chName);
+          ch = SupabaseConfig.client.channel(chName);
           final completer = Completer<void>();
           ch.subscribe((status, [error]) {
             if (status == RealtimeSubscribeStatus.subscribed) {
@@ -159,14 +156,19 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
             event: 'device_authorized',
             payload: payload,
           );
-        } catch (_) {}
+        } catch (_) {
+        } finally {
+          if (ch != null) {
+            try {
+              await SupabaseConfig.client.removeChannel(ch);
+            } catch (_) {}
+          }
+        }
       }
 
       await Future.wait([
         sendToChannel('device_auth_$token'),
         sendToChannel('room_$targetRoom'),
-        if (targetRoom != 'TRIV') sendToChannel('room_TRIV'),
-        sendToChannel('tv_pairing'),
       ]);
 
       // 5. Save paired room to SharedPreferences
@@ -176,14 +178,22 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
         await prefs.setBool('onboardingCompleted', true);
       } catch (_) {}
 
-      // 6. Optional HTTP fallback attempt
+      // 6. Optional authenticated HTTPS backend verify call
       try {
         final uri = Uri.parse('${widget.backendBaseUrl.replaceAll(RegExp(r'/+$'), '')}/auth/device/verify');
+        final accessToken = session?.accessToken ?? '';
+        final headers = <String, String>{
+          'Content-Type': 'application/json',
+          if (accessToken.isNotEmpty) 'Authorization': 'Bearer $accessToken',
+        };
         await http.post(
           uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        ).timeout(const Duration(milliseconds: 1000));
+          headers: headers,
+          body: jsonEncode({
+            ...payload,
+            if (accessToken.isNotEmpty) 'auth_tokens': {'access_token': accessToken},
+          }),
+        ).timeout(const Duration(milliseconds: 1500));
       } catch (_) {}
 
       if (mounted) {
@@ -239,7 +249,9 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
       } else {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Authentication completed. Check your email for confirmation if required.';
+          _errorMessage = _isSignUpMode
+              ? 'Account created. Please check your email to confirm your address before signing in.'
+              : 'Invalid email or password. Please try again.';
         });
       }
     } on AuthException catch (e) {
@@ -439,6 +451,22 @@ class _TvAuthVerifyViewState extends State<TvAuthVerifyView> with SingleTickerPr
                   letterSpacing: 2,
                   color: AppTheme.neonYellow,
                 ),
+              ),
+            ),
+          ],
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                textAlign: TextAlign.center,
               ),
             ),
           ],

@@ -30,11 +30,27 @@ test('DeviceAuthService - verifies and pairs mobile user', () => {
   assert.strictEqual(verifyResult.success, true);
   assert.strictEqual(verifyResult.pairedUserId, 'user-uuid-12345');
 
-  // Status check after verification
+  // Status check after verification (single-use consumption)
   const status = deviceAuthService.checkSessionStatus(session.device_token);
   assert.strictEqual(status.status, 'verified');
   assert.strictEqual(status.user_id, 'user-uuid-12345');
   assert.strictEqual(status.user_info.email, 'host@barroomstrivia.com');
+
+  // Second poll after consumption must NOT leak auth_tokens again
+  const replayStatus = deviceAuthService.checkSessionStatus(session.device_token);
+  assert.strictEqual(replayStatus.status, 'expired');
+});
+
+test('DeviceAuthService - rejects duplicate verify and resolves manual user_code', () => {
+  const session = deviceAuthService.createDeviceCodeSession('https://test.barroomstrivia.com');
+  assert.strictEqual(deviceAuthService.resolveTokenByUserCode(session.user_code), session.device_token);
+
+  const first = deviceAuthService.verifyDevice(session.device_token, 'user-1');
+  assert.strictEqual(first.success, true);
+
+  const duplicate = deviceAuthService.verifyDevice(session.device_token, 'user-2');
+  assert.strictEqual(duplicate.success, false);
+  assert.strictEqual(duplicate.code, 'ALREADY_VERIFIED');
 });
 
 test('DeviceAuthService - rejects nonexistent or invalid device token', () => {

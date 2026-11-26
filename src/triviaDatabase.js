@@ -163,23 +163,23 @@ export async function fetchRealtimeTriviaQuestions(genre, difficulty = 'Standard
     await initOpenTdbToken();
   }
 
-  // IF GENRE IS 'Random', COMBINE QUESTIONS FROM DIFFERENT SPECIFIC GENRES IN ONE GAME
+  // IF GENRE IS 'Random', COMBINE QUESTIONS FROM DIFFERENT SPECIFIC GENRES WITHOUT SEQUENTIAL RATE-LIMIT STALLS
   if (genre === 'Random') {
     const mixedBatch = [];
     const shuffledGenres = [...ALL_SPECIFIC_GENRES].sort(() => 0.5 - Math.random());
 
+    // Draw directly from the verified local/weekly human-made bank across diverse genres
+    // to avoid 10 sequential OpenTDB requests hitting their 5-second rate limit.
     for (let i = 0; i < count; i++) {
       const targetGenre = shuffledGenres[i % shuffledGenres.length];
-      const singleQBatch = await fetchSingleGenreQuestions(targetGenre, normDiff, 1);
-      if (singleQBatch && singleQBatch.length > 0) {
-        mixedBatch.push(singleQBatch[0]);
-      } else {
-        const fallback = getLocalQuestions(targetGenre, normDiff, 1);
-        mixedBatch.push(fallback[0]);
+      const pick = getLocalQuestions(targetGenre, normDiff, 1);
+      if (pick && pick.length > 0) {
+        mixedBatch.push(pick[0]);
       }
     }
 
-    return mixedBatch;
+    const declustered = deClusterSimilarQuestions(mixedBatch, 4);
+    return sanitizeQuestionsDistractors(declustered);
   }
 
   let result;

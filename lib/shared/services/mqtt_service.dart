@@ -15,6 +15,7 @@ class MqttService {
   bool get isConnected => _isConnected;
 
   final Set<String> _subscribedTopics = {};
+  final List<Map<String, dynamic>> _pendingPublishes = [];
   final StreamController<Map<String, dynamic>> _eventController =
       StreamController<Map<String, dynamic>>.broadcast();
 
@@ -24,6 +25,7 @@ class MqttService {
   bool _isConnecting = false;
 
   Future<void> connect() async {
+    if (kIsWeb) return; // MqttServerClient requires dart:io TCP sockets
     if (_isConnected || _isConnecting) return;
     _isConnecting = true;
 
@@ -47,10 +49,10 @@ class MqttService {
         debugPrint('[MQTT] Connected to broker.emqx.io:1883');
         _isConnected = true;
         _isConnecting = false;
-        // Resubscribe to all desired topics
         for (final topic in _subscribedTopics) {
           _client!.subscribe(topic, MqttQos.atMostOnce);
         }
+        _flushPendingPublishes();
       };
 
       final connMessage = MqttConnectMessage()
@@ -64,6 +66,7 @@ class MqttService {
       if (status?.state == MqttConnectionState.connected) {
         _isConnected = true;
         _listenToUpdates();
+        _flushPendingPublishes();
       } else {
         _isConnected = false;
         _scheduleReconnect();
@@ -77,28 +80,49 @@ class MqttService {
     }
   }
 
+  void _flushPendingPublishes() {
+    if (!_isConnected || _client == null || _pendingPublishes.isEmpty) return;
+    final queued = List<Map<String, dynamic>>.from(_pendingPublishes);
+    _pendingPublishes.clear();
+    for (final item in queued) {
+      publish(item['topic'] as String, item['payload'] as Map<String, dynamic>);
+    }
+  }
+
   void _listenToUpdates() {
-    _client?.updates?.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
-      if (c == null || c.isEmpty) return;
-      try {
-        final recMess = c[0].payload as MqttPublishMessage;
-        final pt = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
-        final json = jsonDecode(pt) as Map<String, dynamic>;
-        _eventController.add(json);
-      } catch (e) {
-        debugPrint('[MQTT] Error parsing incoming message: $e');
+    _client?.updates?.listen((List<MqttReceivedMessage<MqttMessage?>>? messages) {
+      if (messages == null || messages.isEmpty) return;
+      for (final message in messages) {
+        try {
+          final recMess = message.payload as MqttPublishMessage;
+          final pt = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+          final json = jsonDecode(pt) as Map<String, dynamic>;
+          _eventController.add(json);
+        } catch (e) {
+          debugPrint('[MQTT] Error parsing incoming message: $e');
+        }
       }
     });
   }
 
   void subscribeToRoom(String roomCode) {
     final norm = roomCode.toUpperCase().trim();
+    if (norm.isEmpty) return;
     subscribeTopic('barrooms_trivia/room_$norm');
     final stripped = norm.replaceAll('-', '');
     if (stripped != norm) {
       subscribeTopic('barrooms_trivia/room_$stripped');
     }
-    subscribeTopic('tv_pairing');
+  }
+
+  void unsubscribeFromRoom(String roomCode) {
+    final norm = roomCode.toUpperCase().trim();
+    if (norm.isEmpty) return;
+    unsubscribeTopic('barrooms_trivia/room_$norm');
+    final stripped = norm.replaceAll('-', '');
+    if (stripped != norm) {
+      unsubscribeTopic('barrooms_trivia/room_$stripped');
+    }
   }
 
   void subscribeTopic(String topic) {
@@ -109,8 +133,43 @@ class MqttService {
     }
   }
 
+  void unsubscribeTopic(String topic) {
+    _subscribedTopics.remove(topic);
+    if (_isConnected && _client != null) {
+      try {
+        _client!.unsubscribe(topic);
+      } catch (_) {}
+    }
+    _disconnectIfIdle();
+  }
+
+  void _disconnectIfIdle() {
+    if (_subscribedTopics.isNotEmpty) return;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _pendingPublishes.clear();
+    if (_client != null) {
+      try {
+        _client!.onDisconnected = null;
+        _client!.autoReconnect = false;
+        _client!.disconnect();
+      } catch (_) {}
+      _client = null;
+    }
+    _isConnected = false;
+    _isConnecting = false;
+  }
+
   void publish(String topic, Map<String, dynamic> payload) {
-    if (!_isConnected || _client == null) return;
+    if (kIsWeb) return;
+    if (!_isConnected || _client == null) {
+      _pendingPublishes.add({'topic': topic, 'payload': payload});
+      if (_pendingPublishes.length > 30) {
+        _pendingPublishes.removeAt(0);
+      }
+      connect();
+      return;
+    }
     try {
       final builder = MqttClientPayloadBuilder();
       builder.addString(jsonEncode(payload));
@@ -132,6 +191,8 @@ class MqttService {
   void dispose() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _subscribedTopics.clear();
+    _pendingPublishes.clear();
     _client?.onDisconnected = null;
     _client?.autoReconnect = false;
     _client?.disconnect();

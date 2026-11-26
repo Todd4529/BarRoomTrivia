@@ -59,13 +59,9 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     context.go('/tv?room=$room');
   }
 
-  void _navigateToTvGameMode({String? roomCode}) {
+  void _exitToHub() {
     if (!mounted) return;
-    if (_selectedGameMode == 'Manual') return;
-    try {
-      final room = roomCode ?? _activeSession?.roomCode ?? _targetRoomCode;
-      context.go('/tv?room=$room&auto_start=true');
-    } catch (_) {}
+    context.go('/hub');
   }
 
   Future<void> _loadRoomCode() async {
@@ -97,28 +93,38 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     _loadRoomCode().then((_) {
       if (!mounted) return;
       _subscribeToRealtime();
+      _createNewSession();
     });
-
-    // Auto-create room session on load
-    _createNewSession();
   }
 
   void _subscribeToRealtime() {
     _realtimeService.joinRoomChannel(
       roomCode: _targetRoomCode,
       onPreGameCountdownBroadcast: (payload) {
-        final room = payload['room_code']?.toString() ?? _targetRoomCode;
-        _navigateToTvGameMode(roomCode: room);
+        if (!mounted) return;
+        final rawStarts = payload['starts_at_epoch_ms'];
+        final startsAt = rawStarts is num ? rawStarts.toInt() : int.tryParse('$rawStarts');
+        final rem = startsAt != null
+            ? ((startsAt - DateTime.now().millisecondsSinceEpoch) / 1000).ceil().clamp(1, 60)
+            : 30;
+        setState(() {
+          _isPreGameCountdownActive = true;
+          _preGameSecondsRemaining = rem;
+          _isGamePaused = false;
+        });
       },
       onQuestionBroadcast: (payload) {
-        final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
-        final qIndex = payload['question_index'] as int?;
+        final rawEnds = payload['timer_ends_at_epoch_ms'];
+        final timerEndsAtEpochMs = rawEnds is num ? rawEnds.toInt() : int.tryParse('$rawEnds');
+        final qIndex = (payload['question_index'] as num?)?.toInt();
         final timerState = payload['timer_state'] as String?;
         if (mounted) {
           setState(() {
             if (qIndex != null) _currentQuestionIndex = qIndex;
             _isReviewPhase = false;
             _isEngineRunning = true;
+            _isPreGameCountdownActive = false;
+            _isGamePaused = false;
             if (timerState == 'idle' || timerEndsAtEpochMs == null || timerEndsAtEpochMs <= 0) {
               _questionSecondsRemaining = (_selectedGameMode == 'Manual' ? 20 : _selectedTimerSeconds);
               _questionCountdownTimer?.cancel();
@@ -128,8 +134,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
         if (timerEndsAtEpochMs != null && timerEndsAtEpochMs > 0 && timerState != 'idle' && mounted) {
           _startQuestionCountdown(timerEndsAtEpochMs);
         }
-        final room = payload['room_code']?.toString() ?? _targetRoomCode;
-        _navigateToTvGameMode(roomCode: room);
       },
       onManualTimerStartedBroadcast: (payload) {
         final timerEndsAtEpochMs = payload['timer_ends_at_epoch_ms'] as int?;
@@ -150,16 +154,19 @@ class _HostDashboardViewState extends State<HostDashboardView> {
         }
       },
       onGameResetBroadcast: (_) {
-        _cancelPreGameCountdown();
+        _preGameTimer?.cancel();
         _questionCountdownTimer?.cancel();
+        _resumeTimer?.cancel();
         if (mounted) {
           setState(() {
             _isEngineRunning = false;
             _isGamePaused = false;
             _isResumeCountdownActive = false;
             _isPreGameCountdownActive = false;
+            _preGameSecondsRemaining = 30;
             _currentQuestionIndex = 0;
             _isReviewPhase = false;
+            _questionSecondsRemaining = 0;
           });
         }
       },
@@ -183,6 +190,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     _timerPageController.dispose();
     _preGameTimer?.cancel();
     _questionCountdownTimer?.cancel();
+    _resumeTimer?.cancel();
     _realtimeService.leaveChannel();
     super.dispose();
   }
@@ -213,6 +221,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   Future<void> _createNewSession() async {
+    if (!mounted) return;
     setState(() {
       _isCreatingSession = true;
     });
@@ -220,13 +229,14 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     final roomCode = _targetRoomCode.isNotEmpty ? _targetRoomCode : 'TRIV';
     try {
       final session = await _supabaseService.createRoomSession(roomCode);
-
+      if (!mounted) return;
       setState(() {
         _activeSession = session;
         _isCreatingSession = false;
         _currentQuestionIndex = 0;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _activeSession = GameSession(
           id: 'dev-session-id',
@@ -244,6 +254,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     if (_activeSession == null) {
       await _createNewSession();
     }
+    if (!mounted) return;
 
     final engine = GameEngineManager.instance;
     if (_isGamePaused || engine.isGamePaused) {
@@ -252,13 +263,13 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     }
 
     if (engine.isEngineRunning || engine.isPreGameCountdownActive) {
-      _navigateToTvGameMode();
       return;
     }
 
     engine.selectedDifficulty = _selectedDifficulty;
+    engine.gamePlayMode = _selectedGameMode;
     engine.startPreGame(
-      roomCode: _activeSession!.roomCode,
+      roomCode: _activeSession?.roomCode ?? _targetRoomCode,
       timerSeconds: _selectedTimerSeconds,
       genres: _selectedGenreQueue,
       isNewGame: true,
@@ -266,9 +277,6 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     );
 
     _startPreGameTimer();
-
-    // Automatically transition TV to the game mode view
-    _navigateToTvGameMode();
   }
 
   void _startPreGameTimer() {
@@ -289,12 +297,13 @@ class _HostDashboardViewState extends State<HostDashboardView> {
   }
 
   void _cancelPreGameCountdown() {
-    GameEngineManager.instance.pauseGame(
+    GameEngineManager.instance.stopGameToLobby(
       roomCode: _activeSession?.roomCode ?? _targetRoomCode,
     );
     _preGameTimer?.cancel();
     _questionCountdownTimer?.cancel();
     _resumeTimer?.cancel();
+    if (!mounted) return;
     setState(() {
       _isPreGameCountdownActive = false;
       _preGameSecondsRemaining = 30;
@@ -313,6 +322,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
     _preGameTimer?.cancel();
     _questionCountdownTimer?.cancel();
     _resumeTimer?.cancel();
+    if (!mounted) return;
     setState(() {
       _isEngineRunning = false;
       _isPreGameCountdownActive = false;
@@ -324,7 +334,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
 
   void _resumeGameEngine() {
     final engine = GameEngineManager.instance;
-    engine.resumeGame(roomCode: _activeSession?.roomCode ?? 'TRIV');
+    engine.resumeGame(roomCode: _activeSession?.roomCode ?? _targetRoomCode);
 
     _resumeTimer?.cancel();
     _resumeTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) {
@@ -393,13 +403,16 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'SELECT GENRES (UP TO 10)',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 1.1,
+                      const Flexible(
+                        child: Text(
+                          'SELECT GENRES (UP TO 10)',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: 1.1,
+                          ),
                         ),
                       ),
                       Text(
@@ -536,12 +549,12 @@ class _HostDashboardViewState extends State<HostDashboardView> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _exitToTvDisplay();
+        _exitToHub();
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _exitToTvDisplay,
-          const SingleActivator(LogicalKeyboardKey.goBack): _exitToTvDisplay,
+          const SingleActivator(LogicalKeyboardKey.escape): _exitToHub,
+          const SingleActivator(LogicalKeyboardKey.goBack): _exitToHub,
         },
         child: Scaffold(
           backgroundColor: AppTheme.darkBackground,
@@ -879,7 +892,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                 final isSelected = _selectedGameMode == mode;
                 final label = mode == 'Auto' ? 'AUTO (HANDS-FREE)' : 'MANUAL (HOST DRIVEN)';
                 return Expanded(
-                  child: GestureDetector(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
                     onTap: () {
                       setState(() {
                         _selectedGameMode = mode;
@@ -894,7 +908,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                           'room_code': room.toUpperCase(),
                           'game_play_mode': mode,
                           'updated_at': DateTime.now().toIso8601String(),
-                        }, onConflict: 'room_code');
+                        }, onConflict: 'room_code').then((_) {}).catchError((_) {});
                       } catch (_) {}
                     },
                     child: AnimatedContainer(
@@ -1012,11 +1026,17 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                       children: [
                         Icon(Icons.campaign_rounded, color: AppTheme.neonCyan),
                         SizedBox(width: 8),
-                        Text('Ad Signage Enabled', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        Flexible(
+                          child: Text(
+                            'Ad Signage Enabled',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ],
                     ),
                     content: const Text(
-                      'Ad Display Signage Mode is now active. Please upload photos (PNG, JPG) or PDF files for your venue sponsor ads to be rotated on screen.',
+                      'Ad Display Signage Mode is now active on your TV. To upload custom venue photos (PNG, JPG) or PDF flyers, open the Web Host Console at barroomstrivia.com.',
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     actions: [
@@ -1089,7 +1109,8 @@ class _HostDashboardViewState extends State<HostDashboardView> {
               children: _difficulties.map((diff) {
                 final isSelected = _selectedDifficulty == diff;
                 return Expanded(
-                  child: GestureDetector(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
                     onTap: () => setState(() {
                       _selectedDifficulty = diff;
                       GameEngineManager.instance.selectedDifficulty = diff;
@@ -1507,7 +1528,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
             ),
           ),
         ],
-        if (_isEngineRunning && _selectedGameMode == 'Manual') ...[
+        if ((_isEngineRunning || isPaused) && _selectedGameMode == 'Manual') ...[
           const SizedBox(height: 12),
           // 3 DEDICATED HOST CONTROL BUTTONS: START TIMER, PAUSE, REVEAL ANSWER
           Row(
@@ -1905,8 +1926,11 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white12),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         Wrap(
                           spacing: 6,
@@ -2462,7 +2486,10 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      dialogTicker?.cancel();
+      dialogTicker = null;
+    });
   }
 
   void _showResetSessionConfirmationDialog(BuildContext context) {
@@ -2478,13 +2505,16 @@ class _HostDashboardViewState extends State<HostDashboardView> {
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.neonYellow, size: 28),
             SizedBox(width: 10),
-            Text(
-              'RESET GAME SESSION',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                letterSpacing: 0.8,
+            Flexible(
+              child: Text(
+                'RESET GAME SESSION',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  letterSpacing: 0.8,
+                ),
               ),
             ),
           ],
@@ -2500,6 +2530,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   Navigator.of(ctx).pop();
                   final room = _activeSession?.roomCode ?? _targetRoomCode;
                   GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'keep_scores');
+                  _startPreGameTimer();
                 },
                 icon: const Icon(Icons.replay_rounded, color: AppTheme.neonCyan, size: 20),
                 label: const Text(
@@ -2521,6 +2552,7 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   Navigator.of(ctx).pop();
                   final room = _activeSession?.roomCode ?? _targetRoomCode;
                   GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'zero_scores');
+                  _startPreGameTimer();
                 },
                 icon: const Icon(Icons.exposure_zero_rounded, color: AppTheme.neonYellow, size: 20),
                 label: const Text(
@@ -2542,13 +2574,19 @@ class _HostDashboardViewState extends State<HostDashboardView> {
                   Navigator.of(ctx).pop();
                   final room = _activeSession?.roomCode ?? _targetRoomCode;
                   GameEngineManager.instance.resetGame(roomCode: room, resetMode: 'clear_all');
-                  _cancelPreGameCountdown();
-                  setState(() {
-                    _isEngineRunning = false;
-                    _isGamePaused = false;
-                    _isResumeCountdownActive = false;
-                    _isPreGameCountdownActive = false;
-                  });
+                  _preGameTimer?.cancel();
+                  _questionCountdownTimer?.cancel();
+                  _resumeTimer?.cancel();
+                  if (mounted) {
+                    setState(() {
+                      _isEngineRunning = false;
+                      _isGamePaused = false;
+                      _isResumeCountdownActive = false;
+                      _isPreGameCountdownActive = false;
+                      _isReviewPhase = false;
+                      _questionSecondsRemaining = 0;
+                    });
+                  }
                 },
                 icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
                 label: const Text(

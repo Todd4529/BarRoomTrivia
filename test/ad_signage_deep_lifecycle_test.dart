@@ -64,7 +64,7 @@ void main() {
       expect(jsContent.contains('PLAY ON ANY PHONE'), isTrue);
       expect(jsContent.contains('REAL-TIME MULTIPLAYER'), isTrue);
       expect(jsContent.contains('LIVE TV LEADERBOARD'), isTrue);
-      expect(jsContent.contains('30+ TRIVIA GENRES'), isTrue);
+      expect(jsContent.contains('20+ TRIVIA GENRES'), isTrue);
       expect(jsContent.contains('AUTOMATED GAME HOST'), isTrue);
       expect(jsContent.contains('PERFECT FOR TRIVIA PARTIES'), isTrue);
     });

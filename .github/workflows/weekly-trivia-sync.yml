@@ -30,8 +30,8 @@ jobs:
 
       - name: Fetch and Ingest Weekly Trivia
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://tzdikvbvdvgjaiznqkcd.supabase.co' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6ZGlrdmJ2ZHZnamFpem5xa2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAxNTMwNzksImV4cCI6MjA1NTcyOTA3OX0.12k3oY1iO6wYk_hJ8e2V0n1QY-B5-v1XyPZ47_3q1W8' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_ANON_KEY }}
         run: node scripts/fetch_weekly_trivia.cjs
 
       - name: Commit and push updated question pack
@@ -39,4 +39,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add assets/data/weekly_trivia_pack.json public/data/weekly_trivia_pack.json
+          if [ -f dist/data/weekly_trivia_pack.json ]; then git add dist/data/weekly_trivia_pack.json; fi
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto: Update weekly internet trivia pack [skip ci]" && git push)

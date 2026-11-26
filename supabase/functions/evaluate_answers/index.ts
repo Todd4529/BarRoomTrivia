@@ -20,11 +20,30 @@ serve(async (req: Request) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? serviceRoleKey;
 
+    const authHeader = req.headers.get('Authorization') ?? '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: missing bearer token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: authData, error: authError } = await userClient.auth.getUser();
+    if (authError || !authData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: invalid user token' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    const supabaseClient = createClient(supabaseUrl, serviceRoleKey);
     const { session_id, question_id }: EvaluateRequest = await req.json();
 
     if (!session_id || !question_id) {
@@ -34,7 +53,35 @@ serve(async (req: Request) => {
       );
     }
 
-    // 1. Fetch the correct question answer
+    // 1. Verify caller owns the game session and check timer expiration
+    const { data: session, error: sError } = await supabaseClient
+      .from('game_sessions')
+      .select('id, room_code, host_id, timer_ends_at')
+      .eq('id', session_id)
+      .single();
+
+    if (sError || !session) {
+      return new Response(
+        JSON.stringify({ error: 'Game session not found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
+    }
+
+    if (session.host_id && session.host_id !== authData.user.id) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: only the session host can evaluate answers' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
+    }
+
+    if (session.timer_ends_at && new Date(session.timer_ends_at).getTime() > Date.now() + 2000) {
+      return new Response(
+        JSON.stringify({ error: 'Timer has not expired yet' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 409 }
+      );
+    }
+
+    // 2. Fetch the correct question answer
     const { data: question, error: qError } = await supabaseClient
       .from('questions')
       .select('id, correct_option, time_limit_seconds')
@@ -48,33 +95,36 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Fetch all un-evaluated answers for this session & question
+    // 3. Fetch ONLY un-evaluated answers (idempotent against duplicate calls)
     const { data: answers, error: aError } = await supabaseClient
       .from('player_answers')
       .select('id, player_uid, selected_option, submitted_at')
       .eq('session_id', session_id)
-      .eq('question_id', question_id);
+      .eq('question_id', question_id)
+      .is('is_correct', null);
 
     if (aError) {
       throw aError;
     }
 
-    const updates = [];
     const scoreMap: Record<string, number> = {};
+    const updatePromises = [];
 
     for (const ans of (answers || [])) {
       const isCorrect = ans.selected_option.trim().toUpperCase() === question.correct_option.trim().toUpperCase();
-      // Base score 100 points for correct answer + speed bonus up to 50 points
-      const scoreAwarded = isCorrect ? 100 : 0;
+      // Matches live client scoring: flat 10 points per correct answer
+      const scoreAwarded = isCorrect ? 10 : 0;
 
-      updates.push(
+      updatePromises.push(
         supabaseClient
           .from('player_answers')
           .update({
             is_correct: isCorrect,
-            score_awarded: scoreAwarded
+            score_awarded: scoreAwarded,
           })
           .eq('id', ans.id)
+          .is('is_correct', null)
+          .select('id')
       );
 
       if (isCorrect) {
@@ -82,39 +132,47 @@ serve(async (req: Request) => {
       }
     }
 
-    await Promise.all(updates);
-
-    // 3. Update cumulative scores in public.players
-    for (const [playerUid, points] of Object.entries(scoreMap)) {
-      // Increment player score
-      const { data: pData } = await supabaseClient
-        .from('players')
-        .select('cumulative_score')
-        .eq('player_uid', playerUid)
-        .single();
-      
-      const currentScore = pData?.cumulative_score || 0;
-      await supabaseClient
-        .from('players')
-        .update({ cumulative_score: currentScore + points })
-        .eq('player_uid', playerUid);
+    const answerResults = await Promise.all(updatePromises);
+    for (const r of answerResults) {
+      if (r.error) throw r.error;
     }
 
-    // 4. Update session status to 'timer_expired'
-    await supabaseClient
+    // 4. Update cumulative scores scoped strictly to this session's room_code
+    for (const [playerUid, points] of Object.entries(scoreMap)) {
+      const { data: pData, error: pFetchErr } = await supabaseClient
+        .from('players')
+        .select('cumulative_score')
+        .eq('room_code', session.room_code)
+        .eq('player_uid', playerUid)
+        .maybeSingle();
+
+      if (pFetchErr || !pData) continue;
+
+      const currentScore = pData.cumulative_score || 0;
+      const { error: pUpdateErr } = await supabaseClient
+        .from('players')
+        .update({ cumulative_score: currentScore + points, updated_at: new Date().toISOString() })
+        .eq('room_code', session.room_code)
+        .eq('player_uid', playerUid);
+
+      if (pUpdateErr) throw pUpdateErr;
+    }
+
+    // 5. Update session status to 'timer_expired'
+    const { error: statusErr } = await supabaseClient
       .from('game_sessions')
-      .update({ status: 'timer_expired' })
+      .update({ status: 'timer_expired', updated_at: new Date().toISOString() })
       .eq('id', session_id);
+    if (statusErr) throw statusErr;
 
     return new Response(
       JSON.stringify({
         success: true,
         evaluated_count: answers?.length || 0,
-        correct_option: question.correct_option
+        correct_option: question.correct_option,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
-
   } catch (error) {
     return new Response(
       JSON.stringify({ error: (error as Error).message }),

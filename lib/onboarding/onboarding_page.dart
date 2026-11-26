@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../shared/theme/app_theme.dart';
 
 class OnboardingPage extends StatefulWidget {
@@ -23,7 +23,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _mainButtonFocus.requestFocus();
+      if (mounted) _mainButtonFocus.requestFocus();
     });
   }
 
@@ -39,8 +39,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Future<void> _completeOnboarding({String destination = '/hub'}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboardingCompleted', true);
+    String target = destination;
+    if (destination == '/hub') {
+      try {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user == null) {
+          target = '/auth';
+        }
+      } catch (_) {
+        target = '/auth';
+      }
+    }
     if (mounted) {
-      context.go(destination);
+      context.go(target);
     }
   }
 
@@ -55,214 +66,150 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  void _prevPage() {
-    if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isTvScreen = size.width > 800 && size.width > size.height;
 
-    return FocusScope(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent) {
-          final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.arrowRight) {
-            _nextPage();
-            return KeyEventResult.handled;
-          } else if (key == LogicalKeyboardKey.arrowLeft) {
-            _prevPage();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: (index) => setState(() => _currentPage = index),
-                  children: [
-                    _buildFirstPage(isTvScreen),
-                    _buildPage(
-                      title: 'Host Controls',
-                      description: 'Start, pause, and manage genre queues in real time from any phone or browser.',
-                      icon: Icons.dashboard,
-                      color: AppTheme.neonPurple,
-                      isTvScreen: isTvScreen,
-                    ),
-                    _buildPage(
-                      title: 'Join as a Player',
-                      description: 'Players scan the on-screen QR code to play with no app install required.',
-                      icon: Icons.phone_iphone,
-                      color: AppTheme.neonPink,
-                      isTvScreen: isTvScreen,
-                    ),
-                  ],
-                ),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _currentPage = index),
+                children: [
+                  _buildFirstPage(isTvScreen),
+                  _buildPage(
+                    title: 'Host Controls',
+                    description: 'Start, pause, and manage genre queues in real time from any phone or browser.',
+                    icon: Icons.dashboard,
+                    color: AppTheme.neonPurple,
+                    isTvScreen: isTvScreen,
+                  ),
+                  _buildPage(
+                    title: 'Join as a Player',
+                    description: 'Players scan the on-screen QR code to play with no app install required.',
+                    icon: Icons.phone_iphone,
+                    color: AppTheme.neonPink,
+                    isTvScreen: isTvScreen,
+                  ),
+                ],
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  3,
-                  (index) => Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPage == index ? 12 : 8,
-                    height: _currentPage == index ? 12 : 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _currentPage == index ? AppTheme.neonCyan : Colors.white30,
-                    ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                3,
+                (index) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentPage == index ? 12 : 8,
+                  height: _currentPage == index ? 12 : 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentPage == index ? AppTheme.neonCyan : Colors.white30,
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Column(
-                    children: [
-                      // Main Remote-Focusable Advance Button
-                      Focus(
-                        focusNode: _mainButtonFocus,
-                        autofocus: true,
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent) {
-                            final key = event.logicalKey;
-                            if (key == LogicalKeyboardKey.select ||
-                                key == LogicalKeyboardKey.enter ||
-                                key == LogicalKeyboardKey.numpadEnter ||
-                                key == LogicalKeyboardKey.space ||
-                                key == LogicalKeyboardKey.gameButtonA) {
-                              _nextPage();
-                              return KeyEventResult.handled;
-                            }
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: Builder(
-                          builder: (context) {
-                            final isFocused = Focus.of(context).hasFocus;
-                            return SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isFocused ? Colors.white : AppTheme.neonCyan,
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  elevation: isFocused ? 12 : 4,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                    side: BorderSide(
-                                      color: isFocused ? AppTheme.neonYellow : Colors.transparent,
-                                      width: isFocused ? 3 : 0,
-                                    ),
-                                  ),
+            ),
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ListenableBuilder(
+                        listenable: _mainButtonFocus,
+                        builder: (context, _) {
+                          final isFocused = _mainButtonFocus.hasFocus;
+                          return ElevatedButton(
+                            focusNode: _mainButtonFocus,
+                            autofocus: true,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isFocused ? Colors.white : AppTheme.neonCyan,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              elevation: isFocused ? 12 : 4,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                side: BorderSide(
+                                  color: isFocused ? AppTheme.neonYellow : Colors.transparent,
+                                  width: isFocused ? 3 : 0,
                                 ),
-                                onPressed: _nextPage,
-                                child: Text(
-                                  _currentPage == 2 ? 'Get Started' : 'Next (or Press Enter)',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            onPressed: _nextPage,
+                            child: Text(
+                              _currentPage == 2
+                                  ? 'Get Started'
+                                  : (isTvScreen ? 'Next (or Press Enter)' : 'Next'),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: [
+                        ListenableBuilder(
+                          listenable: _skipButtonFocus,
+                          builder: (context, _) {
+                            final isFocused = _skipButtonFocus.hasFocus;
+                            return TextButton(
+                              focusNode: _skipButtonFocus,
+                              style: TextButton.styleFrom(
+                                foregroundColor: isFocused ? AppTheme.neonYellow : Colors.white70,
+                              ),
+                              onPressed: () => _completeOnboarding(destination: '/hub'),
+                              child: Text(
+                                'Skip Intro',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
+                                  decoration: isFocused ? TextDecoration.underline : TextDecoration.none,
                                 ),
                               ),
                             );
                           },
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Focus(
-                            focusNode: _skipButtonFocus,
-                            onKeyEvent: (node, event) {
-                              if (event is KeyDownEvent) {
-                                final key = event.logicalKey;
-                                if (key == LogicalKeyboardKey.select ||
-                                    key == LogicalKeyboardKey.enter ||
-                                    key == LogicalKeyboardKey.space) {
-                                  _completeOnboarding(destination: '/hub');
-                                  return KeyEventResult.handled;
-                                }
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final isFocused = Focus.of(context).hasFocus;
-                                return TextButton(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: isFocused ? AppTheme.neonYellow : Colors.white70,
-                                  ),
-                                  onPressed: () => _completeOnboarding(destination: '/hub'),
-                                  child: Text(
-                                    'Skip Intro',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
-                                      decoration: isFocused ? TextDecoration.underline : TextDecoration.none,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          Focus(
-                            focusNode: _tvModeFocus,
-                            onKeyEvent: (node, event) {
-                              if (event is KeyDownEvent) {
-                                final key = event.logicalKey;
-                                if (key == LogicalKeyboardKey.select ||
-                                    key == LogicalKeyboardKey.enter ||
-                                    key == LogicalKeyboardKey.space) {
-                                  _completeOnboarding(destination: '/tv?room=TRIV');
-                                  return KeyEventResult.handled;
-                                }
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                            child: Builder(
-                              builder: (context) {
-                                final isFocused = Focus.of(context).hasFocus;
-                                return TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: isFocused ? AppTheme.neonCyan : Colors.white60,
-                                  ),
-                                  onPressed: () => _completeOnboarding(destination: '/tv?room=TRIV'),
-                                  icon: const Icon(Icons.tv, size: 18),
-                                  label: Text(
-                                    'Quick TV Display',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ListenableBuilder(
+                          listenable: _tvModeFocus,
+                          builder: (context, _) {
+                            final isFocused = _tvModeFocus.hasFocus;
+                            return TextButton.icon(
+                              focusNode: _tvModeFocus,
+                              style: TextButton.styleFrom(
+                                foregroundColor: isFocused ? AppTheme.neonCyan : Colors.white60,
+                              ),
+                              onPressed: () => _completeOnboarding(destination: '/tv?room=TRIV'),
+                              icon: const Icon(Icons.tv, size: 18),
+                              label: Text(
+                                'Quick TV Display',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: isFocused ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+          ],
         ),
       ),
     );

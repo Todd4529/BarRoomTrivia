@@ -87,8 +87,17 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
 
+  bool get _isSignageDisplayActive =>
+      (_isGamePaused && (_isAdSignageModeActive || _isPauseTimeoutAdActive)) ||
+      _isInterRoundPhase ||
+      ((_isAdSignageModeActive || _customAdSlides.isNotEmpty) &&
+          !_isGameActive &&
+          !_isPreGameCountdown &&
+          !_isResumeCountdownActive &&
+          !_isInterQuestionPhase);
+
   int get _totalAdSlides {
-    if (_customAdSlides.isEmpty) return 3;
+    if (_customAdSlides.isEmpty) return _isSignageDisplayActive ? 3 : 4;
     final maxPairs = max(3, _customAdSlides.length);
     return maxPairs * 2;
   }
@@ -319,7 +328,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               _isResumeCountdownActive = false;
             });
             _startPreGameTimer();
-          } else if (status == 'question_active' && !_isGameActive && !_isPreGameCountdown) {
+          } else if ((status == 'question_active' || status == 'active_reading') && !_isGameActive && !_isPreGameCountdown) {
+            final isReadingOnly = status == 'active_reading';
             // Validate that this question is not already expired
             final rawEnds = res['timer_ends_at'];
             int? timerEndsAt;
@@ -330,46 +340,51 @@ class _TvDisplayViewState extends State<TvDisplayView> {
               timerEndsAt = dt?.millisecondsSinceEpoch ?? int.tryParse(rawEnds);
             }
             final now = DateTime.now().millisecondsSinceEpoch;
-            if (timerEndsAt != null && timerEndsAt <= now) {
+            if (!isReadingOnly && timerEndsAt != null && timerEndsAt <= now) {
               return;
             }
             final qData = res['question_data'] as Map<String, dynamic>?;
             if (qData != null) {
               final q = Question.fromJson(qData);
-              final dur = res['duration_seconds'] as int? ?? 20;
-              final rawQ = res['current_question_index'] as int? ?? 1;
+              final dur = (res['duration_seconds'] as num?)?.toInt() ?? 20;
+              final rawQ = (res['current_question_index'] as num?)?.toInt() ?? 1;
               const totalQ = 10;
               final qIdx = ((rawQ - 1) % totalQ) + 1;
-              final sessionRound = (res['current_round'] as int?) ??
-                  (res['round_number'] as int?) ??
+              final sessionRound = (res['current_round'] as num?)?.toInt() ??
+                  (res['round_number'] as num?)?.toInt() ??
                   ((rawQ - 1) ~/ totalQ) + 1;
               final roundNum = sessionRound;
               final cat = qData['category']?.toString() ?? res['category']?.toString();
+              final mode = res['game_play_mode']?.toString() ?? _gamePlayMode;
               final nowMs = DateTime.now().millisecondsSinceEpoch;
-              final targetEndsAt = (timerEndsAt != null && timerEndsAt > nowMs)
+              final targetEndsAt = (!isReadingOnly && timerEndsAt != null && timerEndsAt > nowMs)
                   ? timerEndsAt
                   : (nowMs + dur * 1000);
               final remainingMs = targetEndsAt - nowMs;
-              final durationSec = max(0, (remainingMs / 1000).ceil().clamp(0, 180));
-              _targetTimerEndsAtMs = targetEndsAt;
+              final durationSec = isReadingOnly ? dur : max(0, (remainingMs / 1000).ceil().clamp(0, 180));
+              _targetTimerEndsAtMs = isReadingOnly ? null : targetEndsAt;
 
               _interQuestionTimer?.cancel();
               setState(() {
                 _currentQuestion = _sanitizeQuestionDistractors(q);
                 if (cat != null && cat.isNotEmpty) _activeGenre = cat;
+                _gamePlayMode = mode;
                 _totalDuration = dur;
                 _remainingSeconds = durationSec;
                 _questionIndex = qIdx;
                 _currentRound = roundNum;
                 _totalQuestionsInRound = totalQ;
                 _isGameActive = true;
+                _isQuestionTimerRunning = !isReadingOnly;
                 _isPreGameCountdown = false;
                 _isTimerExpired = false;
                 _isInterQuestionPhase = false;
                 _isGamePaused = false;
                 _isResumeCountdownActive = false;
               });
-              _startTimer();
+              if (!isReadingOnly) {
+                _startTimer();
+              }
             }
           } else if ((status == 'round_summary' || status == 'inter_round') && !_isInterRoundPhase) {
             final rawEnds = res['timer_ends_at'] ?? res['starts_at'];
@@ -383,7 +398,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             final now = DateTime.now().millisecondsSinceEpoch;
             final remSec = endsAt != null ? max(1, ((endsAt - now) / 1000).ceil()) : 120;
             final targetEpoch = endsAt ?? (now + remSec * 1000);
-            final nextR = (res['current_round'] as int?) ?? (res['round_number'] as int?) ?? (_currentRound + 1);
+            final nextR = (res['current_round'] as num?)?.toInt() ?? (res['round_number'] as num?)?.toInt() ?? (_currentRound + 1);
 
             setState(() {
               _isGameActive = false;
@@ -502,7 +517,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         final rFromPayload = (payload['round_number'] as num?)?.toInt() ??
             (payload['roundNumber'] as num?)?.toInt();
         final roundNum = (rFromPayload != null && rFromPayload > 0)
-            ? max(_currentRound, rFromPayload)
+            ? rFromPayload
             : _currentRound;
         final qInRound = ((rawQIdx - 1) % totalQ) + 1;
         final cat = payload['category']?.toString() ?? payload['genre']?.toString();
@@ -737,6 +752,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         _preGameTimer?.cancel();
         _resumeTimer?.cancel();
         _interQuestionTimer?.cancel();
+        _roundWinnersOverlayTimer?.cancel();
+        _interRoundCountdownTimer?.cancel();
+        _pauseAdTimeoutTimer?.cancel();
+
+        if (mode == 'clear_all') {
+          SupabaseService.clearLocalPlayers(_displayRoomCode);
+        }
 
         if (mounted) {
           setState(() {
@@ -744,8 +766,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             _isPreGameCountdown = false;
             _isTimerExpired = false;
             _isGamePaused = false;
+            _isPauseTimeoutAdActive = false;
             _isResumeCountdownActive = false;
             _isInterQuestionPhase = false;
+            _isInterRoundPhase = false;
+            _showRoundWinnersOverlay = false;
+            _top3Winners = [];
+            _currentRound = 1;
+            _questionIndex = 1;
             _currentQuestion = null;
             _previousWrongOptions.clear();
             if (mode == 'clear_all') {
@@ -897,7 +925,16 @@ class _TvDisplayViewState extends State<TvDisplayView> {
         }
 
         final pList = payload['players'] ?? payload['leaderboard'];
-        if (pList is List && pList.isNotEmpty) {
+        if (pList is List) {
+          if (pList.isEmpty) {
+            SupabaseService.clearLocalPlayers(_displayRoomCode);
+            if (mounted) {
+              setState(() {
+                _leaderboard = [];
+              });
+            }
+            return;
+          }
           final incoming = <Player>[];
           for (var item in pList) {
             if (item is Map) {
@@ -911,7 +948,6 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             }
           }
           if (incoming.isNotEmpty) {
-            SupabaseService.mergeLocalPlayers('TRIV', incoming);
             final merged = SupabaseService.mergeLocalPlayers(_displayRoomCode, incoming);
             if (mounted) {
               setState(() {
@@ -1208,8 +1244,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
   }
 
   void _onTimerEnded([Map<String, dynamic>? payload]) async {
-    // If receiving a remote timer_expired, guard against stale packets from previous questions
+    // If receiving a remote timer_expired in Auto mode, guard against stale packets from previous questions
+    final incomingMode = (payload?['game_play_mode'] as String?) ?? _gamePlayMode;
     if (payload != null &&
+        incomingMode != 'Manual' &&
         _questionStartedAt != null &&
         DateTime.now().difference(_questionStartedAt!).inMilliseconds < 3500) {
       debugPrint('[TV] Ignoring stale timer_expired received within 3.5s of question start');
@@ -1344,45 +1382,32 @@ class _TvDisplayViewState extends State<TvDisplayView> {
       ..sort((a, b) => b.score.compareTo(a.score));
 
     if (sorted.isNotEmpty) {
-      final winner = sorted.first;
-      // Strictly only award round bonus if winner scored points (> 0) and GameEngine hasn't already awarded it
-      if (winner.score > 0 && !GameEngineManager.instance.isEngineRunning) {
-        final newScore = winner.score + 20;
-        SupabaseService.updatePlayerScoreDirectly(
-          roomCode: _displayRoomCode,
-          nickname: winner.nickname,
-          score: newScore,
-        );
-        _supabaseService.updateLocalPlayerScore(
-          roomCode: _displayRoomCode,
-          nickname: winner.nickname,
-          score: newScore,
-          pointsToAdd: 20,
-        );
-        final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
-        if (wIdx >= 0) {
-          sorted[wIdx] = Player(
-            id: winner.id,
-            playerUid: winner.playerUid,
-            roomCode: winner.roomCode,
+      final topScore = sorted.first.score;
+      // Strictly only award round bonus if top score > 0 and GameEngine hasn't already awarded it; award all tied leaders
+      if (topScore > 0 && !GameEngineManager.instance.isEngineRunning) {
+        final tiedWinners = sorted.where((p) => p.score == topScore).toList();
+        for (final winner in tiedWinners) {
+          final newScore = winner.score + 20;
+          _supabaseService.updateLocalPlayerScore(
+            roomCode: _displayRoomCode,
             nickname: winner.nickname,
-            cumulativeScore: newScore,
-            isConnected: winner.isConnected,
+            score: newScore,
+            pointsToAdd: 20,
           );
+          final wIdx = sorted.indexWhere((p) => p.nickname.toLowerCase() == winner.nickname.toLowerCase());
+          if (wIdx >= 0) {
+            sorted[wIdx] = Player(
+              id: winner.id,
+              playerUid: winner.playerUid,
+              roomCode: winner.roomCode,
+              nickname: winner.nickname,
+              cumulativeScore: newScore,
+              isConnected: winner.isConnected,
+            );
+          }
         }
         sorted.sort((a, b) => b.score.compareTo(a.score));
         _leaderboard = sorted;
-
-        _realtimeService.broadcastPlayerScoreUpdated(
-          roomCode: _displayRoomCode,
-          nickname: winner.nickname,
-          score: newScore,
-          pointsEarned: 20,
-        );
-        _realtimeService.broadcastLeaderboardUpdated(
-          roomCode: _displayRoomCode,
-          players: SupabaseService.getLocalPlayersJson(_displayRoomCode),
-        );
       }
     }
 
@@ -1591,9 +1616,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
     _pauseAdTimeoutTimer?.cancel();
     _timer?.cancel();
     _preGameTimer?.cancel();
+    _resumeTimer?.cancel();
+    _interQuestionTimer?.cancel();
     _adSlideTimer?.cancel();
     _roundWinnersOverlayTimer?.cancel();
     _interRoundCountdownTimer?.cancel();
+    _adImageBytesCache.clear();
     _realtimeService.leaveChannel();
     super.dispose();
   }
@@ -1645,6 +1673,8 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             const SingleActivator(LogicalKeyboardKey.enter): () => handleFocusedActivate(dialogContext),
             const SingleActivator(LogicalKeyboardKey.numpadEnter): () => handleFocusedActivate(dialogContext),
             const SingleActivator(LogicalKeyboardKey.gameButtonA): () => handleFocusedActivate(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.escape): () => handleCancelExit(dialogContext),
+            const SingleActivator(LogicalKeyboardKey.goBack): () => handleCancelExit(dialogContext),
           },
           child: Dialog(
           backgroundColor: Colors.transparent,
@@ -1881,7 +1911,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             .timeout(const Duration(milliseconds: 900));
         if (res != null) {
           final st = res['status'] as String?;
-          if (st != null && st != 'idle' && st != 'ended' && st != 'cancelled') {
+          if (st != null && st != 'idle' && st != 'ended' && st != 'cancelled' && st != 'lobby' && st != 'waiting_for_host') {
             isGameRunning = true;
           }
         }
@@ -2082,6 +2112,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 elevation: 6,
+              ).copyWith(
+                side: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused)
+                    ? const BorderSide(color: Colors.white, width: 3)
+                    : BorderSide.none),
               ),
               icon: const Icon(Icons.arrow_back_rounded, size: 20, color: Colors.black),
               label: const Text(
@@ -2198,6 +2232,10 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 borderRadius: BorderRadius.circular(16),
               ),
               elevation: 6,
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused)
+                  ? const BorderSide(color: Colors.white, width: 3)
+                  : BorderSide.none),
             ),
             icon: const Icon(Icons.check_circle_outline, size: 20, color: Colors.black),
             label: const Text(
@@ -2217,13 +2255,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isSignageActive = (_isGamePaused && (_isAdSignageModeActive || _isPauseTimeoutAdActive)) ||
-        _isInterRoundPhase ||
-        ((_isAdSignageModeActive || _customAdSlides.isNotEmpty) &&
-            !_isGameActive &&
-            !_isPreGameCountdown &&
-            !_isResumeCountdownActive &&
-            !_isInterQuestionPhase);
+    final bool isSignageActive = _isSignageDisplayActive;
 
     return PopScope(
       canPop: false,
@@ -2262,14 +2294,20 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Opacity(
-                            opacity: (_currentQuestion != null && !_isInterQuestionPhase) ? 0.0 : 1.0,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
-                              tooltip: 'Exit Application',
-                              onPressed: _showExitApplicationDialog,
+                          IgnorePointer(
+                            ignoring: _currentQuestion != null && !_isInterQuestionPhase,
+                            child: ExcludeFocus(
+                              excluding: _currentQuestion != null && !_isInterQuestionPhase,
+                              child: Opacity(
+                                opacity: (_currentQuestion != null && !_isInterQuestionPhase) ? 0.0 : 1.0,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 24),
+                                  tooltip: 'Exit Application',
+                                  onPressed: _showExitApplicationDialog,
+                                ),
+                              ),
                             ),
                           ),
                           Row(
@@ -2318,12 +2356,13 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             if (_showRoundWinnersOverlay && _top3Winners.isNotEmpty)
               Positioned.fill(
                 child: Container(
-                  color: Colors.black.withOpacity(0.85),
+                  color: Colors.black.withOpacity(0.88),
                   alignment: Alignment.center,
-                  padding: const EdgeInsets.all(32),
-                  child: Container(
+                  padding: const EdgeInsets.all(24),
+                  child: SingleChildScrollView(
+                    child: Container(
                     constraints: const BoxConstraints(maxWidth: 580),
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
                       color: AppTheme.cardSurfaceElevated,
                       borderRadius: BorderRadius.circular(28),
@@ -2393,7 +2432,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        ...List.generate(_top3Winners.length, (idx) {
+                        ...List.generate(_top3Winners.length.clamp(0, 3), (idx) {
                           final w = _top3Winners[idx];
                           final badges = ['🥇 1ST PLACE (+20 BONUS)', '🥈 2ND PLACE', '🥉 3RD PLACE'];
                           final colors = [AppTheme.neonYellow, Colors.grey.shade300, const Color(0xFFCD7F32)];
@@ -2409,27 +2448,36 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      badges[idx],
-                                      style: TextStyle(
-                                        color: colors[idx],
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 15,
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          badges[idx],
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: colors[idx],
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 14,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Text(
-                                      (w['nickname'] as String? ?? '').toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 18,
+                                      const SizedBox(width: 12),
+                                      Flexible(
+                                        child: Text(
+                                          (w['nickname'] as String? ?? '').toUpperCase(),
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 18,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 10),
                                 Text(
                                   '${w['score']} pts',
                                   style: TextStyle(
@@ -2444,6 +2492,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                         }),
                       ],
                     ),
+                  ),
                   ),
                 ),
               ),
@@ -2644,6 +2693,49 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 ),
               ),
             ),
+
+            // Visible Status Pill during Pause or Inter-Round Intermission over Ad Signage
+            if (_isGamePaused || _isInterRoundPhase)
+              Positioned(
+                top: 20,
+                right: 28,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xF00A0F1E),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppTheme.neonYellow, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.neonYellow.withValues(alpha: 0.45),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isGamePaused ? Icons.pause_circle_filled_rounded : Icons.timer_rounded,
+                        color: AppTheme.neonYellow,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isGamePaused
+                            ? 'GAME PAUSED BY HOST'
+                            : 'NEXT ROUND IN ${_formatIntermissionMinutes(_interRoundSecondsRemaining)}',
+                        style: const TextStyle(
+                          color: AppTheme.neonYellow,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Permanent Floating Join QR Code in Lower Right Corner of Every Ad
             Positioned(
@@ -2952,7 +3044,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                     '⚡',
                     'BUZZ IN & WIN',
                     AppTheme.neonYellow,
-                    'REAL-TIME MULTIPLAYER! 4 color-coded answers appear on your phone. Tap fast before the timer hits zero for speed bonus points!',
+                    'REAL-TIME MULTIPLAYER! 4 color-coded answers appear on your phone. Lock in the right answer before the timer hits zero to earn +10 points!',
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -3564,8 +3656,14 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                       _displayRoomCode,
                       style: const TextStyle(color: AppTheme.neonYellow, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
                     ),
-                    const SizedBox(width: 14),
-                    const Text('•  Scan the QR code in the corner with any phone camera to join!', style: TextStyle(color: AppTheme.neonCyan, fontSize: 11)),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        '•  Scan the QR code in the corner with any phone camera to join!',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: AppTheme.neonCyan, fontSize: 11),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -3861,7 +3959,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Earn points for fast and accurate answers on every question!',
+              'Earn +10 points for every correct answer plus +20 bonus points for round winners!',
               style: TextStyle(color: AppTheme.neonCyan, fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -3973,7 +4071,7 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                           const Icon(Icons.timer, color: AppTheme.neonCyan, size: 36),
                           const SizedBox(width: 14),
                           Text(
-                            '0:${_preGameSeconds.toString().padLeft(2, '0')}',
+                            '${_preGameSeconds ~/ 60}:${(_preGameSeconds % 60).toString().padLeft(2, '0')}',
                             style: const TextStyle(
                               fontSize: 44,
                               fontWeight: FontWeight.w900,
@@ -4063,19 +4161,22 @@ class _TvDisplayViewState extends State<TvDisplayView> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonPurple.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppTheme.neonPurple),
-                      ),
-                      child: Text(
-                        _currentQuestion?.category.toUpperCase() ?? 'GENERAL TRIVIA',
-                        style: const TextStyle(
-                          color: AppTheme.neonPurple,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonPurple.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.neonPurple),
+                        ),
+                        child: Text(
+                          _currentQuestion?.category.toUpperCase() ?? 'GENERAL TRIVIA',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.neonPurple,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     ),
@@ -4275,9 +4376,9 @@ class _TvDisplayViewState extends State<TvDisplayView> {
             ),
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: Colors.white,
+                color: (!showCorrect && color.computeLuminance() > 0.5) ? Colors.black87 : Colors.white,
                 fontSize: 16,
               ),
             ),
@@ -4286,10 +4387,12 @@ class _TvDisplayViewState extends State<TvDisplayView> {
           Expanded(
             child: Text(
               text,
+              maxLines: 3,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: showCorrect ? FontWeight.bold : FontWeight.w600,
                 color: Colors.white,
+                height: 1.2,
               ),
               overflow: TextOverflow.ellipsis,
             ),

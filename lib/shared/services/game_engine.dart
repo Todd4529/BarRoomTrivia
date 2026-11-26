@@ -89,25 +89,19 @@ class GameEngineManager {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': roomCode.toUpperCase().trim(),
         'status': 'pre_game_countdown',
-        'starts_at': startsAtEpochMs,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String(),
         'current_question_index': 0,
         'current_round': currentRound,
         'round_number': currentRound,
         'genre': selectedGenres.isNotEmpty ? selectedGenres.first : 'General Trivia',
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_code');
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
 
     _preGameTimer?.cancel();
     _preGameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (preGameSecondsRemaining > 1) {
         preGameSecondsRemaining--;
-        _realtimeService.broadcastGameStarting(
-          roomCode: roomCode,
-          startsAtEpochMs: DateTime.now().millisecondsSinceEpoch + (preGameSecondsRemaining * 1000),
-          roundNumber: currentRound,
-          genre: selectedGenres.isNotEmpty ? selectedGenres.first : null,
-        );
       } else {
         timer.cancel();
         isPreGameCountdownActive = false;
@@ -157,7 +151,7 @@ class GameEngineManager {
             'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
           },
           'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'room_code');
+        }, onConflict: 'room_code').then((_) {}).catchError((_) {});
       } catch (_) {}
 
       _realtimeService.broadcastQuestion(
@@ -191,7 +185,7 @@ class GameEngineManager {
         'current_round': currentRound,
         'round_number': currentRound,
         'duration_seconds': selectedTimerSeconds,
-        'timer_ends_at': timerEndsAtEpochMs,
+        'timer_ends_at': DateTime.fromMillisecondsSinceEpoch(timerEndsAtEpochMs).toIso8601String(),
         'game_play_mode': 'Auto',
         'category': question.category,
         'genre': question.category,
@@ -201,7 +195,7 @@ class GameEngineManager {
           'question_number_in_round': ((currentQuestionIndex) % 10) + 1,
         },
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_code');
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
 
     _realtimeService.broadcastQuestion(
@@ -324,9 +318,9 @@ class GameEngineManager {
         'status': 'round_summary',
         'current_round': nextRound,
         'round_number': currentRound,
-        'starts_at': nextRoundStartsAtEpochMs,
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(nextRoundStartsAtEpochMs).toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_code');
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
 
     _realtimeService.broadcastRoundCompleted(
@@ -400,10 +394,16 @@ class GameEngineManager {
     _questionTimer?.cancel();
     _resumeTimer?.cancel();
 
+    final wasTimerRunning = isQuestionTimerRunning && activeQuestionTimerEndsAtEpochMs > 0;
     if (isEngineRunning && activeQuestion != null) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final remaining = ((activeQuestionTimerEndsAtEpochMs - now) / 1000).ceil();
-      remainingQuestionSeconds = remaining > 0 ? remaining : selectedTimerSeconds;
+      if (wasTimerRunning) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final remaining = ((activeQuestionTimerEndsAtEpochMs - now) / 1000).ceil();
+        remainingQuestionSeconds = remaining > 0 ? remaining : (gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds);
+      } else {
+        remainingQuestionSeconds = gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds;
+        activeQuestionTimerEndsAtEpochMs = 0;
+      }
     }
 
     isPreGameCountdownActive = false;
@@ -418,7 +418,7 @@ class GameEngineManager {
         'remaining_question_seconds': remainingQuestionSeconds,
         'current_round': currentRound,
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_code');
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
 
     _realtimeService.broadcastGamePaused(
@@ -435,21 +435,25 @@ class GameEngineManager {
     isResumeCountdownActive = true;
     resumeSecondsRemaining = 10;
 
+    final defaultDur = gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds;
+    final safeRem = remainingQuestionSeconds > 0 ? remainingQuestionSeconds : defaultDur;
     final startsAtEpochMs = DateTime.now().millisecondsSinceEpoch + 10 * 1000;
 
     try {
       SupabaseConfig.client.from('game_sessions').upsert({
         'room_code': roomCode.toUpperCase().trim(),
-        'status': 'question_active',
+        'status': 'resuming',
+        'starts_at': DateTime.fromMillisecondsSinceEpoch(startsAtEpochMs).toIso8601String(),
+        'remaining_question_seconds': safeRem,
         'current_round': currentRound,
         'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'room_code');
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
     } catch (_) {}
 
     _realtimeService.broadcastGameResuming(
       roomCode: roomCode,
       startsAtEpochMs: startsAtEpochMs,
-      remainingQuestionSeconds: remainingQuestionSeconds > 0 ? remainingQuestionSeconds : selectedTimerSeconds,
+      remainingQuestionSeconds: safeRem,
       roundNumber: currentRound,
       questionIndex: currentQuestionIndex,
     );
@@ -477,11 +481,33 @@ class GameEngineManager {
     if (!isEngineRunning || activeQuestion == null) return;
 
     final question = activeQuestion!;
-    final durationSec = remainingQuestionSeconds > 0 ? remainingQuestionSeconds : selectedTimerSeconds;
+    final cumulativeIndex = ((currentRound - 1) * 10) + (currentQuestionIndex > 0 ? currentQuestionIndex : 1);
+
+    // If Manual mode was paused while still in Reading phase (before START TIMER), keep timer idle
+    if (gamePlayMode == 'Manual' && activeQuestionTimerEndsAtEpochMs <= 0) {
+      isQuestionTimerRunning = false;
+      remainingQuestionSeconds = 20;
+      _realtimeService.broadcastQuestion(
+        roomCode: roomCode,
+        questionIndex: cumulativeIndex,
+        question: question,
+        durationSeconds: 20,
+        timerEndsAtEpochMs: 0,
+        roundNumber: currentRound,
+        totalQuestions: 10,
+        gamePlayMode: 'Manual',
+        questionPhase: 'reading',
+        timerState: 'idle',
+      );
+      return;
+    }
+
+    final defaultDur = gamePlayMode == 'Manual' ? 20 : selectedTimerSeconds;
+    final durationSec = remainingQuestionSeconds > 0 ? remainingQuestionSeconds : defaultDur;
     final timerEndsAtEpochMs = DateTime.now().millisecondsSinceEpoch + (durationSec * 1000);
     activeQuestionTimerEndsAtEpochMs = timerEndsAtEpochMs;
+    isQuestionTimerRunning = true;
 
-    final cumulativeIndex = ((currentRound - 1) * 10) + (currentQuestionIndex > 0 ? currentQuestionIndex : 1);
     _realtimeService.broadcastQuestion(
       roomCode: roomCode,
       questionIndex: cumulativeIndex,
@@ -490,12 +516,44 @@ class GameEngineManager {
       timerEndsAtEpochMs: timerEndsAtEpochMs,
       roundNumber: currentRound,
       totalQuestions: 10,
+      gamePlayMode: gamePlayMode,
+      questionPhase: 'countdown',
+      timerState: 'running',
     );
 
     _questionTimer?.cancel();
     _questionTimer = Timer(Duration(seconds: durationSec), () {
       _handleQuestionTimerExpiration(roomCode: roomCode, question: question);
     });
+  }
+
+  void stopGameToLobby({String roomCode = 'TRIV'}) {
+    _preGameTimer?.cancel();
+    _questionTimer?.cancel();
+    _resumeTimer?.cancel();
+
+    isEngineRunning = false;
+    isPreGameCountdownActive = false;
+    isGamePaused = false;
+    isResumeCountdownActive = false;
+    isReviewPhase = false;
+    isQuestionTimerRunning = false;
+    isRoundCompletedWaitingForNext = false;
+    activeQuestionTimerEndsAtEpochMs = 0;
+    activeQuestion = null;
+
+    try {
+      SupabaseConfig.client.from('game_sessions').upsert({
+        'room_code': roomCode.toUpperCase().trim(),
+        'status': 'lobby',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'room_code').then((_) {}).catchError((_) {});
+    } catch (_) {}
+
+    _realtimeService.broadcastGameReset(
+      roomCode: roomCode,
+      resetMode: 'keep_scores',
+    );
   }
 
   void resetGame({String roomCode = 'TRIV', String resetMode = 'keep_scores'}) {

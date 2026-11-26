@@ -352,10 +352,23 @@ class MainActivity : FlutterActivity() {
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
 
-        audioTrack.write(buffer, 0, buffer.size)
-        audioTrack.play()
-        val durationMs = (buffer.size * 1000L) / sampleRate
-        Thread.sleep(durationMs + 20)
-        audioTrack.release()
+        try {
+            audioTrack.write(buffer, 0, buffer.size)
+            audioTrack.play()
+            val durationMs = (buffer.size * 1000L) / sampleRate
+            Thread.sleep(durationMs + 20)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            try {
+                audioTrack.stop()
+            } catch (_: Exception) {}
+            audioTrack.release()
+        }
+    }
+
+    override fun onDestroy() {
+        audioExecutor.shutdownNow()
+        super.onDestroy()
     }
 }

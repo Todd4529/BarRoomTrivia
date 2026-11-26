@@ -78,15 +78,14 @@ class WeeklyTriviaSyncService {
         }
       }
 
-      // 5. Ingest fresh questions and update cache
+      // 5. Ingest fresh questions and update cache (only advance 7-day timestamp on actual success)
       if (freshQuestions.isNotEmpty) {
         TriviaRepository.injectQuestions(freshQuestions);
         await _saveDynamicQuestionsToCache(prefs, freshQuestions);
         await prefs.setString(_lastSyncKey, DateTime.now().toIso8601String());
         debugPrint('[WeeklyTriviaSyncService] Automatic sync complete: ${freshQuestions.length} questions added to game bank.');
       } else {
-        // Even if network was unavailable, update timestamp so we don't spam network on every resume
-        await prefs.setString(_lastSyncKey, DateTime.now().toIso8601String());
+        debugPrint('[WeeklyTriviaSyncService] Sync skipped (offline/unavailable); will retry on next launch.');
       }
     } catch (e) {
       debugPrint('[WeeklyTriviaSyncService] Error during silent background sync: $e');

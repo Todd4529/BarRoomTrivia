@@ -102,6 +102,12 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    if (_deviceToken.isNotEmpty) {
+      MqttService().unsubscribeTopic('device_auth_$_deviceToken');
+    }
+    if (_userCode.isNotEmpty) {
+      MqttService().unsubscribeFromRoom(_userCode);
+    }
     _authChannel?.unsubscribe();
     _roomChannel?.unsubscribe();
     _userCodeChannel?.unsubscribe();
@@ -133,49 +139,63 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     _startCountdown();
   }
 
+  bool _matchesThisTvPairing(Map<String, dynamic> data) {
+    final token = data['device_token']?.toString().trim();
+    final rawCode = (data['user_code'] ?? data['room_code'])?.toString().trim().toUpperCase();
+    final normUserCode = _userCode.toUpperCase();
+    final strippedUserCode = normUserCode.replaceAll('-', '');
+
+    if (token != null && token.isNotEmpty && token == _deviceToken) {
+      return true;
+    }
+    if (rawCode != null && rawCode.isNotEmpty) {
+      if (rawCode == normUserCode || rawCode.replaceAll('-', '') == strippedUserCode) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void _subscribeToPairingChannel() {
-    _authChannel?.unsubscribe();
-    _roomChannel?.unsubscribe();
-    _userCodeChannel?.unsubscribe();
-    _globalChannel?.unsubscribe();
+    if (_authChannel != null) {
+      try { SupabaseConfig.client.removeChannel(_authChannel!); } catch (_) {}
+      _authChannel = null;
+    }
+    if (_roomChannel != null) {
+      try { SupabaseConfig.client.removeChannel(_roomChannel!); } catch (_) {}
+      _roomChannel = null;
+    }
+    if (_userCodeChannel != null) {
+      try { SupabaseConfig.client.removeChannel(_userCodeChannel!); } catch (_) {}
+      _userCodeChannel = null;
+    }
+    if (_globalChannel != null) {
+      try { SupabaseConfig.client.removeChannel(_globalChannel!); } catch (_) {}
+      _globalChannel = null;
+    }
     _pollingTimer?.cancel();
     _mqttPairingSubscription?.cancel();
     _localBusSubscription?.cancel();
 
+    void handleIncomingPairing(Map<String, dynamic> data) {
+      if (_isAuthorized || !mounted) return;
+      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
+      if (ev == 'device_authorized' ||
+          ev == 'pre_game_countdown' ||
+          ev == 'question_start' ||
+          ev == 'start_game') {
+        if (_matchesThisTvPairing(data)) {
+          _countdownTimer?.cancel();
+          _handleDeviceAuthorized(data);
+        }
+      }
+    }
+
     // 1. Cross-tab & local bus event listener (instant local web synchronization)
-    BroadcastSync.listen((data) {
-      if (_isAuthorized || !mounted) return;
-      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
-      final token = data['device_token']?.toString();
-      final code = (data['user_code'] ?? data['room_code'])?.toString();
-      if (ev == 'device_authorized' ||
-          ev == 'pre_game_countdown' ||
-          ev == 'question_start' ||
-          ev == 'start_game') {
-        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
-          _countdownTimer?.cancel();
-          _handleDeviceAuthorized(data);
-        }
-      }
-    });
+    BroadcastSync.listen(handleIncomingPairing);
+    _localBusSubscription = RealtimeService.localEventStream.listen(handleIncomingPairing);
 
-    _localBusSubscription = RealtimeService.localEventStream.listen((data) {
-      if (_isAuthorized || !mounted) return;
-      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
-      final token = data['device_token']?.toString();
-      final code = (data['user_code'] ?? data['room_code'])?.toString();
-      if (ev == 'device_authorized' ||
-          ev == 'pre_game_countdown' ||
-          ev == 'question_start' ||
-          ev == 'start_game') {
-        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
-          _countdownTimer?.cancel();
-          _handleDeviceAuthorized(data);
-        }
-      }
-    });
-
-    // 2. MQTT real-time subscription (works globally across devices)
+    // 2. MQTT real-time subscription strictly for this TV's token & room code
     final mqtt = MqttService();
     mqtt.connect();
     mqtt.subscribeTopic('device_auth_$_deviceToken');
@@ -184,24 +204,8 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
     if (stripped != _userCode) {
       mqtt.subscribeTopic('barrooms_trivia/room_$stripped');
     }
-    mqtt.subscribeTopic('barrooms_trivia/room_TRIV');
-    mqtt.subscribeTopic('tv_pairing');
 
-    _mqttPairingSubscription = mqtt.eventStream.listen((data) {
-      if (_isAuthorized || !mounted) return;
-      final ev = (data['event'] ?? data['type'])?.toString().toLowerCase();
-      final token = data['device_token']?.toString();
-      final code = (data['user_code'] ?? data['room_code'])?.toString();
-      if (ev == 'device_authorized' ||
-          ev == 'pre_game_countdown' ||
-          ev == 'question_start' ||
-          ev == 'start_game') {
-        if (token == null || token == _deviceToken || code == null || code == _userCode || code == 'TRIV' || ev != 'device_authorized') {
-          _countdownTimer?.cancel();
-          _handleDeviceAuthorized(data);
-        }
-      }
-    });
+    _mqttPairingSubscription = mqtt.eventStream.listen(handleIncomingPairing);
 
     try {
       final channelName = 'device_auth_$_deviceToken';
@@ -211,26 +215,10 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           .onBroadcast(
             event: 'device_authorized',
             callback: (payload) {
-              _handleDeviceAuthorized(payload);
+              if (_matchesThisTvPairing(payload) || payload['device_token'] == null) {
+                _handleDeviceAuthorized(payload);
+              }
             },
-          )
-          .subscribe();
-
-      _roomChannel = SupabaseConfig.client.channel('room_TRIV');
-      _roomChannel!
-          .onBroadcast(
-            event: 'device_authorized',
-            callback: (payload) {
-              _handleDeviceAuthorized(payload);
-            },
-          )
-          .onBroadcast(
-            event: 'question_start',
-            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
-          )
-          .onBroadcast(
-            event: 'pre_game_countdown',
-            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
           )
           .subscribe();
 
@@ -239,25 +227,25 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
           .onBroadcast(
             event: 'device_authorized',
             callback: (payload) {
-              _handleDeviceAuthorized(payload);
+              if (_matchesThisTvPairing(payload)) {
+                _handleDeviceAuthorized(payload);
+              }
             },
           )
           .onBroadcast(
             event: 'question_start',
-            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
+            callback: (payload) {
+              if (_matchesThisTvPairing({...payload, 'room_code': payload['room_code'] ?? _userCode})) {
+                _handleDeviceAuthorized({...payload, 'event': 'question_start', 'user_info': {'display_name': 'Host'}});
+              }
+            },
           )
           .onBroadcast(
             event: 'pre_game_countdown',
-            callback: (_) => _handleDeviceAuthorized({'user_info': {'display_name': 'Host'}}),
-          )
-          .subscribe();
-
-      _globalChannel = SupabaseConfig.client.channel('tv_pairing');
-      _globalChannel!
-          .onBroadcast(
-            event: 'device_authorized',
             callback: (payload) {
-              _handleDeviceAuthorized(payload);
+              if (_matchesThisTvPairing({...payload, 'room_code': payload['room_code'] ?? _userCode})) {
+                _handleDeviceAuthorized({...payload, 'event': 'pre_game_countdown', 'user_info': {'display_name': 'Host'}});
+              }
             },
           )
           .subscribe();
@@ -662,13 +650,38 @@ class _TvQrAuthViewState extends State<TvQrAuthView> with SingleTickerProviderSt
                       },
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Row(
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => context.go('/auth'),
+                        icon: const Icon(Icons.login_rounded, size: 18, color: AppTheme.neonCyan),
+                        label: const Text(
+                          'SIGN IN DIRECTLY ON THIS DEVICE',
+                          style: TextStyle(color: AppTheme.neonCyan, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => context.go('/hub'),
+                        icon: const Icon(Icons.apps_rounded, size: 18, color: Colors.white70),
+                        label: const Text(
+                          'OPEN MODE HUB',
+                          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       const Icon(Icons.fiber_manual_record, size: 14, color: AppTheme.neonGreen),
-                      const SizedBox(width: 8),
                       const Text(
-                        'Waiting for host phone sign-in  •  Expires in: ',
+                        'Waiting for host phone sign-in  •  Expires in:',
                         style: TextStyle(fontSize: 14, color: Colors.white54),
                       ),
                       Text(

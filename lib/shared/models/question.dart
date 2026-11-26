@@ -144,6 +144,14 @@ class Question {
     final optD = inner['option_d'] ?? inner['optionD'] ?? json['option_d'] ?? json['optionD'] ?? opts?['D'] ?? opts?['d'] ?? (optsList != null && optsList.length > 3 ? optsList[3] : null) ?? 'Option D';
     final correct = inner['correct_option'] ?? inner['correctOption'] ?? inner['correct'] ?? json['correct_option'] ?? json['correctOption'] ?? json['correct'] ?? 'A';
 
+    final rawLimit = inner['time_limit_seconds'] ??
+        inner['duration_seconds'] ??
+        json['time_limit_seconds'] ??
+        json['duration_seconds'];
+    final int parsedLimit = rawLimit is num
+        ? rawLimit.toInt()
+        : (int.tryParse(rawLimit?.toString() ?? '') ?? 20);
+
     return Question(
       id: (inner['id'] ?? inner['question_id'] ?? json['id'] ?? json['question_id'] ?? DateTime.now().millisecondsSinceEpoch.toString()).toString(),
       category: (inner['category'] ?? inner['genre'] ?? json['category'] ?? json['genre'] ?? 'General Knowledge').toString(),
@@ -154,7 +162,7 @@ class Question {
       optionC: decodeHtmlAndSymbols(optC.toString()),
       optionD: decodeHtmlAndSymbols(optD.toString()),
       correctOption: correct.toString().toUpperCase().trim(),
-      timeLimitSeconds: (inner['time_limit_seconds'] ?? inner['duration_seconds'] ?? json['time_limit_seconds'] ?? json['duration_seconds'] as num?)?.toInt() ?? 20,
+      timeLimitSeconds: parsedLimit > 0 ? parsedLimit : 20,
     );
   }
 

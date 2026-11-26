@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../shared/services/broadcast_sync.dart';
-import '../shared/services/mqtt_service.dart';
-import '../shared/services/realtime_service.dart';
 import '../shared/theme/app_theme.dart';
 import '../shared/services/supabase_service.dart';
 
@@ -99,9 +96,7 @@ class _AuthPageState extends State<AuthPage> {
     final isShift = HardwareKeyboard.instance.isShiftPressed;
     final key = event.logicalKey;
     return key == LogicalKeyboardKey.arrowDown ||
-        (key == LogicalKeyboardKey.tab && !isShift) ||
-        key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter;
+        (key == LogicalKeyboardKey.tab && !isShift);
   }
 
   bool _isUpAction(KeyEvent event) {
@@ -123,7 +118,10 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   KeyEventResult _handleEmailKey(FocusNode node, KeyEvent event) {
-    if (_isDownAction(event)) {
+    if (_isDownAction(event) ||
+        (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter))) {
       _passwordFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
@@ -133,6 +131,12 @@ class _AuthPageState extends State<AuthPage> {
   KeyEventResult _handlePasswordKey(FocusNode node, KeyEvent event) {
     if (_isUpAction(event)) {
       _emailFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      if (!_loading) _handlePrimarySubmit();
       return KeyEventResult.handled;
     }
     if (_isDownAction(event)) {
@@ -293,10 +297,16 @@ class _AuthPageState extends State<AuthPage> {
             const SnackBar(content: Text('Password reset email sent')),
           );
         }
+      } on AuthException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message)),
+          );
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.toString()}')),
+            SnackBar(content: Text('Unable to send reset email: ${e.toString()}')),
           );
         }
       }
@@ -351,28 +361,6 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   void _navigateToHome() {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        final payload = {
-          'event': 'device_authorized',
-          'type': 'device_authorized',
-          'user_id': user.id,
-          'user_info': {
-            'email': user.email ?? 'Host User',
-            'display_name': user.userMetadata?['display_name'] ?? user.email?.split('@').first ?? 'Host',
-          },
-          'timestamp': DateTime.now().toIso8601String(),
-        };
-        BroadcastSync.postEvent(payload);
-        RealtimeService.postLocalEvent(payload);
-        final mqtt = MqttService();
-        mqtt.connect();
-        mqtt.publish('tv_pairing', payload);
-        mqtt.publish('barrooms_trivia/room_TRIV', payload);
-      }
-    } catch (_) {}
-
     if (mounted) {
       context.go('/hub');
     }

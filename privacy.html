@@ -105,9 +105,10 @@
 <body>
   <div class="container">
     <div class="header">
+      <div style="margin-bottom: 14px;"><a href="./" style="text-decoration: none; font-weight: 700; font-size: 14px;">← Back to Bar Rooms Trivia</a></div>
       <div class="badge">LEGAL COMPLIANCE</div>
       <h1>Privacy Policy for Bar Rooms Trivia</h1>
-      <div class="effective-date">Last updated: October 4, 2026 • Version 1.1</div>
+      <div class="effective-date">Last updated: November 26, 2026 • Version 1.2</div>
     </div>
 
     <p>
@@ -120,22 +121,24 @@
 
     <h2>1. Information We Collect and How We Use It</h2>
     <ul>
-      <li><strong>Player Nicknames & Scores:</strong> When joining a trivia session, players provide a display nickname. This nickname, along with transient game scores, is used strictly to render real-time leaderboards and answer results during that game session.</li>
-      <li><strong>Camera Access (Optional):</strong> Mobile player devices may request camera permissions solely to scan the room QR code displayed on the TV screen. Camera feeds are processed locally on your device in real-time. No video feeds or images are ever recorded, stored, or uploaded to any server.</li>
-      <li><strong>Host Uploaded Media:</strong> Hosts may upload venue logos, drink specials, and promotional flyers (PDFs or images). These files are stored locally in the host device's browser IndexedDB storage and transmitted transiently via secure channels to connected TV screens in that room.</li>
-      <li><strong>Local Storage:</strong> We use your device's browser localStorage and IndexedDB to persist host preferences, selected room codes, and sound preferences between sessions.</li>
+      <li><strong>Player Nicknames &amp; Scores:</strong> When joining a trivia session, players provide a display nickname. This nickname, along with transient game scores, is used strictly to render real-time leaderboards and answer results during that game session.</li>
+      <li><strong>Camera Access (Native QR Scanning Only):</strong> Patrons join games by scanning the TV QR code with their phone's native camera app, which opens the web controller link in their browser. No video feeds or images are ever recorded, stored, or uploaded by Bar Rooms Trivia.</li>
+      <li><strong>Host Account Credentials:</strong> Venue hosts who sign in with email/password or OAuth authenticate via Supabase Auth so they can pair displays and control their rooms securely.</li>
+      <li><strong>Host Uploaded Media:</strong> Hosts may upload venue logos, drink specials, and promotional flyers (PDFs or images) in the Web Host Console. These files are stored locally in the host browser's IndexedDB storage and synchronized to connected TV displays for that room.</li>
+      <li><strong>Local Storage:</strong> We use your device's browser localStorage, IndexedDB, and app preferences to remember room codes, sound settings, and host configuration between sessions.</li>
     </ul>
 
     <h2>2. Real-Time Multiplayer Network Communications</h2>
     <p>
-      To enable synchronized real-time trivia gameplay across TVs, host controls, and mobile player phones, game events (question starts, answer submissions, timers, leaderboard ranks) are transmitted over secure encrypted WebSockets (WSS/HTTPS) powered by Supabase. These game sessions are ephemeral and transient.
+      To enable synchronized real-time trivia gameplay across TVs, host controls, and mobile player phones, game events (question starts, answer submissions, timers, leaderboard ranks) are transmitted over encrypted WebSockets (WSS/HTTPS) via Supabase Realtime and EMQX MQTT. These game sessions are ephemeral and transient.
     </p>
 
     <h2>3. Third-Party Services</h2>
     <p>The app relies on trusted infrastructure providers:</p>
     <ul>
-      <li><strong>Supabase:</strong> For secure database hosting and real-time multiplayer message synchronization.</li>
-      <li><strong>Open Trivia Database (OpenTDB):</strong> For curated community trivia question banks.</li>
+      <li><strong>Supabase:</strong> For secure database hosting, host authentication, and real-time multiplayer message synchronization.</li>
+      <li><strong>EMQX MQTT:</strong> For encrypted WebSocket message relay between paired TVs, hosts, and player browsers.</li>
+      <li><strong>Open Trivia Database (OpenTDB) &amp; The Trivia API:</strong> For curated community trivia question banks.</li>
       <li><strong>Mozilla PDF.js:</strong> Client-side rendering of host-provided PDF flyers entirely within your device's browser.</li>
     </ul>
 
@@ -155,7 +158,7 @@
     </p>
 
     <div class="footer">
-      &copy; 2026 Bar Rooms Trivia. All rights reserved. • <a href="terms.html">Terms of Service</a>
+      &copy; 2026 Bar Rooms Trivia. All rights reserved. • <a href="./">Home</a> • <a href="terms.html">Terms of Service</a>
     </div>
   </div>
 </body>

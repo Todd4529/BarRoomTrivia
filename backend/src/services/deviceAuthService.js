@@ -2,13 +2,15 @@ import crypto from 'crypto';
 
 /**
  * In-memory storage for short-lived device authorization sessions.
- * In a multi-instance production cluster, this can be swapped with Redis / KeyDB.
+ * In a multi-instance production cluster, swap with Redis / KeyDB.
  */
 class DeviceAuthService {
   constructor() {
     this.sessions = new Map(); // Key: device_token, Value: session data
+    this.userCodeIndex = new Map(); // Key: normalized userCode, Value: device_token
     this.DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
     this.POLL_INTERVAL_SECONDS = 4;
+    this.MAX_SESSIONS = 10000;
 
     // Periodic cleanup of expired tokens every 60 seconds
     setInterval(() => this.cleanupExpiredSessions(), 60 * 1000).unref();
@@ -20,6 +22,13 @@ class DeviceAuthService {
    * @returns {Object} Device authorization codes and verification metadata
    */
   createDeviceCodeSession(baseUrl = 'https://barroomstrivia.com') {
+    if (this.sessions.size >= this.MAX_SESSIONS) {
+      this.cleanupExpiredSessions();
+      if (this.sessions.size >= this.MAX_SESSIONS) {
+        return { error: 'Too many active pairing sessions, please retry shortly' };
+      }
+    }
+
     const deviceToken = crypto.randomBytes(32).toString('hex');
     const sessionToken = crypto.randomBytes(24).toString('base64url');
     const userCode = crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. "A4F89C"
@@ -43,6 +52,7 @@ class DeviceAuthService {
     };
 
     this.sessions.set(deviceToken, sessionData);
+    this.userCodeIndex.set(userCode, deviceToken);
 
     return {
       device_token: deviceToken,
@@ -55,12 +65,16 @@ class DeviceAuthService {
   }
 
   /**
+   * Resolves a manual 6-character TV pairing code to its device token.
+   */
+  resolveTokenByUserCode(userCode) {
+    if (!userCode) return null;
+    const norm = String(userCode).trim().toUpperCase();
+    return this.userCodeIndex.get(norm) || null;
+  }
+
+  /**
    * Verifies and pairs a mobile user to an existing device token.
-   * @param {string} deviceToken - Token generated during device initialization
-   * @param {string} userId - Mobile user ID from authenticated mobile session
-   * @param {Object} userInfo - Optional user profile (email, displayName, avatar)
-   * @param {Object} authTokens - Session tokens/claims to grant to the TV
-   * @returns {Object} Result of the pairing operation
    */
   verifyDevice(deviceToken, userId, userInfo = {}, authTokens = {}) {
     if (!deviceToken || !userId) {
@@ -73,12 +87,12 @@ class DeviceAuthService {
     }
 
     if (Date.now() > session.expiresAt) {
-      this.sessions.delete(deviceToken);
+      this._deleteSession(deviceToken, session);
       return { success: false, error: 'Device pairing session has expired', code: 'EXPIRED_TOKEN' };
     }
 
     if (session.status === 'verified') {
-      return { success: true, message: 'Device already paired', pairedUserId: session.pairedUserId };
+      return { success: false, error: 'Device session has already been paired', code: 'ALREADY_VERIFIED' };
     }
 
     // Pair the mobile user to the TV device session
@@ -98,9 +112,7 @@ class DeviceAuthService {
 
   /**
    * Checks the status of a device authorization session.
-   * Polled by Android TV every 4 seconds.
-   * @param {string} deviceToken - The device token to check
-   * @returns {Object} Status and paired session details if verified
+   * Once verified, consumes and removes the session immediately so auth_tokens are single-use.
    */
   checkSessionStatus(deviceToken) {
     if (!deviceToken) {
@@ -113,18 +125,21 @@ class DeviceAuthService {
     }
 
     if (Date.now() > session.expiresAt) {
-      this.sessions.delete(deviceToken);
+      this._deleteSession(deviceToken, session);
       return { status: 'expired', error: 'Session expired' };
     }
 
     if (session.status === 'verified') {
-      return {
+      const payload = {
         status: 'verified',
         user_id: session.pairedUserId,
         user_info: session.pairedUserInfo,
         session_token: session.sessionToken,
         auth_tokens: session.authTokens,
       };
+      // Consume immediately so sensitive auth_tokens cannot be polled repeatedly
+      this._deleteSession(deviceToken, session);
+      return payload;
     }
 
     return {
@@ -134,6 +149,13 @@ class DeviceAuthService {
     };
   }
 
+  _deleteSession(deviceToken, session) {
+    this.sessions.delete(deviceToken);
+    if (session?.userCode) {
+      this.userCodeIndex.delete(session.userCode);
+    }
+  }
+
   /**
    * Cleans up expired sessions from memory
    */
@@ -141,7 +163,7 @@ class DeviceAuthService {
     const now = Date.now();
     for (const [token, session] of this.sessions.entries()) {
       if (now > session.expiresAt) {
-        this.sessions.delete(token);
+        this._deleteSession(token, session);
       }
     }
   }
